@@ -85,8 +85,9 @@ migrate-action:
 		echo "Отсутствует параметр db, path или action. Пример: make migrate-action db=chavo_auth_db path=/migrations/auth action=up"; \
 		exit 1; \
 	fi; \
-	docker compose exec -T chavo-postgres psql -U ${POSTGRES_USER} -c "CREATE DATABASE IF NOT EXISTS $(db)" 2>/dev/null || true; \
+	docker compose exec -T chavo-postgres psql -U ${POSTGRES_USER} -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$(db)'" | grep -q 1 || \
+		docker compose exec -T chavo-postgres psql -U ${POSTGRES_USER} -d postgres -c "CREATE DATABASE $(db)"; \
 	docker compose run --rm chavo-postgres-migrate \
 		-path "$(path)" \
-		-database postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/${POSTGRES_DB}?sslmode=disable \
+		-database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/$(db)?sslmode=disable" \
 		"$(action)"

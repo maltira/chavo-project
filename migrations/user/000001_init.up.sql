@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     full_name   VARCHAR(100)    NOT NULL,
 
     bio         VARCHAR(500),
-    avatar_url  VARCHAR(255),
+    avatar_url  VARCHAR(254),
     birth_date  DATE,
 
     last_seen   TIMESTAMPTZ     NOT NULL    DEFAULT NOW(),

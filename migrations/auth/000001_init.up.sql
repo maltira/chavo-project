@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     created_at  TIMESTAMPTZ     NOT NULL        DEFAULT NOW(),
     expires_at  TIMESTAMPTZ     NOT NULL,
 
-    CONSTRAINT expires_at_future CHECK (expires_at > created_at),
+    CONSTRAINT expires_at_future CHECK (expires_at > created_at)
 );
 CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_token ON refresh_tokens(token);
@@ -44,14 +44,14 @@ CREATE INDEX idx_refresh_tokens_token ON refresh_tokens(token);
 CREATE TABLE IF NOT EXISTS otp_codes (
     id          UUID            PRIMARY KEY     DEFAULT gen_random_uuid(),
     user_id     UUID            NOT NULL        REFERENCES users(id) ON DELETE CASCADE,
-    code        VARCHAR(6)      NOT NULL        CHECK (code ~ '^[0-9]{6}$'),,
-    code_type   VARCHAR(50)     NOT NULL        CHECK (code_type IN ('login', 'password_change', 'email_change', 'account_delete'))
+    code        VARCHAR(6)      NOT NULL        CHECK (code ~ '^[0-9]{6}$'),
+    code_type   VARCHAR(50)     NOT NULL        CHECK (code_type IN ('login', 'password_change', 'email_change', 'account_delete')),
     is_used     BOOLEAN         NOT NULL        DEFAULT FALSE,
 
     created_at  TIMESTAMPTZ     NOT NULL        DEFAULT NOW(),
     expires_at  TIMESTAMPTZ     NOT NULL,
 
-    CONSTRAINT expires_at_future CHECK (expires_at > created_at),
+    CONSTRAINT expires_at_future CHECK (expires_at > created_at)
 );
 CREATE INDEX idx_otp_codes_user_id ON otp_codes(user_id);
 CREATE INDEX idx_otp_codes_code ON otp_codes(code);

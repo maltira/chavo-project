@@ -1,7 +1,17 @@
 package main
 
-import "fmt"
+import (
+	"context"
+
+	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/db"
+)
 
 func main() {
-	fmt.Println("Hello World")
+	ctx := context.Background()
+
+	pool, err := db.NewPool(ctx)
+	if err != nil {
+		panic("Failed to connect to database: " + err.Error())
+	}
+	defer db.ClosePool(pool)
 }

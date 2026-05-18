@@ -95,4 +95,6 @@ migrate-action:
 # Запуск сервисов
 
 chavo-auth-run:
-	@go run services/auth-service/cmd/main.go
+	@docker compose up -d --build auth-service
+chavo-auth-down:
+	@docker compose down auth-service

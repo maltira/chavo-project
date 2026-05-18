@@ -32,3 +32,16 @@ services:
       - "127.0.0.1:5432:5432"
     depends_on:
       - chavo-postgres
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: chavo-auth
+    environment:
+      - AUTH_DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/${AUTH_DB_NAME}?sslmode=disable
+      - ENV=${ENV}
+      - AUTH_PORT=${AUTH_PORT}
+    depends_on:
+      chavo-postgres:
+        condition: service_healthy

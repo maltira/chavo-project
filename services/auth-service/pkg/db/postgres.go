@@ -2,17 +2,19 @@ package db
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
-func NewPool(ctx context.Context) (*pgxpool.Pool, error) {
+func NewPool(ctx context.Context, log *zap.Logger) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(os.Getenv("AUTH_DB_DSN"))
 	if err != nil {
-		return nil, err
+		log.Error("Failed to parse DSN", zap.Error(err))
+		return nil, fmt.Errorf("failed to parse DSN: %w", err)
 	}
 
 	config.MaxConns = 25
@@ -22,17 +24,22 @@ func NewPool(ctx context.Context) (*pgxpool.Pool, error) {
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to create connection pool", zap.Error(err))
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
-		return nil, err
+	if err = pool.Ping(ctx); err != nil {
+		log.Error("Failed to ping database", zap.Error(err))
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
-
+	log.Info("Database connection established")
 	return pool, nil
 }
 
-func ClosePool(pool *pgxpool.Pool) {
+func ClosePool(pool *pgxpool.Pool, log *zap.Logger) {
+	if pool == nil {
+		return
+	}
 	pool.Close()
-	log.Println("Pool closed")
+	log.Info("Database connection closed")
 }

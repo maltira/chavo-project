@@ -91,3 +91,8 @@ migrate-action:
 		-path "$(path)" \
 		-database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/$(db)?sslmode=disable" \
 		"$(action)"
+
+# Запуск сервисов
+
+chavo-auth-run:
+	@go run services/auth-service/cmd/main.go

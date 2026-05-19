@@ -46,7 +46,7 @@ CREATE INDEX idx_blocks_profile_id ON blocks(profile_id);
 CREATE INDEX idx_blocks_blocked_profile_id ON blocks(blocked_profile_id);
 
 -- Триггер для updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION user_update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -55,7 +55,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_profiles_updated_at BEFORE UPDATE ON profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION user_update_updated_at_column();
 
 CREATE TRIGGER trigger_settings_updated_at BEFORE UPDATE ON settings
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION user_update_updated_at_column();

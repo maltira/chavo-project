@@ -3,15 +3,14 @@ package db
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
-func NewPool(ctx context.Context, log *zap.Logger) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig(os.Getenv("AUTH_DB_DSN"))
+func NewPool(ctx context.Context, dsn string, log *zap.Logger) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		log.Error("Failed to parse DSN", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse DSN: %w", err)

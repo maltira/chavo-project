@@ -1,17 +1,14 @@
 package logger
 
 import (
-	"os"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 var Log *zap.Logger
 
-func Init() error {
+func Init(env string) error {
 	var config zap.Config
-	env := os.Getenv("ENV")
 
 	if env == "production" {
 		config = zap.NewProductionConfig()

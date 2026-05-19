@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/maltira/chavo-project-backend/services/auth-service/internal/config"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/logger"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/router"
 	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/db"
@@ -16,48 +16,52 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	if err := logger.Init(); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
+		panic("failed to load config: " + err.Error())
+	}
+
+	if err = logger.Init(cfg.Env); err != nil {
 		panic(err)
 	}
 	defer logger.Sync()
 
 	log := logger.Log
 
-	pool, err := db.NewPool(ctx, log)
+	ctx := context.Background()
+	pool, err := db.NewPool(ctx, cfg.AUTH_DB_DSN, log)
 	if err != nil {
-		logger.Log.Fatal("Failed to connect to database", zap.Error(err))
+		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer db.ClosePool(pool, log)
 
 	// ЗАПУСК СЕРВЕРА
 	r := router.SetupRouter()
-	port := os.Getenv("AUTH_PORT")
 	srv := &http.Server{
-		Addr:    ":" + port,
+		Addr:    ":" + cfg.Port,
 		Handler: r,
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	go func() {
-		logger.Log.Info("Auth service starting", zap.String("port", port))
+		log.Info("Auth service starting", zap.String("port", cfg.Port))
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Log.Fatal("Failed to start server", zap.Error(err))
+			log.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
 
 	// Ожидание сигнала завершения
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	logger.Log.Info("Shutting down server...")
+	<-ctx.Done()
+	log.Info("Shutting down server...")
 
 	// Graceful shutdown с таймаутом
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err = srv.Shutdown(ctx); err != nil {
-		logger.Log.Error("Server forced to shutdown", zap.Error(err))
+	if err = srv.Shutdown(shutdownCtx); err != nil {
+		log.Error("Server forced to shutdown", zap.Error(err))
 	}
-	logger.Log.Info("Server exited gracefully")
+	log.Info("Server exited gracefully")
 }

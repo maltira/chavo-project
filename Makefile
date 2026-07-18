@@ -3,16 +3,16 @@ export
 
 export PROJECT_ROOT=$(shell pwd)
 
-# make env-up - Запуск PostgreSQL
-env-up:
+# make ps-up - Запуск PostgreSQL
+ps-up:
 	@docker compose up -d chavo-postgres
 
-# make env-down - Остановка PostgreSQL
-env-down:
+# make ps-down - Остановка PostgreSQL
+ps-down:
 	@docker compose down chavo-postgres
 
-# make env-cleanup - ПОЛНОЕ удаление окружения (с потерей данных!)
-env-cleanup:
+# make ps-cleanup - ПОЛНОЕ удаление окружения (с потерей данных!)
+ps-cleanup:
 	@read -p "Очистить все volume файлы окружения? Опасность утери данных. [y/N]: " ans; \
 	if [ "$$ans" = "y" ]; then \
 	  docker compose down chavo-postgres && \
@@ -42,21 +42,21 @@ MIGRATE_CHAT_PATH := /migrations/chat
 # make migrate-create - Создает новый файл миграции
 migrate-create-auth:
 	@if [ -z "$(seq)" ]; then \
-		echo "Отсутствует параметр seq. Пример: make migrate-make-auth seq=init"; \
+		echo "Отсутствует параметр seq. Пример: make migrate-create-auth seq=init"; \
 		exit 1; \
 	fi; \
 	docker compose run --rm chavo-postgres-migrate \
 		create -ext sql -dir $(MIGRATE_AUTH_PATH) -seq "$(seq)"
 migrate-create-user:
 	@if [ -z "$(seq)" ]; then \
-		echo "Отсутствует параметр seq. Пример: make migrate-make-user seq=init"; \
+		echo "Отсутствует параметр seq. Пример: make migrate-create-user seq=init"; \
 		exit 1; \
 	fi; \
 	docker compose run --rm chavo-postgres-migrate \
 		create -ext sql -dir $(MIGRATE_USER_PATH) -seq "$(seq)"
 migrate-create-chat:
 	@if [ -z "$(seq)" ]; then \
-		echo "Отсутствует параметр seq. Пример: make migrate-make-chat seq=init"; \
+		echo "Отсутствует параметр seq. Пример: make migrate-create-chat seq=init"; \
 		exit 1; \
 	fi; \
 	docker compose run --rm chavo-postgres-migrate \
@@ -91,3 +91,10 @@ migrate-action:
 		-path "$(path)" \
 		-database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/$(db)?sslmode=disable" \
 		"$(action)"
+
+# Запуск сервисов
+
+chavo-auth-run:
+	@docker compose up -d --build auth-service
+chavo-auth-down:
+	@docker compose down auth-service

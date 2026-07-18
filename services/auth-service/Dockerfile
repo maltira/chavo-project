@@ -11,6 +11,8 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /auth ./cmd/main.go
 
 FROM alpine:3.22.4
 
+RUN apk add --no-cache ca-certificates
+
 COPY --from=builder /auth /auth
 
 CMD ["/auth"]

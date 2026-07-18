@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сброс пароля</title>
+</head>
+
+<body style="margin:0; padding:0; background-color:#f4f7fa; font-family: 'Segoe UI', Arial, sans-serif;">
+    <div
+        style="max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+
+        <!-- Шапка -->
+        <div style="background: linear-gradient(135deg, #0078D4, #00A1F1); padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 26px;">Chavo</h1>
+        </div>
+
+        <!-- Основное содержание -->
+        <div style="padding: 40px 50px; text-align: center;">
+            <h2 style="color: #333; margin-bottom: 10px;">Сброс пароля</h2>
+
+            <p style="color: #555; font-size: 16px; line-height: 1.6;">
+                Вы получили это письмо, потому что был запрошен сброс пароля для вашего аккаунта.
+            </p>
+
+            <!-- Кнопка -->
+            <div style="margin: 35px 0;">
+                <a href="{{.ResetURL}}" style="display: inline-block; background-color: #0078D4; color: white;
+                          padding: 16px 36px; text-decoration: none; border-radius: 8px;
+                          font-size: 17px; font-weight: 600;">
+                    Сбросить пароль
+                </a>
+            </div>
+
+            <p style="color: #666; font-size: 15px;">
+                Ссылка действительна в течение <strong>{{.ExpiresIn}}</strong>.<br>
+                Если вы не запрашивали сброс пароля — просто проигнорируйте это письмо.
+            </p>
+
+            <hr style="margin: 40px 0; border: none; border-top: 1px solid #eee;">
+
+            <p style="color: #999; font-size: 13px;">
+                С уважением,<br>
+                Команда Chavo?
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>

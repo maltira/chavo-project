@@ -17,9 +17,11 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT deletion_reason_check CHECK (
         (deleted_at IS NULL AND deletion_reason IS NULL AND deleted_by IS NULL) OR
         (deleted_at IS NOT NULL AND deletion_reason IS NOT NULL AND deleted_by IS NOT NULL)
-    )
+    ),
+    CONSTRAINT users_email_unique UNIQUE (email)
 );
-CREATE UNIQUE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
+-- Partial index для быстрого поиска активных пользователей (soft delete pattern)
+CREATE INDEX idx_users_email_active ON users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_deleted_at ON users(deleted_at) WHERE deleted_at IS NOT NULL;
 CREATE INDEX idx_users_verified ON users(is_verified, deleted_at) WHERE deleted_at IS NULL;
 

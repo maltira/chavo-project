@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Код подтверждения</title>
+</head>
+
+<body style="margin: 0; padding: 0; background-color: #f4f7fa; font-family: 'Segoe UI', Arial, sans-serif;">
+    <div
+        style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+
+        <!-- Шапка -->
+        <div style="background: linear-gradient(135deg, #0078D4, #00A1F1); padding: 30px 40px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Подтверждение email</h1>
+        </div>
+
+        <!-- Основное содержимое -->
+        <div style="padding: 40px 50px; text-align: center;">
+            <p style="color: #555555; font-size: 16px; line-height: 1.5;">
+                Для завершения введите этот одноразовый код:
+            </p>
+
+            <!-- OTP код -->
+            <div
+                style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 10px; border: 2px dashed #0078D4;">
+                <div
+                    style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #0078D4; font-family: monospace;">
+                    {{.Code}}
+                </div>
+            </div>
+
+            <p style="color: #666666; font-size: 15px;">
+                Код действителен до <strong>{{.ExpiresIn}}</strong>.<br>
+                Не передавайте его никому.
+            </p>
+
+            <p style="color: #999999; font-size: 13px; margin-top: 40px;">
+                Если вы не запрашивали этот код — просто проигнорируйте письмо.
+            </p>
+        </div>
+
+        <!-- Футер -->
+        <div style="background-color: #f8f9fa; padding: 25px; text-align: center; border-top: 1px solid #eeeeee;">
+            <p style="margin: 0; color: #888888; font-size: 13px;">
+                С уважением,<br>
+                <strong>Команда Chavo?</strong>
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>

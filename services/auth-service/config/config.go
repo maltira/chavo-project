@@ -1,14 +1,15 @@
 package config
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"time"
 )
 
 type Config struct {
-	Env  string
-	Port string
+	Env      string
+	AuthPort string
+	UserPort string
 
 	// Database
 	AuthDBDSN string
@@ -22,7 +23,7 @@ type Config struct {
 	RefreshTokenDuration time.Duration
 
 	// Password reset token
-	PassTokenDuration time.Duration
+	VerificationTTL time.Duration
 
 	// Frontend
 	FrontendURL string
@@ -32,30 +33,39 @@ type Config struct {
 	SMTPPort string
 	SMTPUser string
 	SMTPPass string
+
+	// Internal service communication
+	InternalSecret string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Env:                  getEnv("ENV", "development"),
-		Port:                 getEnv("AUTH_PORT", "8001"),
-		AuthDBDSN:            os.Getenv("AUTH_DB_DSN"),
-		RedisURL:             getEnv("REDIS_URL", "redis://localhost:6379/0"),
-		JWTSecret:            os.Getenv("JWT_SECRET"),
+		Env:       getEnv("ENV", "development"),
+		AuthPort:  getEnv("AUTH_PORT", "8001"),
+		UserPort:  getEnv("USER_PORT", "8002"),
+		AuthDBDSN: os.Getenv("AUTH_DB_DSN"),
+		RedisURL:  getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		JWTSecret: os.Getenv("JWT_SECRET"),
+
 		AccessTokenDuration:  parseDuration("ACCESS_TOKEN_DURATION", 15*time.Minute),
 		RefreshTokenDuration: parseDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
-		PassTokenDuration:    parseDuration("PASS_TOKEN_DURATION", 15*time.Minute),
-		FrontendURL:          getEnv("FRONTEND_URL", "http://localhost:3000"),
-		SMTPHost:             os.Getenv("SMTP_HOST"),
-		SMTPPort:             getEnv("SMTP_PORT", "587"),
-		SMTPUser:             os.Getenv("SMTP_USER"),
-		SMTPPass:             os.Getenv("SMTP_PASS"),
+		VerificationTTL:      parseDuration("VERIFICATION_TTL", 15*time.Minute),
+
+		FrontendURL: os.Getenv("FRONTEND_URL"),
+
+		SMTPHost: os.Getenv("SMTP_HOST"),
+		SMTPPort: getEnv("SMTP_PORT", "587"),
+		SMTPUser: os.Getenv("SMTP_USER"),
+		SMTPPass: os.Getenv("SMTP_PASS"),
+
+		InternalSecret: os.Getenv("INTERNAL_SECRET"),
 	}
 
-	if cfg.AuthDBDSN == "" {
-		return nil, fmt.Errorf("AUTH_DB_DSN is required")
-	}
 	if cfg.JWTSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
+		return nil, errors.New("JWT_SECRET is required")
+	}
+	if cfg.AuthDBDSN == "" {
+		return nil, errors.New("AUTH_DB_DSN is required")
 	}
 
 	return cfg, nil

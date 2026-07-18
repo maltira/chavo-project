@@ -1,4 +1,3 @@
-
 services:
   chavo-postgres:
     image: postgres:16-alpine
@@ -33,6 +32,18 @@ services:
     depends_on:
       - chavo-postgres
 
+  chavo-redis:
+    image: redis:7-alpine
+    container_name: chavo-env-redis
+    restart: unless-stopped
+    volumes:
+      - ${PROJECT_ROOT}/out/redisdata:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   auth-service:
     build:
       context: ./services/auth-service
@@ -40,8 +51,24 @@ services:
     container_name: chavo-auth
     environment:
       - AUTH_DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/${AUTH_DB_NAME}?sslmode=disable
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
       - ENV=${ENV}
       - AUTH_PORT=${AUTH_PORT}
+      - USER_PORT=${USER_PORT}
+      - ACCESS_TOKEN_DURATION=${ACCESS_TOKEN_DURATION}
+      - REFRESH_TOKEN_DURATION=${REFRESH_TOKEN_DURATION}
+      - VERIFICATION_TTL=${VERIFICATION_TTL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    ports:
+      - "${AUTH_PORT}:${AUTH_PORT}"
     depends_on:
       chavo-postgres:
+        condition: service_healthy
+      chavo-redis:
         condition: service_healthy

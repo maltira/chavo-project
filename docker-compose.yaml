@@ -38,6 +38,8 @@ services:
     restart: unless-stopped
     volumes:
       - ${PROJECT_ROOT}/out/redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -67,6 +69,25 @@ services:
       - INTERNAL_SECRET=${INTERNAL_SECRET}
     ports:
       - "${AUTH_PORT}:${AUTH_PORT}"
+    depends_on:
+      chavo-postgres:
+        condition: service_healthy
+      chavo-redis:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    container_name: chavo-user
+    environment:
+      - USER_DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/${USER_DB_NAME}?sslmode=disable
+      - REDIS_URL=${REDIS_URL}
+      - ENV=${ENV}
+      - USER_PORT=${USER_PORT}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    ports:
+      - "${USER_PORT}:${USER_PORT}"
     depends_on:
       chavo-postgres:
         condition: service_healthy

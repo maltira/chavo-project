@@ -98,3 +98,8 @@ chavo-auth-run:
 	@docker compose up -d --build auth-service
 chavo-auth-down:
 	@docker compose down auth-service
+
+chavo-user-run:
+	@docker compose up -d --build user-service
+chavo-user-down:
+	@docker compose down user-service

@@ -36,13 +36,17 @@ type Config struct {
 
 	// Internal service communication
 	InternalSecret string
+
+	// Inter-service URLs
+	UserServiceURL string
 }
 
 func Load() (*Config, error) {
+	userPort := getEnv("USER_PORT", "8002")
 	cfg := &Config{
 		Env:       getEnv("ENV", "development"),
 		AuthPort:  getEnv("AUTH_PORT", "8001"),
-		UserPort:  getEnv("USER_PORT", "8002"),
+		UserPort:  userPort,
 		AuthDBDSN: os.Getenv("AUTH_DB_DSN"),
 		RedisURL:  getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret: os.Getenv("JWT_SECRET"),
@@ -59,6 +63,10 @@ func Load() (*Config, error) {
 		SMTPPass: os.Getenv("SMTP_PASS"),
 
 		InternalSecret: os.Getenv("INTERNAL_SECRET"),
+
+		// USER_SERVICE_URL позволяет переопределить адрес user-service.
+		// По умолчанию используется имя контейнера в Docker-сети.
+		UserServiceURL: getEnv("USER_SERVICE_URL", "http://chavo-user:"+userPort),
 	}
 
 	if cfg.JWTSecret == "" {

@@ -10,14 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
-func SendRequestCreateProfile(userID uuid.UUID, userPort, internalSecret string) error {
+func SendRequestCreateProfile(userID uuid.UUID, userServiceURL, internalSecret string) error {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	payload := map[string]interface{}{"user_id": userID.String()}
 
 	body, _ := json.Marshal(payload)
 
 	req, err := http.NewRequest(http.MethodPost,
-		fmt.Sprintf("http://user:%s/api/user/profile", userPort),
+		fmt.Sprintf("%s/api/user/profile", userServiceURL),
 		bytes.NewBuffer(body))
 	if err != nil {
 		return err

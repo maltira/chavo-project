@@ -15,7 +15,7 @@ func SetupRouter(
 	r.Use(gin.Recovery())
 	r.ForwardedByClientIP = true
 
-	auth := r.Group("/auth")
+	auth := r.Group("/api/auth")
 	{
 		// Registration & login
 		auth.POST("/register", authH.Register)

@@ -148,7 +148,7 @@ func (s *authService) VerifyNewAccount(ctx context.Context, token string) error 
 	// Notify user-service to create a profile (with retries).
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
-		err = utils.SendRequestCreateProfile(userID, s.cfg.UserPort, s.cfg.InternalSecret)
+		err = utils.SendRequestCreateProfile(userID, s.cfg.UserServiceURL, s.cfg.InternalSecret)
 		if err == nil {
 			lastErr = nil
 			break

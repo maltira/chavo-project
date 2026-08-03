@@ -117,4 +117,3 @@ func runServer(srv *http.Server, port string, log *zap.Logger) {
 	}
 	log.Info("Server exited gracefully")
 }
-

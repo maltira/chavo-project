@@ -13,16 +13,14 @@ import (
 //go:embed templates/*
 var templateFS embed.FS
 
-// EmailSender defines the interface for sending emails.
-// Implementations can be SMTP-based, third-party API, or a stub for dev.
+// EmailSender defines the interface for sending emails
 type EmailSender interface {
 	SendVerification(to, verifyURL string) error
 	SendOTP(to, code, expiresAt string) error
 	SendPasswordReset(to, resetURL string, expiresIn string) error
-	SendRecovery(to, recoveryURL string, expiresIn string) error
 }
 
-// Sender is a real SMTP implementation of EmailSender using gomail.
+// Sender is a real SMTP implementation of EmailSender using gomail
 type Sender struct {
 	host string
 	port int
@@ -33,10 +31,9 @@ type Sender struct {
 	verificationTmpl *template.Template
 	otpTmpl          *template.Template
 	passResetTmpl    *template.Template
-	recoveryTmpl     *template.Template
 }
 
-// NewSender creates a new Sender with SMTP credentials and pre-parsed templates.
+// NewSender creates a new Sender with SMTP credentials and pre-parsed templates
 func NewSender(host, port, user, pass string, log *zap.Logger) EmailSender {
 	smtpPort, err := strconv.Atoi(port)
 	if err != nil {
@@ -55,13 +52,11 @@ func NewSender(host, port, user, pass string, log *zap.Logger) EmailSender {
 	s.verificationTmpl = mustParseTemplate("templates/verification.html")
 	s.otpTmpl = mustParseTemplate("templates/otp.html")
 	s.passResetTmpl = mustParseTemplate("templates/reset_pass.html")
-	s.recoveryTmpl = mustParseTemplate("templates/recovery_acc.html")
 
 	return s
 }
 
-// dial возвращает настроенный SMTP-диалер с явным TLSConfig.
-// ServerName обязателен для корректного TLS-хендшейка с Yahoo и другими серверами.
+// dial возвращает настроенный SMTP-диалер с явным TLSConfig
 func (s *Sender) dial() *gomail.Dialer {
 	d := gomail.NewDialer(s.host, s.port, s.user, s.pass)
 	d.TLSConfig = &tls.Config{

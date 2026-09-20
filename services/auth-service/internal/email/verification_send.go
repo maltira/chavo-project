@@ -25,7 +25,7 @@ func (s *Sender) SendVerification(to, verifyURL string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", s.user)
 	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Подтвердите ваш аккаунт на Chavo?")
+	m.SetHeader("Subject", "Подтвердите ваш аккаунт на Chavo")
 	m.SetBody("text/html", body.String())
 
 	d := s.dial()

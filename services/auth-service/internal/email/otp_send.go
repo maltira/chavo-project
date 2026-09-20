@@ -25,7 +25,7 @@ func (s *Sender) SendOTP(to, code, expiresAt string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", s.user)
 	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Ваш код подтверждения — "+code)
+	m.SetHeader("Subject", code)
 	m.SetBody("text/html", body.String())
 
 	d := s.dial()

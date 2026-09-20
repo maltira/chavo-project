@@ -6,13 +6,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o auth ./cmd
 
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /auth ./cmd/main.go
-
+# ──────────────────────────────────────────────
 FROM alpine:3.22.4
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 
-COPY --from=builder /auth /auth
+WORKDIR /app
+COPY --from=builder /app/auth .
 
-CMD ["/auth"]
+CMD ["./auth"]

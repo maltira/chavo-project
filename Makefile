@@ -1,105 +1,138 @@
 include .env
 export
 
-export PROJECT_ROOT=$(shell pwd)
+# ──────────────────────────────────────────────
+# Переменные
+# ──────────────────────────────────────────────
 
-# make ps-up - Запуск PostgreSQL
-ps-up:
-	@docker compose up -d chavo-postgres
+COMPOSE          := docker compose
+MIGRATE_IMG      := migrate/migrate:v4.19.1
+NETWORK          := chavo-network
 
-# make ps-down - Остановка PostgreSQL
-ps-down:
-	@docker compose down chavo-postgres
+DB_AUTH_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(AUTH_DB_NAME)?sslmode=disable
+DB_USER_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(USER_DB_NAME)?sslmode=disable
+DB_MESSAGE_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(MESSAGE_DB_NAME)?sslmode=disable
 
-# make ps-cleanup - ПОЛНОЕ удаление окружения (с потерей данных!)
-ps-cleanup:
-	@read -p "Очистить все volume файлы окружения? Опасность утери данных. [y/N]: " ans; \
-	if [ "$$ans" = "y" ]; then \
-	  docker compose down chavo-postgres && \
-	  sudo rm -rf out/pgdata && \
-	  echo "Файлы окружения очищены"; \
-	else \
-	  echo "Очистка окружения отменена"; \
-	fi
-
-# make env-port-forward - Проброс портов на хост
-env-port-forward:
-	@docker compose up -d port-forwarder
-
-# make env-port-close - Закрыть проброс портов
-env-port-close:
-	@docker compose down port-forwarder
-
-# Миграции - это SQL файлы в папке /migrations, которые последовательно
-# изменяют схему базы данных. Каждая миграция имеет:
-#   - up.sql   - применяет изменения (движение вперёд)
-#   - down.sql - откатывает изменения (движение назад)
-
-MIGRATE_AUTH_PATH := /migrations/auth
-MIGRATE_USER_PATH := /migrations/user
-MIGRATE_CHAT_PATH := /migrations/chat
-
-# make migrate-create - Создает новый файл миграции
-migrate-create-auth:
-	@if [ -z "$(seq)" ]; then \
-		echo "Отсутствует параметр seq. Пример: make migrate-create-auth seq=init"; \
-		exit 1; \
-	fi; \
-	docker compose run --rm chavo-postgres-migrate \
-		create -ext sql -dir $(MIGRATE_AUTH_PATH) -seq "$(seq)"
-migrate-create-user:
-	@if [ -z "$(seq)" ]; then \
-		echo "Отсутствует параметр seq. Пример: make migrate-create-user seq=init"; \
-		exit 1; \
-	fi; \
-	docker compose run --rm chavo-postgres-migrate \
-		create -ext sql -dir $(MIGRATE_USER_PATH) -seq "$(seq)"
-migrate-create-chat:
-	@if [ -z "$(seq)" ]; then \
-		echo "Отсутствует параметр seq. Пример: make migrate-create-chat seq=init"; \
-		exit 1; \
-	fi; \
-	docker compose run --rm chavo-postgres-migrate \
-		create -ext sql -dir $(MIGRATE_CHAT_PATH) -seq "$(seq)"
+.PHONY: up down restart \
+        init-dbs \
+        migrate-up migrate-down \
+        migrate-auth-down migrate-user-down migrate-message-down \
+        psql db-tables clean-db clean-kafka clean-data \
+        kafka-topics kafka-ui
 
 
-# make migrate-up - Применить все ожидающие миграции
-migrate-auth-up:
-	@make migrate-action db=${AUTH_DB_NAME} path=$(MIGRATE_AUTH_PATH) action=up
-migrate-user-up:
-	@make migrate-action db=${USER_DB_NAME}  path=$(MIGRATE_USER_PATH) action=up
-migrate-chat-up:
-	@make migrate-action db=${CHAT_DB_NAME}  path=$(MIGRATE_CHAT_PATH) action=up
+# ──────────────────────────────────────────────
+# Инфраструктура
+# ──────────────────────────────────────────────
 
-# make migrate-down - Откатить последнюю миграцию
+up:
+	@$(COMPOSE) up -d --build
+
+down:
+	@$(COMPOSE) down
+
+restart: down up
+
+# ──────────────────────────────────────────────
+# База данных
+# ──────────────────────────────────────────────
+
+init-dbs:
+	@$(COMPOSE) up -d --wait postgres
+	@echo "Инициализация баз данных..."
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -c "\
+		SELECT 'CREATE DATABASE $(AUTH_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(AUTH_DB_NAME)')\gexec; \
+		SELECT 'CREATE DATABASE $(USER_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(USER_DB_NAME)')\gexec; \
+		SELECT 'CREATE DATABASE $(MESSAGE_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(MESSAGE_DB_NAME)')\gexec;"
+	@echo "Базы данных готовы."
+
+psql:
+	@docker exec -it chavo-postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+
+db-tables:
+	@echo "=== Auth DB ($(AUTH_DB_NAME)) ==="
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(AUTH_DB_NAME) -c "\dt" 2>/dev/null || true
+	@echo "=== User DB ($(USER_DB_NAME)) ==="
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(USER_DB_NAME) -c "\dt" 2>/dev/null || true
+	@echo "=== Message DB ($(MESSAGE_DB_NAME)) ==="
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(MESSAGE_DB_NAME) -c "\dt" 2>/dev/null || true
+
+clean-db:
+	@$(COMPOSE) up -d --wait postgres
+	@echo "Очистка таблиц PostgreSQL..."
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(AUTH_DB_NAME) -c "\
+		TRUNCATE TABLE users, email_verifications, refresh_tokens CASCADE;" 2>/dev/null || true
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(USER_DB_NAME) -c "\
+		TRUNCATE TABLE profiles, user_settings, user_blocks CASCADE;" 2>/dev/null || true
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(MESSAGE_DB_NAME) -c "\
+		TRUNCATE TABLE conversations, conversation_members, conversation_join_requests, messages, message_receipts CASCADE;" 2>/dev/null || true
+	@echo "Таблицы БД успешно очищены."
+
+# ──────────────────────────────────────────────
+# Redis
+# ──────────────────────────────────────────────
+
+clean-redis:
+	@$(COMPOSE) up -d --wait redis
+	@echo "Очистка данных Redis..."
+	@docker exec chavo-redis redis-cli FLUSHALL
+	@echo "Redis успешно очищен."
+
+# ──────────────────────────────────────────────
+# Миграции
+# ──────────────────────────────────────────────
+
+migrate-up:
+	@$(COMPOSE) up migrate --force-recreate
+
 migrate-auth-down:
-	@make migrate-action db=${AUTH_DB_NAME} path=$(MIGRATE_AUTH_PATH) action=down
+	@docker run --rm --network $(NETWORK) \
+		-v $(shell pwd)/migrations/auth:/migrations \
+		$(MIGRATE_IMG) \
+		-path=/migrations \
+		-database="$(DB_AUTH_URL)" \
+		down 1
+
 migrate-user-down:
-	@make migrate-action db=${USER_DB_NAME} path=$(MIGRATE_USER_PATH) action=down
-migrate-chat-down:
-	@make migrate-action db=${CHAT_DB_NAME} path=$(MIGRATE_CHAT_PATH) action=down
+	@docker run --rm --network $(NETWORK) \
+		-v $(shell pwd)/migrations/user:/migrations \
+		$(MIGRATE_IMG) \
+		-path=/migrations \
+		-database="$(DB_USER_URL)" \
+		down 1
 
-# migrate-action - Внутренняя команда для выполнения миграций (не для прямого вызова)
-migrate-action:
-	@if [ -z "$(db)" ] || [ -z "$(path)" ] || [ -z "$(action)" ]; then \
-		echo "Отсутствует параметр db, path или action. Пример: make migrate-action db=chavo_auth_db path=/migrations/auth action=up"; \
-		exit 1; \
-	fi; \
-	docker compose exec -T chavo-postgres psql -U ${POSTGRES_USER} -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$(db)'" | grep -q 1 || \
-		docker compose exec -T chavo-postgres psql -U ${POSTGRES_USER} -d postgres -c "CREATE DATABASE $(db)"; \
-	docker compose run --rm chavo-postgres-migrate \
-		-path "$(path)" \
-		-database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@chavo-postgres:5432/$(db)?sslmode=disable" \
-		"$(action)"
+migrate-message-down:
+	@docker run --rm --network $(NETWORK) \
+		-v $(shell pwd)/migrations/message:/migrations \
+		$(MIGRATE_IMG) \
+		-path=/migrations \
+		-database="$(DB_MESSAGE_URL)" \
+		down 1
 
-# Запуск сервисов
+migrate-down: migrate-auth-down migrate-user-down migrate-message-down
 
-chavo-auth-run:
-	@docker compose up -d --build auth-service
-chavo-auth-down:
-	@docker compose down auth-service
 
-chavo-user-run:
-	@docker compose up -d --build user-service
-chavo-user-down:
-	@docker compose down user-service
+# ──────────────────────────────────────────────
+# Kafka
+# ──────────────────────────────────────────────
+
+clean-kafka:
+	@$(COMPOSE) up -d --wait kafka
+	@echo "Очистка топиков Kafka..."
+	@docker exec chavo-kafka /bin/sh -c '\
+		kafka-topics --delete --if-exists --bootstrap-server localhost:9092 --topic auth-events; \
+		kafka-topics --delete --if-exists --bootstrap-server localhost:9092 --topic user-events; \
+		kafka-topics --delete --if-exists --bootstrap-server localhost:9092 --topic conversation-events; \
+		kafka-topics --delete --if-exists --bootstrap-server localhost:9092 --topic message-events;'
+	@$(COMPOSE) up kafka-init --force-recreate
+	@echo "Топики Kafka успешно пересозданы."
+
+kafka-topics:
+	@docker exec chavo-kafka kafka-topics \
+		--list --bootstrap-server localhost:9092
+
+kafka-ui:
+	@xdg-open http://localhost:$(KAFKA_UI_PORT) 2>/dev/null || \
+		echo "Открой в браузере: http://localhost:$(KAFKA_UI_PORT)"
+
+clean-data: clean-db clean-kafka clean-redis

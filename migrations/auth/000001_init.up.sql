@@ -26,6 +26,19 @@ CREATE TABLE IF NOT EXISTS email_verifications (
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX idx_email_verifications_token_hash ON email_verifications(token_hash);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    user_id UUID PRIMARY KEY
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+    
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_password_reset_tokens_token_hash ON password_reset_tokens(token_hash);
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -11,24 +11,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// GenerateAccessToken creates a signed JWT access token with a JTI claim.
-func GenerateAccessToken(userID uuid.UUID, secret string, duration time.Duration) (token string, jti string, err error) {
-	jti = uuid.NewString()
+// GenerateAccessToken creates a signed JWT access token with sid (session ID) and sub (user ID) claims
+func GenerateAccessToken(userID, sessionID uuid.UUID, secret string, duration time.Duration) (string, error) {
 	now := time.Now()
 
 	claims := jwt.MapClaims{
 		"sub": userID.String(),
-		"jti": jti,
+		"sid": sessionID.String(),
 		"iat": now.Unix(),
 		"exp": now.Add(duration).Unix(),
 	}
 
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	token, err = t.SignedString([]byte(secret))
+	token, err := t.SignedString([]byte(secret))
 	if err != nil {
-		return "", "", fmt.Errorf("sign access token: %w", err)
+		return "", fmt.Errorf("sign access token: %w", err)
 	}
-	return token, jti, nil
+	return token, nil
 }
 
 // GenerateRefreshToken creates a cryptographically random refresh token string.

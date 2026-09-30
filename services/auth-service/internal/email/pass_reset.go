@@ -11,10 +11,10 @@ type PassResetData struct {
 	ExpiresIn string
 }
 
-func (s *Sender) SendPasswordReset(to, resetURL string, expiresIn string) error {
+func (s *Sender) SendPasswordReset(to, resetURL string) error {
 	data := PassResetData{
 		ResetURL:  resetURL,
-		ExpiresIn: expiresIn,
+		ExpiresIn: "15 минут",
 	}
 
 	var body bytes.Buffer

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,9 @@ type Config struct {
 	VerificationTTL      time.Duration
 
 	FrontendURL string
+
+	// Kafka
+	KafkaBrokers []string
 
 	// SMTP
 	SMTPHost string
@@ -40,6 +44,8 @@ func Load() (*Config, error) {
 
 		FrontendURL: os.Getenv("FRONTEND_URL"),
 
+		KafkaBrokers: parseStringSlice("KAFKA_BROKERS", []string{"kafka:29092"}),
+
 		SMTPHost: os.Getenv("SMTP_HOST"),
 		SMTPPort: os.Getenv("SMTP_PORT"),
 		SMTPUser: os.Getenv("SMTP_USER"),
@@ -50,7 +56,7 @@ func Load() (*Config, error) {
 		return nil, errors.New("JWT_SECRET is required")
 	}
 	if cfg.DatabaseURL == "" {
-		return nil, errors.New("DATABASSE_URL is required")
+		return nil, errors.New("DATABASE_URL is required")
 	}
 
 	return cfg, nil
@@ -73,4 +79,22 @@ func parseDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func parseStringSlice(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	parts := strings.Split(v, ",")
+	res := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			res = append(res, trimmed)
+		}
+	}
+	if len(res) == 0 {
+		return fallback
+	}
+	return res
 }

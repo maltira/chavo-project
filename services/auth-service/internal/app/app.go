@@ -16,20 +16,22 @@ import (
 	"github.com/maltira/chavo-project-backend/services/auth-service/config"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/email"
 	handler "github.com/maltira/chavo-project-backend/services/auth-service/internal/handler/http"
-	"github.com/maltira/chavo-project-backend/services/auth-service/internal/logger"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/repository"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/router"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/service"
+	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
+	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/logger"
 	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/postgres"
 	rds "github.com/maltira/chavo-project-backend/services/auth-service/pkg/redis"
 )
 
 type App struct {
-	cfg    *config.Config
-	log    *zap.Logger
-	pool   *pgxpool.Pool
-	rdb    *redis.Client
-	server *http.Server
+	cfg      *config.Config
+	log      *zap.Logger
+	pool     *pgxpool.Pool
+	rdb      *redis.Client
+	producer *kafka.Producer
+	server   *http.Server
 }
 
 // New инициализирует инфраструктуру и собирает все зависимости приложения
@@ -57,21 +59,24 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
+	producer := kafka.NewProducer(cfg.KafkaBrokers, log)
+
 	mail := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, log)
 
 	// Repositories
 	userRepo := repository.NewUserRepository(pool)
+	verRepo := repository.NewVerificationRepository(pool)
+	resetRepo := repository.NewPasswordResetRepository(pool)
 	tokenRepo := repository.NewTokenRepository(pool)
-	otpRepo := repository.NewOTPRepository(pool)
 
 	// Services
-	tokenSvc := service.NewTokenService(tokenRepo, rdb, cfg, log)
-	otpSvc := service.NewOtpService(otpRepo, mail, log)
-	authSvc := service.NewAuthService(userRepo, tokenRepo, pool, rdb, mail, cfg, log)
+	otpSvc := service.NewOtpService(rdb, userRepo, mail, log)
+	tokenSvc := service.NewTokenService(tokenRepo, rdb, producer, cfg, log)
+	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, otpSvc, pool, rdb, producer, mail, cfg, log)
 
 	// Handlers
-	authHandler := handler.NewAuthHandler(authSvc, otpSvc, tokenSvc, log)
-	otpHandler := handler.NewOtpHandler(otpSvc, authSvc, tokenSvc, cfg, log)
+	authHandler := handler.NewAuthHandler(authSvc, tokenSvc, log)
+	otpHandler := handler.NewOtpHandler(otpSvc, tokenSvc, cfg, log)
 	refreshHandler := handler.NewRefreshHandler(tokenSvc, cfg, log)
 
 	r := router.SetupRouter(authHandler, otpHandler, refreshHandler)
@@ -81,11 +86,12 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg:    cfg,
-		log:    log,
-		pool:   pool,
-		rdb:    rdb,
-		server: server,
+		cfg:      cfg,
+		log:      log,
+		pool:     pool,
+		rdb:      rdb,
+		producer: producer,
+		server:   server,
 	}, nil
 }
 
@@ -134,6 +140,12 @@ func (a *App) Start() error {
 
 // Close закрывает все открытые соединения и ресурсы.
 func (a *App) Close() {
+	if a.server != nil {
+		_ = a.server.Close()
+	}
+	if a.producer != nil {
+		_ = a.producer.Close()
+	}
 	if a.pool != nil {
 		postgres.ClosePool(a.pool)
 	}

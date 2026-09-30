@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/maltira/chavo-project-backend/services/auth-service/config"
-	"github.com/maltira/chavo-project-backend/services/auth-service/internal/dto"
+	"github.com/maltira/chavo-project-backend/services/auth-service/internal/models/dto"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/service"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/utils"
 )
@@ -33,7 +33,11 @@ func (h *RefreshHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	access, newRefresh, err := h.ts.Refresh(c.Request.Context(), refreshToken)
+	ip := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+	device := utils.ParseDeviceInfo(userAgent)
+
+	access, newRefresh, err := h.ts.Refresh(c.Request.Context(), refreshToken, ip, userAgent, device)
 	if err != nil {
 		utils.ClearAuthCookies(c)
 		respondError(c, err, h.log)
@@ -47,43 +51,9 @@ func (h *RefreshHandler) Refresh(c *gin.Context) {
 	})
 }
 
-func (h *RefreshHandler) TerminateSession(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Code:  http.StatusBadRequest,
-			Error: "Некорректный UUID пользователя",
-		})
-		return
-	}
-
-	tokenID, err := uuid.Parse(c.Param("token_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Code:  http.StatusBadRequest,
-			Error: "Некорректный UUID сессии",
-		})
-		return
-	}
-
-	if err = h.ts.RevokeByID(c.Request.Context(), userID, tokenID); err != nil {
-		respondError(c, err, h.log)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.MessageResponse{
-		Success: true,
-		Message: "Сессия завершена",
-	})
-}
-
 func (h *RefreshHandler) ListSessions(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Code:  http.StatusBadRequest,
-			Error: "Некорректный UUID пользователя",
-		})
+	userID, ok := utils.GetXUserID(c)
+	if !ok {
 		return
 	}
 
@@ -93,5 +63,42 @@ func (h *RefreshHandler) ListSessions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, sessions)
+	resp := make([]dto.SessionResponse, 0, len(sessions))
+	for _, s := range sessions {
+		resp = append(resp, dto.SessionResponse{
+			ID:         s.ID,
+			DeviceName: s.DeviceName,
+			UserAgent:  s.UserAgent,
+			IPAddress:  s.IPAddress,
+			CreatedAt:  s.CreatedAt,
+			ExpiresAt:  s.ExpiresAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *RefreshHandler) TerminateSession(c *gin.Context) {
+	userID, ok := utils.GetXUserID(c)
+	if !ok {
+		return
+	}
+
+	sessionID, err := uuid.Parse(c.Param("session_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Code:  http.StatusBadRequest,
+			Error: "Некорректный UUID сессии",
+		})
+		return
+	}
+
+	if err = h.ts.RevokeByID(c.Request.Context(), userID, sessionID); err != nil {
+		respondError(c, err, h.log)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.MessageResponse{
+		Message: "Сессия завершена",
+	})
 }

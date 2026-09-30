@@ -14,10 +14,10 @@ import (
 
 type TokenRepository interface {
 	Save(ctx context.Context, token *models.RefreshToken) error
-	FindByToken(ctx context.Context, token string) (*models.RefreshToken, error)
+	FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*models.RefreshToken, error)
-	Delete(ctx context.Context, token string) error
-	DeleteAllByUser(ctx context.Context, userID uuid.UUID, excludeToken *string) ([]string, error)
+	RevokeByID(ctx context.Context, id uuid.UUID) error
+	RevokeAllByUserTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, excludeID *uuid.UUID) ([]uuid.UUID, error)
 	ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error)
 }
 
@@ -30,71 +30,77 @@ func NewTokenRepository(pool *pgxpool.Pool) TokenRepository {
 }
 
 func (r *tokenRepository) Save(ctx context.Context, token *models.RefreshToken) error {
+	if token.ID == uuid.Nil {
+		token.ID = uuid.New()
+	}
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO refresh_tokens (user_id, token, access_jti, ip, user_agent, device, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		token.UserID, token.Token, token.AccessJTI,
-		token.IP, token.UserAgent, token.Device,
+		`INSERT INTO refresh_tokens (id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+		token.ID, token.UserID, token.TokenHash,
+		token.DeviceName, token.UserAgent, token.IPAddress,
 		token.ExpiresAt,
 	)
 	return err
 }
 
-func (r *tokenRepository) FindByToken(ctx context.Context, token string) (*models.RefreshToken, error) {
+func (r *tokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
 	return r.scanToken(ctx,
-		`SELECT id, user_id, token, access_jti, ip, user_agent, device, created_at, expires_at
-		 FROM refresh_tokens WHERE token = $1`, token)
+		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		 FROM refresh_tokens WHERE token_hash = $1`, tokenHash)
 }
 
 func (r *tokenRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.RefreshToken, error) {
 	return r.scanToken(ctx,
-		`SELECT id, user_id, token, access_jti, ip, user_agent, device, created_at, expires_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
 		 FROM refresh_tokens WHERE id = $1`, id)
 }
 
-func (r *tokenRepository) Delete(ctx context.Context, token string) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM refresh_tokens WHERE token = $1`, token)
-	return err
+func (r *tokenRepository) RevokeByID(ctx context.Context, id uuid.UUID) error {
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return apperror.ErrNotFound
+	}
+	return nil
 }
 
-// DeleteAllByUser deletes all refresh tokens for a user (optionally excluding one)
-// and returns the access JTIs so they can be blacklisted.
-func (r *tokenRepository) DeleteAllByUser(ctx context.Context, userID uuid.UUID, excludeToken *string) ([]string, error) {
-	query := `DELETE FROM refresh_tokens WHERE user_id = $1`
+func (r *tokenRepository) RevokeAllByUserTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, excludeID *uuid.UUID) ([]uuid.UUID, error) {
+	query := `UPDATE refresh_tokens 
+	          SET revoked_at = NOW() 
+	          WHERE user_id = $1 AND revoked_at IS NULL`
 	args := []any{userID}
 
-	if excludeToken != nil && *excludeToken != "" {
-		query += ` AND token != $2`
-		args = append(args, *excludeToken)
+	if excludeID != nil && *excludeID != uuid.Nil {
+		query += ` AND id != $2`
+		args = append(args, *excludeID)
 	}
+	query += ` RETURNING id`
 
-	query += ` RETURNING access_jti`
-
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var jtis []string
+	var sessionIDs []uuid.UUID
 	for rows.Next() {
-		var jti string
-		if err = rows.Scan(&jti); err != nil {
+		var id uuid.UUID
+		if err = rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		if jti != "" {
-			jtis = append(jtis, jti)
-		}
+		sessionIDs = append(sessionIDs, id)
 	}
-	return jtis, rows.Err()
+	return sessionIDs, rows.Err()
 }
 
 func (r *tokenRepository) ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, token, access_jti, ip, user_agent, device, created_at, expires_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
 		 FROM refresh_tokens
-		 WHERE user_id = $1 AND expires_at > NOW()
+		 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
 		 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -105,9 +111,9 @@ func (r *tokenRepository) ListActiveByUser(ctx context.Context, userID uuid.UUID
 	for rows.Next() {
 		var t models.RefreshToken
 		if err = rows.Scan(
-			&t.ID, &t.UserID, &t.Token, &t.AccessJTI,
-			&t.IP, &t.UserAgent, &t.Device,
-			&t.CreatedAt, &t.ExpiresAt,
+			&t.ID, &t.UserID, &t.TokenHash,
+			&t.DeviceName, &t.UserAgent, &t.IPAddress,
+			&t.ExpiresAt, &t.CreatedAt, &t.RevokedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -119,9 +125,9 @@ func (r *tokenRepository) ListActiveByUser(ctx context.Context, userID uuid.UUID
 func (r *tokenRepository) scanToken(ctx context.Context, query string, args ...any) (*models.RefreshToken, error) {
 	var t models.RefreshToken
 	err := r.pool.QueryRow(ctx, query, args...).Scan(
-		&t.ID, &t.UserID, &t.Token, &t.AccessJTI,
-		&t.IP, &t.UserAgent, &t.Device,
-		&t.CreatedAt, &t.ExpiresAt,
+		&t.ID, &t.UserID, &t.TokenHash,
+		&t.DeviceName, &t.UserAgent, &t.IPAddress,
+		&t.ExpiresAt, &t.CreatedAt, &t.RevokedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

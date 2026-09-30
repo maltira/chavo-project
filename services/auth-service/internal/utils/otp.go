@@ -5,7 +5,6 @@ import (
 	"math/big"
 )
 
-// GenerateOTP creates a cryptographically random 6-digit OTP code.
 func GenerateOTP() (string, error) {
 	const digits = "0123456789"
 	code := make([]byte, 6)

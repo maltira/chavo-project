@@ -17,7 +17,7 @@ var templateFS embed.FS
 type EmailSender interface {
 	SendVerification(to, verifyURL string) error
 	SendOTP(to, code, expiresAt string) error
-	SendPasswordReset(to, resetURL string, expiresIn string) error
+	SendPasswordReset(to, resetURL string) error
 }
 
 // Sender is a real SMTP implementation of EmailSender using gomail

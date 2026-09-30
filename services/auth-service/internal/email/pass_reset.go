@@ -11,10 +11,10 @@ type PassResetData struct {
 	ExpiresIn string
 }
 
-func (s *Sender) SendPasswordReset(to, resetURL string, expiresIn string) error {
+func (s *Sender) SendPasswordReset(to, resetURL string) error {
 	data := PassResetData{
 		ResetURL:  resetURL,
-		ExpiresIn: expiresIn,
+		ExpiresIn: "15 минут",
 	}
 
 	var body bytes.Buffer
@@ -25,7 +25,7 @@ func (s *Sender) SendPasswordReset(to, resetURL string, expiresIn string) error 
 	m := gomail.NewMessage()
 	m.SetHeader("From", s.user)
 	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Сброс пароля Chavo")
+	m.SetHeader("Subject", "Сброс пароля")
 	m.SetBody("text/html", body.String())
 
 	d := s.dial()

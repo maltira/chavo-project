@@ -15,41 +15,29 @@ func SetupRouter(
 	r.Use(gin.Recovery())
 	r.ForwardedByClientIP = true
 
-	auth := r.Group("/api/auth")
+	auth := r.Group("/auth")
 	{
-		// Registration & login
+		// Registration
 		auth.POST("/register", authH.Register)
-		auth.PUT("/register/verify", authH.VerifyEmail)
+		auth.GET("/register/verify", authH.VerifyRegister)
+
+		// Login & OTP
 		auth.POST("/login", authH.Login)
-		auth.PUT("/login/verify", otpH.VerifyLoginOTP)
+		auth.POST("/otp/verify", otpH.VerifyOTP)
+		auth.POST("/otp/resend", otpH.ResendOTP)
 
-		// Token refresh
+		// Token refresh & Logout
 		auth.POST("/refresh", refreshH.Refresh)
+		auth.POST("/logout", authH.Logout)
 
-		// Logout
-		auth.POST("/logout", authH.LogoutCurrent)
-		auth.POST("/logout/all", authH.LogoutAll)
-		auth.POST("/logout/:token_id", refreshH.TerminateSession)
-
-		// Password reset (unauthenticated)
-		auth.POST("/forgot-password", authH.ForgotPassword)
-		auth.POST("/reset-password", authH.ResetPassword)
-
-		// Profile
-		auth.GET("/me", authH.Me)
-
-		// Change password/email (authenticated)
-		auth.POST("/change/pass", authH.ChangePass)
-		auth.PUT("/change/pass/verify", otpH.VerifyChangePasswordOTP)
-		auth.POST("/change/email", authH.ChangeEmail)
-		auth.PUT("/change/email/verify", otpH.VerifyChangeMailOTP)
-
-		// Account deletion
-		auth.POST("/account/delete", authH.DeleteAccount)
-		auth.POST("/account/delete/verify", otpH.VerifyDeleteAccountOTP)
+		// Password reset & change
+		auth.POST("/reset/request", authH.RequestPasswordReset)
+		auth.POST("/reset/confirm", authH.ConfirmPasswordReset)
+		auth.POST("/change-password", authH.ChangePassword)
 
 		// Sessions
 		auth.GET("/sessions", refreshH.ListSessions)
+		auth.DELETE("/sessions/:session_id", refreshH.TerminateSession)
 	}
 
 	return r

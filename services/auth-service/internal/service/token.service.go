@@ -7,103 +7,133 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/maltira/chavo-project-backend/services/auth-service/config"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/maltira/chavo-project-backend/services/auth-service/config"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/apperror"
+	"github.com/maltira/chavo-project-backend/services/auth-service/internal/events"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/repository"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/utils"
+	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
+)
+
+const (
+	SessionKeyPrefix = "ws:session:"
 )
 
 type TokenService interface {
 	GenerateTokens(ctx context.Context, userID uuid.UUID, ip, userAgent, device string) (accessToken, refreshToken string, err error)
-	Refresh(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
-	RevokeByToken(ctx context.Context, refreshToken string) error
-	RevokeByID(ctx context.Context, userID, tokenID uuid.UUID) error
-	RevokeAll(ctx context.Context, userID uuid.UUID, excludeToken *string) error
+	Refresh(ctx context.Context, refreshToken string, ip, userAgent, device string) (accessToken, newRefreshToken string, err error)
+	RevokeCurrent(ctx context.Context, userID uuid.UUID, refreshToken string) error
+	RevokeByID(ctx context.Context, userID, sessionID uuid.UUID) error
 	ListActiveSessions(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error)
 }
 
 type tokenService struct {
-	repo repository.TokenRepository
-	rdb  *redis.Client
-	cfg  *config.Config
-	log  *zap.Logger
+	repo     repository.TokenRepository
+	rdb      *redis.Client
+	producer *kafka.Producer
+	cfg      *config.Config
+	log      *zap.Logger
 }
 
 func NewTokenService(
 	repo repository.TokenRepository,
 	rdb *redis.Client,
+	producer *kafka.Producer,
 	cfg *config.Config,
 	log *zap.Logger,
 ) TokenService {
-	return &tokenService{repo: repo, rdb: rdb, cfg: cfg, log: log}
+	return &tokenService{
+		repo:     repo,
+		rdb:      rdb,
+		producer: producer,
+		cfg:      cfg,
+		log:      log,
+	}
 }
 
-// GenerateTokens creates a new access + refresh token pair and persists the refresh token.
 func (s *tokenService) GenerateTokens(ctx context.Context, userID uuid.UUID, ip, userAgent, device string) (string, string, error) {
-	accessToken, jti, err := utils.GenerateAccessToken(userID, s.cfg.JWTSecret, s.cfg.AccessTokenDuration)
+	plainRefreshToken, expiresAt, err := utils.GenerateRefreshToken(s.cfg.RefreshTokenDuration)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	refreshToken, expiresAt, err := utils.GenerateRefreshToken(s.cfg.RefreshTokenDuration)
-	if err != nil {
-		return "", "", err
+	sessionID := uuid.New()
+	tokenHash := utils.HashSHA256(plainRefreshToken)
+
+	var ipPtr, uaPtr, devPtr *string
+	if ip != "" {
+		ipPtr = &ip
+	}
+	if userAgent != "" {
+		truncatedUA := truncate(userAgent, 254)
+		uaPtr = &truncatedUA
+	}
+	if device != "" {
+		devPtr = &device
 	}
 
 	rt := &models.RefreshToken{
-		UserID:    userID,
-		Token:     refreshToken,
-		AccessJTI: jti,
-		IP:        ip,
-		UserAgent: truncate(userAgent, 254),
-		Device:    device,
-		ExpiresAt: expiresAt,
+		ID:         sessionID,
+		UserID:     userID,
+		TokenHash:  tokenHash,
+		DeviceName: devPtr,
+		UserAgent:  uaPtr,
+		IPAddress:  ipPtr,
+		ExpiresAt:  expiresAt,
 	}
 
 	if err = s.repo.Save(ctx, rt); err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("save refresh token to db: %w", err)
 	}
 
-	return accessToken, refreshToken, nil
+	accessToken, err := utils.GenerateAccessToken(userID, sessionID, s.cfg.JWTSecret, s.cfg.AccessTokenDuration)
+	if err != nil {
+		return "", "", fmt.Errorf("generate access token: %w", err)
+	}
+
+	// Сохраняем активную сессию в Redis (whitelist)
+	sessionKey := SessionKeyPrefix + sessionID.String()
+	ttl := time.Until(expiresAt)
+	if ttl <= 0 {
+		ttl = s.cfg.RefreshTokenDuration
+	}
+
+	if err = s.rdb.Set(ctx, sessionKey, userID.String(), ttl).Err(); err != nil {
+		s.log.Error("Failed to cache session in Redis", zap.String("session_id", sessionID.String()), zap.Error(err))
+	}
+
+	return accessToken, plainRefreshToken, nil
 }
 
-// Refresh rotates a refresh token: validates the old one, blacklists its access JTI,
-// deletes it, and issues a new pair.
-func (s *tokenService) Refresh(ctx context.Context, refreshToken string) (string, string, error) {
-	rt, err := s.repo.FindByToken(ctx, refreshToken)
-	if err != nil || time.Now().After(rt.ExpiresAt) {
+func (s *tokenService) Refresh(ctx context.Context, refreshToken string, ip, userAgent, device string) (string, string, error) {
+	tokenHash := utils.HashSHA256(refreshToken)
+	rt, err := s.repo.FindByTokenHash(ctx, tokenHash)
+	if err != nil {
 		return "", "", apperror.ErrInvalidToken
 	}
 
-	// Blacklist the old access token's JTI.
-	s.blacklistJTI(ctx, rt.AccessJTI)
-
-	// Delete the old refresh token.
-	_ = s.repo.Delete(ctx, refreshToken)
-
-	// Generate a new pair.
-	return s.GenerateTokens(ctx, rt.UserID, rt.IP, rt.UserAgent, rt.Device)
-}
-
-// RevokeByToken revokes a single refresh token by its value.
-func (s *tokenService) RevokeByToken(ctx context.Context, refreshToken string) error {
-	rt, err := s.repo.FindByToken(ctx, refreshToken)
-	if err == nil {
-		s.blacklistJTI(ctx, rt.AccessJTI)
+	if rt.RevokedAt != nil || time.Now().After(rt.ExpiresAt) {
+		return "", "", apperror.ErrInvalidToken
 	}
-	return s.repo.Delete(ctx, refreshToken)
+
+	// Инвалидируем старую сессию
+	_ = s.repo.RevokeByID(ctx, rt.ID)
+	_ = s.rdb.Del(ctx, SessionKeyPrefix+rt.ID.String()).Err()
+
+	// Выпускаем новую пару токенов
+	return s.GenerateTokens(ctx, rt.UserID, ip, userAgent, device)
 }
 
-// RevokeByID revokes a refresh token by its DB ID, ensuring ownership.
-func (s *tokenService) RevokeByID(ctx context.Context, userID, tokenID uuid.UUID) error {
-	rt, err := s.repo.FindByID(ctx, tokenID)
+func (s *tokenService) RevokeCurrent(ctx context.Context, userID uuid.UUID, refreshToken string) error {
+	tokenHash := utils.HashSHA256(refreshToken)
+	rt, err := s.repo.FindByTokenHash(ctx, tokenHash)
 	if err != nil {
 		if errors.Is(err, apperror.ErrNotFound) {
-			return nil // already gone — idempotent
+			return nil
 		}
 		return err
 	}
@@ -112,35 +142,55 @@ func (s *tokenService) RevokeByID(ctx context.Context, userID, tokenID uuid.UUID
 		return apperror.ErrForbidden
 	}
 
-	s.blacklistJTI(ctx, rt.AccessJTI)
-	return s.repo.Delete(ctx, rt.Token)
+	return s.RevokeByID(ctx, userID, rt.ID)
 }
 
-// RevokeAll revokes all refresh tokens for a user, optionally excluding one.
-func (s *tokenService) RevokeAll(ctx context.Context, userID uuid.UUID, excludeToken *string) error {
-	jtis, err := s.repo.DeleteAllByUser(ctx, userID, excludeToken)
+func (s *tokenService) RevokeByID(ctx context.Context, userID, sessionID uuid.UUID) error {
+	rt, err := s.repo.FindByID(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("delete all tokens for user %s: %w", userID, err)
+		if errors.Is(err, apperror.ErrNotFound) {
+			return nil
+		}
+		return err
 	}
-	for _, jti := range jtis {
-		s.blacklistJTI(ctx, jti)
+
+	if rt.UserID != userID {
+		return apperror.ErrForbidden
 	}
+
+	if err = s.repo.RevokeByID(ctx, sessionID); err != nil {
+		return err
+	}
+
+	// Удаляем из Redis
+	_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
+
+	// Публикуем событие в Kafka
+	s.publishRevokedEvent(ctx, sessionID, userID, "remote_logout")
+
 	return nil
 }
 
-// ListActiveSessions returns active sessions for a user.
 func (s *tokenService) ListActiveSessions(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error) {
 	return s.repo.ListActiveByUser(ctx, userID)
 }
 
-// blacklistJTI adds a JTI to the Redis blacklist with TTL = AccessTokenDuration.
-func (s *tokenService) blacklistJTI(ctx context.Context, jti string) {
-	if jti == "" {
+func (s *tokenService) publishRevokedEvent(ctx context.Context, sessionID, userID uuid.UUID, reason string) {
+	if s.producer == nil {
 		return
 	}
-	key := "blacklist:jti:" + jti
-	if err := s.rdb.Set(ctx, key, "1", s.cfg.AccessTokenDuration).Err(); err != nil {
-		s.log.Warn("Failed to blacklist JTI", zap.String("jti", jti), zap.Error(err))
+
+	ev := events.NewEvent(events.TypeSessionRevoked, events.SessionRevokedPayload{
+		SessionID: sessionID,
+		UserID:    userID,
+		Reason:    reason,
+	})
+
+	if err := s.producer.Publish(ctx, events.TopicAuthEvents, userID.String(), ev); err != nil {
+		s.log.Error("Failed to publish session.revoked event",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 	}
 }
 

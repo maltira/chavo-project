@@ -3,84 +3,63 @@ package config
 import (
 	"errors"
 	"os"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	Env      string
-	AuthPort string
-	UserPort string
+	Env         string
+	Port        string
+	DatabaseURL string
+	RedisURL    string
 
-	// Database
-	AuthDBDSN string
-
-	// Redis
-	RedisURL string
-
-	// JWT
 	JWTSecret            string
 	AccessTokenDuration  time.Duration
 	RefreshTokenDuration time.Duration
+	VerificationTTL      time.Duration
 
-	// Password reset token
-	VerificationTTL time.Duration
-
-	// Frontend
 	FrontendURL string
+
+	// Kafka
+	KafkaBrokers []string
 
 	// SMTP
 	SMTPHost string
 	SMTPPort string
 	SMTPUser string
 	SMTPPass string
-
-	// Internal service communication
-	InternalSecret string
-
-	// Inter-service URLs
-	UserServiceURL string
 }
 
 func Load() (*Config, error) {
-	userPort := getEnv("USER_PORT", "8002")
 	cfg := &Config{
-		Env:       getEnv("ENV", "development"),
-		AuthPort:  getEnv("AUTH_PORT", "8001"),
-		UserPort:  userPort,
-		AuthDBDSN: os.Getenv("AUTH_DB_DSN"),
-		RedisURL:  getEnv("REDIS_URL", "redis://localhost:6379/0"),
-		JWTSecret: os.Getenv("JWT_SECRET"),
+		Env:         getEnv("ENV", "development"),
+		Port:        getEnv("AUTH_PORT", "8001"),
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		JWTSecret:   os.Getenv("JWT_SECRET"),
 
-		AccessTokenDuration:  parseDuration("ACCESS_TOKEN_DURATION", 15*time.Minute),
+		AccessTokenDuration:  parseDuration("ACCESS_TOKEN_DURATION", 10*time.Minute),
 		RefreshTokenDuration: parseDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
 		VerificationTTL:      parseDuration("VERIFICATION_TTL", 15*time.Minute),
 
 		FrontendURL: os.Getenv("FRONTEND_URL"),
 
+		KafkaBrokers: parseStringSlice("KAFKA_BROKERS", []string{"kafka:29092"}),
+
 		SMTPHost: os.Getenv("SMTP_HOST"),
-		SMTPPort: getEnv("SMTP_PORT", "587"),
+		SMTPPort: os.Getenv("SMTP_PORT"),
 		SMTPUser: os.Getenv("SMTP_USER"),
 		SMTPPass: os.Getenv("SMTP_PASS"),
-
-		InternalSecret: os.Getenv("INTERNAL_SECRET"),
-
-		// USER_SERVICE_URL позволяет переопределить адрес user-service.
-		// По умолчанию используется имя контейнера в Docker-сети.
-		UserServiceURL: getEnv("USER_SERVICE_URL", "http://chavo-user:"+userPort),
 	}
 
 	if cfg.JWTSecret == "" {
 		return nil, errors.New("JWT_SECRET is required")
 	}
-	if cfg.AuthDBDSN == "" {
-		return nil, errors.New("AUTH_DB_DSN is required")
+	if cfg.DatabaseURL == "" {
+		return nil, errors.New("DATABASE_URL is required")
 	}
 
 	return cfg, nil
-}
-
-func (c *Config) IsProduction() bool {
-	return c.Env == "production"
 }
 
 func getEnv(key, fallback string) string {
@@ -100,4 +79,22 @@ func parseDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func parseStringSlice(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	parts := strings.Split(v, ",")
+	res := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			res = append(res, trimmed)
+		}
+	}
+	if len(res) == 0 {
+		return fallback
+	}
+	return res
 }

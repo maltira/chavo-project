@@ -182,12 +182,9 @@ services:
       dockerfile: Dockerfile
     container_name: chavo-auth
     environment:
-      - AUTH_DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_DB_NAME}?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_DB_NAME}?sslmode=disable
       - REDIS_URL=${REDIS_URL}
       - JWT_SECRET=${JWT_SECRET}
-      - ENV=${ENV}
-      - AUTH_PORT=${AUTH_PORT}
-      - USER_PORT=${USER_PORT}
       - ACCESS_TOKEN_DURATION=${ACCESS_TOKEN_DURATION}
       - REFRESH_TOKEN_DURATION=${REFRESH_TOKEN_DURATION}
       - VERIFICATION_TTL=${VERIFICATION_TTL}
@@ -196,6 +193,8 @@ services:
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
+      - ENV=${ENV}
+      - PORT=${AUTH_PORT}
     ports:
       - "${AUTH_PORT}:${AUTH_PORT}"
     depends_on:

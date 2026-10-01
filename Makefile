@@ -17,7 +17,7 @@ DB_MESSAGE_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:54
         init-dbs \
         migrate-up migrate-down \
         migrate-auth-down migrate-user-down migrate-message-down \
-        psql db-tables clean-db clean-kafka clean-data \
+        psql db-tables clean-db clean-redis clean-kafka clean-data \
         kafka-topics kafka-ui
 
 

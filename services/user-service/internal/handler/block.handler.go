@@ -5,112 +5,107 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models/dto"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/service"
-	"github.com/maltira/chavo-project-backend/services/user-service/pkg/utils"
 )
 
 type BlockHandler struct {
-	sc  service.BlockService
-	rdb *redis.Client
+	svc service.BlockService
 	log *zap.Logger
 }
 
-func NewBlockHandler(sc service.BlockService, rdb *redis.Client, log *zap.Logger) *BlockHandler {
-	return &BlockHandler{sc: sc, rdb: rdb, log: log}
+func NewBlockHandler(svc service.BlockService, log *zap.Logger) *BlockHandler {
+	return &BlockHandler{svc: svc, log: log}
 }
 
-// GetAllBlocks возвращает список заблокированных пользователей.
-func (h *BlockHandler) GetAllBlocks(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
+// GET /users/me/blocked?limit=&offset=
+func (h *BlockHandler) GetBlocked(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
 		return
 	}
 
-	blocks, err := h.sc.GetAllBlocks(c.Request.Context(), userID)
+	limit, offset := parsePagination(c, 20, 100)
+
+	items, err := h.svc.GetBlockedUsers(c.Request.Context(), userID, limit, offset)
 	if err != nil {
 		respondError(c, err, h.log)
 		return
 	}
-	c.JSON(http.StatusOK, blocks)
+
+	c.JSON(http.StatusOK, dto.BlockedListResponse{
+		Items:  items,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
-// IsBlocked проверяет, заблокирован ли текущий пользователь.
-func (h *BlockHandler) IsBlocked(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
+// GET /users/:user_id/block-status
+func (h *BlockHandler) GetBlockStatus(c *gin.Context) {
+	myID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+
+	targetID, err := uuid.Parse(c.Param("user_id"))
 	if err != nil {
 		respondError(c, apperror.ErrInvalidUUID, h.log)
 		return
 	}
 
-	targetID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
-	}
-
-	isBlocked, err := h.sc.IsBlock(c.Request.Context(), targetID, userID)
+	blockedByMe, blockedByThem, err := h.svc.GetBlockStatus(c.Request.Context(), myID, targetID)
 	if err != nil {
 		respondError(c, err, h.log)
 		return
 	}
-	c.JSON(http.StatusOK, isBlocked)
+
+	c.JSON(http.StatusOK, dto.BlockStatusResponse{
+		BlockedByMe:   blockedByMe,
+		BlockedByThem: blockedByThem,
+	})
 }
 
-// BlockUser блокирует пользователя.
+// POST /users/:user_id/block
 func (h *BlockHandler) BlockUser(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+
+	targetID, err := uuid.Parse(c.Param("user_id"))
 	if err != nil {
 		respondError(c, apperror.ErrInvalidUUID, h.log)
 		return
 	}
 
-	blockUUID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
-	}
-
-	blockedProfile, err := h.sc.BlockUser(c.Request.Context(), userID, blockUUID)
-	if err != nil {
+	if err = h.svc.BlockUser(c.Request.Context(), userID, targetID); err != nil {
 		respondError(c, err, h.log)
 		return
 	}
 
-	if err = utils.PublishBlockEvent(h.rdb, userID, blockUUID, true); err != nil {
-		h.log.Error("Failed to publish block event", zap.Error(err))
-	}
-
-	c.JSON(http.StatusOK, blockedProfile)
+	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Пользователь заблокирован"})
 }
 
-// UnblockUser разблокирует пользователя.
+// DELETE /users/:user_id/block
 func (h *BlockHandler) UnblockUser(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+
+	targetID, err := uuid.Parse(c.Param("user_id"))
 	if err != nil {
 		respondError(c, apperror.ErrInvalidUUID, h.log)
 		return
 	}
 
-	blockedUUID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
-	}
-
-	if err = h.sc.UnblockUser(c.Request.Context(), userID, blockedUUID); err != nil {
+	if err = h.svc.UnblockUser(c.Request.Context(), userID, targetID); err != nil {
 		respondError(c, err, h.log)
 		return
 	}
 
-	if err = utils.PublishBlockEvent(h.rdb, userID, blockedUUID, false); err != nil {
-		h.log.Error("Failed to publish unblock event", zap.Error(err))
-	}
-
-	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Пользователь удалён из черного списка"})
+	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Пользователь разблокирован"})
 }

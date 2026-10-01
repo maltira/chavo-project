@@ -1,6 +1,8 @@
 package dto
 
-type SettingsUpdateRequest struct {
-	ShowOnlineStatus *bool   `json:"show_online_status"`
-	ShowBirthDate    *string `json:"show_birth_date"`
+type UpdateSettingsRequest struct {
+	SystemLanguage    *string `json:"system_language"`
+	Theme             *string `json:"theme"`
+	AllowGroupInvites *bool   `json:"allow_group_invites"`
+	ShowOnlineStatus  *bool   `json:"show_online_status"`
 }

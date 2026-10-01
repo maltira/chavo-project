@@ -1,10 +1,17 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Settings struct {
-	ID               uuid.UUID `json:"id"`
-	ProfileID        uuid.UUID `json:"profile_id"`
-	ShowOnlineStatus bool      `json:"show_online_status"`
-	ShowBirthDate    bool      `json:"show_birth_date"`
+	UserID            uuid.UUID `json:"user_id"`
+	SystemLanguage    string    `json:"system_language"`
+	Theme             string    `json:"theme"`
+	AllowGroupInvites bool      `json:"allow_group_invites"`
+	ShowOnlineStatus  bool      `json:"show_online_status"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }

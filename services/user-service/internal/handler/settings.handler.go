@@ -4,32 +4,29 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models/dto"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/service"
 )
 
 type SettingsHandler struct {
-	sc  service.SettingsService
+	svc service.SettingsService
 	log *zap.Logger
 }
 
-func NewSettingsHandler(sc service.SettingsService, log *zap.Logger) *SettingsHandler {
-	return &SettingsHandler{sc: sc, log: log}
+func NewSettingsHandler(svc service.SettingsService, log *zap.Logger) *SettingsHandler {
+	return &SettingsHandler{svc: svc, log: log}
 }
 
-// GetSettings возвращает настройки текущего пользователя.
+// GET /users/me/settings
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
 		return
 	}
 
-	settings, err := h.sc.GetSettings(c.Request.Context(), userID)
+	settings, err := h.svc.GetSettings(c.Request.Context(), userID)
 	if err != nil {
 		respondError(c, err, h.log)
 		return
@@ -38,48 +35,36 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
-// UpdateVisibleStatus обновляет отображение статуса в сети.
-func (h *SettingsHandler) UpdateVisibleStatus(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
+// PATCH /users/me/settings
+func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
 		return
 	}
 
-	visible := c.Query("visible")
-	if visible == "" {
-		respondError(c, apperror.ErrIncorrectData, h.log)
+	var req dto.UpdateSettingsRequest
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	err = h.sc.UpdateVisibleStatus(c.Request.Context(), userID, visible == "true")
-	if err != nil {
+	data := make(map[string]any)
+	if req.SystemLanguage != nil {
+		data["system_language"] = *req.SystemLanguage
+	}
+	if req.Theme != nil {
+		data["theme"] = *req.Theme
+	}
+	if req.AllowGroupInvites != nil {
+		data["allow_group_invites"] = *req.AllowGroupInvites
+	}
+	if req.ShowOnlineStatus != nil {
+		data["show_online_status"] = *req.ShowOnlineStatus
+	}
+
+	if err := h.svc.UpdateSettings(c.Request.Context(), userID, data); err != nil {
 		respondError(c, err, h.log)
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Отображение статуса успешно изменено"})
-}
-
-// UpdateVisibleBirthDate обновляет отображение даты рождения.
-func (h *SettingsHandler) UpdateVisibleBirthDate(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
-	}
-
-	visible := c.Query("visible")
-	if visible == "" {
-		respondError(c, apperror.ErrIncorrectData, h.log)
-		return
-	}
-
-	err = h.sc.UpdateVisibleBirthDate(c.Request.Context(), userID, visible == "true" || visible == "all")
-	if err != nil {
-		respondError(c, err, h.log)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Отображение даты рождения успешно изменено"})
+	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Настройки успешно обновлены"})
 }

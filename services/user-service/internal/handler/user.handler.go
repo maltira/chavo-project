@@ -6,37 +6,44 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models/dto"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/service"
-	"github.com/maltira/chavo-project-backend/services/user-service/pkg/websocket"
 )
 
 type ProfileHandler struct {
-	sc  service.ProfileService
+	svc service.ProfileService
+	rdb *redis.Client
 	log *zap.Logger
 }
 
-func NewProfileHandler(sc service.ProfileService, log *zap.Logger) *ProfileHandler {
-	return &ProfileHandler{sc: sc, log: log}
+func NewProfileHandler(svc service.ProfileService, rdb *redis.Client, log *zap.Logger) *ProfileHandler {
+	return &ProfileHandler{svc: svc, rdb: rdb, log: log}
 }
 
-// CreateProfile создаёт профиль пользователя (межсервисный вызов).
+// POST /users/me
 func (h *ProfileHandler) CreateProfile(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+
 	var req dto.CreateProfileRequest
 	if !bindJSON(c, &req) {
 		return
 	}
 
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
+	input := service.CreateProfileInput{
+		Username:    req.Username,
+		DisplayName: req.DisplayName,
+		Bio:         req.Bio,
+		AvatarURL:   req.AvatarURL,
 	}
 
-	if err = h.sc.Create(c.Request.Context(), userID); err != nil {
+	if err := h.svc.Create(c.Request.Context(), userID, input); err != nil {
 		respondError(c, err, h.log)
 		return
 	}
@@ -44,15 +51,14 @@ func (h *ProfileHandler) CreateProfile(c *gin.Context) {
 	c.JSON(http.StatusCreated, dto.MessageResponse{Success: true, Message: "Профиль успешно создан"})
 }
 
-// GetCurrentProfile возвращает профиль текущего авторизованного пользователя.
-func (h *ProfileHandler) GetCurrentProfile(c *gin.Context) {
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
+// GET /users/me
+func (h *ProfileHandler) GetMe(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
 		return
 	}
 
-	profile, err := h.sc.FindByID(c.Request.Context(), userID)
+	profile, err := h.svc.FindByID(c.Request.Context(), userID)
 	if err != nil {
 		respondError(c, err, h.log)
 		return
@@ -61,39 +67,68 @@ func (h *ProfileHandler) GetCurrentProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, profile)
 }
 
-// GetProfileByID возвращает публичный профиль по ID.
-func (h *ProfileHandler) GetProfileByID(c *gin.Context) {
-	userID, err := uuid.Parse(c.Param("id"))
+// PATCH /users/me
+func (h *ProfileHandler) UpdateMe(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+
+	var req dto.UpdateProfileRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+
+	data := make(map[string]string)
+	if req.Username != nil {
+		data["username"] = *req.Username
+	}
+	if req.DisplayName != nil {
+		data["display_name"] = *req.DisplayName
+	}
+	if req.Bio != nil {
+		data["bio"] = *req.Bio
+	}
+	if req.AvatarURL != nil {
+		data["avatar_url"] = *req.AvatarURL
+	}
+
+	if err := h.svc.Update(c.Request.Context(), userID, data); err != nil {
+		respondError(c, err, h.log)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Профиль успешно обновлён"})
+}
+
+// GET /users/:user_id
+func (h *ProfileHandler) GetByID(c *gin.Context) {
+	profileID, err := uuid.Parse(c.Param("user_id"))
 	if err != nil {
 		respondError(c, apperror.ErrInvalidUUID, h.log)
 		return
 	}
 
-	user, err := h.sc.FindByID(c.Request.Context(), userID)
+	profile, err := h.svc.FindByID(c.Request.Context(), profileID)
 	if err != nil {
 		respondError(c, err, h.log)
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, profile)
 }
 
-// GetProfilesByQuery ищет профили по поисковому запросу.
-func (h *ProfileHandler) GetProfilesByQuery(c *gin.Context) {
-	query := c.Query("q")
-	l := c.DefaultQuery("limit", "10")
-
-	if query == "" {
+// GET /users?q=...&limit=10&offset=0
+func (h *ProfileHandler) Search(c *gin.Context) {
+	q := c.Query("q")
+	if q == "" {
 		respondError(c, apperror.ErrIncorrectData, h.log)
 		return
 	}
 
-	limit, err := strconv.Atoi(l)
-	if err != nil || limit < 1 || limit > 20 {
-		limit = 10
-	}
+	limit, offset := parsePagination(c, 8, 20)
 
-	profiles, err := h.sc.GetAllBySearch(c.Request.Context(), query, limit)
+	profiles, err := h.svc.GetAllBySearch(c.Request.Context(), q, limit, offset)
 	if err != nil {
 		respondError(c, err, h.log)
 		return
@@ -102,69 +137,25 @@ func (h *ProfileHandler) GetProfilesByQuery(c *gin.Context) {
 	c.JSON(http.StatusOK, profiles)
 }
 
-// UpdateProfile обновляет данные профиля текущего пользователя.
-func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
+// — helpers —
+
+func parseUserID(c *gin.Context, log *zap.Logger) (uuid.UUID, bool) {
 	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
 	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
+		respondError(c, apperror.ErrInvalidUUID, log)
+		return uuid.Nil, false
 	}
-
-	var req map[string]any
-	if !bindJSON(c, &req) {
-		return
-	}
-
-	if err = h.sc.Update(c.Request.Context(), userID, req); err != nil {
-		respondError(c, err, h.log)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Новые данные успешно сохранены"})
+	return userID, true
 }
 
-// IsUsernameFree проверяет доступность username.
-func (h *ProfileHandler) IsUsernameFree(c *gin.Context) {
-	username := c.Query("u")
-	if len(username) < 4 || len(username) > 16 {
-		respondError(c, apperror.ErrInvalidUsername, h.log)
-		return
+func parsePagination(c *gin.Context, defaultLimit, maxLimit int) (limit, offset int) {
+	limit, _ = strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(defaultLimit)))
+	offset, _ = strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit < 1 || limit > maxLimit {
+		limit = defaultLimit
 	}
-
-	isFree, err := h.sc.IsUsernameFree(c.Request.Context(), username)
-	if err != nil {
-		respondError(c, err, h.log)
-		return
+	if offset < 0 {
+		offset = 0
 	}
-
-	c.JSON(http.StatusOK, isFree)
-}
-
-// GetUserStatus проверяет статус онлайн пользователя.
-func (h *ProfileHandler) GetUserStatus(c *gin.Context) {
-	profileID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		respondError(c, apperror.ErrInvalidUUID, h.log)
-		return
-	}
-
-	profile, err := h.sc.FindByID(c.Request.Context(), profileID)
-	if err != nil {
-		respondError(c, err, h.log)
-		return
-	}
-
-	if profile.Settings != nil && !profile.Settings.ShowOnlineStatus {
-		c.JSON(http.StatusOK, dto.ProfileStatusResponse{
-			Online:   false,
-			LastSeen: nil,
-		})
-		return
-	}
-
-	isOnline := websocket.IsClientOnline(profileID)
-	c.JSON(http.StatusOK, dto.ProfileStatusResponse{
-		Online:   isOnline,
-		LastSeen: &profile.LastSeen,
-	})
+	return
 }

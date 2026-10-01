@@ -20,14 +20,15 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE INDEX idx_profiles_username_trgm ON profiles USING GIN (username gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS user_settings (
-    user_id         UUID PRIMARY KEY,
-    system_language VARCHAR(10) NOT NULL DEFAULT 'en',
-    theme           VARCHAR(20) NOT NULL DEFAULT 'system',
+    user_id             UUID PRIMARY KEY,
+    system_language     VARCHAR(10) NOT NULL DEFAULT 'en',
+    theme               VARCHAR(20) NOT NULL DEFAULT 'system',
+    allow_group_invites BOOLEAN NOT NULL DEFAULT TRUE,
+    show_online_status  BOOLEAN NOT NULL DEFAULT TRUE,
     
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),    
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_user_settings_user_id ON user_settings(user_id);
 
 CREATE TABLE IF NOT EXISTS user_blocks (
     user_id UUID NOT NULL,    

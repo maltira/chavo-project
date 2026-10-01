@@ -135,17 +135,6 @@ func (s *authService) VerifyRegister(ctx context.Context, token string) error {
 		return fmt.Errorf("delete verification token: %w", err)
 	}
 
-	// Публикуем событие user.email_verified в Kafka (для user-service)
-	if s.producer == nil {
-		return fmt.Errorf("kafka producer is nil")
-	}
-	evMsg := events.NewEvent(events.TypeEmailVerified, events.EmailVerifiedPayload{
-		UserID: ev.UserID,
-	})
-	if pErr := s.producer.Publish(ctx, events.TopicAuthEvents, ev.UserID.String(), evMsg); pErr != nil {
-		return fmt.Errorf("publish user.email_verified for user %s to Kafka: %w", ev.UserID.String(), pErr)
-	}
-
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}

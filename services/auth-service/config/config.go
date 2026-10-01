@@ -33,23 +33,23 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Env:         getEnv("ENV", "development"),
-		Port:        getEnv("AUTH_PORT", "8001"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6379/0"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
+		Port:        getEnv("PORT", "8001"),
+		DatabaseURL: getEnv("DATABASE_URL", ""),
+		RedisURL:    getEnv("REDIS_URL", ""),
+		JWTSecret:   getEnv("JWT_SECRET", ""),
 
 		AccessTokenDuration:  parseDuration("ACCESS_TOKEN_DURATION", 10*time.Minute),
 		RefreshTokenDuration: parseDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
 		VerificationTTL:      parseDuration("VERIFICATION_TTL", 15*time.Minute),
 
-		FrontendURL: os.Getenv("FRONTEND_URL"),
+		FrontendURL: getEnv("FRONTEND_URL", ""),
 
 		KafkaBrokers: parseStringSlice("KAFKA_BROKERS", []string{"kafka:29092"}),
 
-		SMTPHost: os.Getenv("SMTP_HOST"),
-		SMTPPort: os.Getenv("SMTP_PORT"),
-		SMTPUser: os.Getenv("SMTP_USER"),
-		SMTPPass: os.Getenv("SMTP_PASS"),
+		SMTPHost: getEnv("SMTP_HOST", ""),
+		SMTPPort: getEnv("SMTP_PORT", ""),
+		SMTPUser: getEnv("SMTP_USER", ""),
+		SMTPPass: getEnv("SMTP_PASS", ""),
 	}
 
 	if cfg.JWTSecret == "" {
@@ -57,6 +57,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, errors.New("DATABASE_URL is required")
+	}
+	if cfg.RedisURL == "" {
+		return nil, errors.New("REDIS_URL is required")
 	}
 
 	return cfg, nil

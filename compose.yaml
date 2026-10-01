@@ -181,9 +181,11 @@ services:
       context: ./services/auth-service
       dockerfile: Dockerfile
     container_name: chavo-auth
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_DB_NAME}?sslmode=disable
       - REDIS_URL=${REDIS_URL}
+      - KAFKA_BROKERS=kafka:29092
       - JWT_SECRET=${JWT_SECRET}
       - ACCESS_TOKEN_DURATION=${ACCESS_TOKEN_DURATION}
       - REFRESH_TOKEN_DURATION=${REFRESH_TOKEN_DURATION}
@@ -204,6 +206,10 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - chavo-network
 
@@ -212,11 +218,13 @@ services:
       context: ./services/user-service
       dockerfile: Dockerfile
     container_name: chavo-user
+    restart: unless-stopped
     environment:
-      - USER_DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${USER_DB_NAME}?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${USER_DB_NAME}?sslmode=disable
       - REDIS_URL=${REDIS_URL}
+      - KAFKA_BROKERS=kafka:29092
       - ENV=${ENV}
-      - USER_PORT=${USER_PORT}
+      - PORT=${USER_PORT}
     ports:
       - "${USER_PORT}:${USER_PORT}"
     depends_on:
@@ -225,6 +233,10 @@ services:
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      kafka-init:
         condition: service_completed_successfully
     networks:
       - chavo-network

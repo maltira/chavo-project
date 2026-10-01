@@ -7,16 +7,20 @@ import (
 )
 
 type Profile struct {
-	ID        uuid.UUID  `json:"id"`
-	Username  string     `json:"username"`
-	FullName  string     `json:"full_name"`
-	Bio       string     `json:"bio,omitempty"`
-	AvatarURL string     `json:"avatar_url,omitempty"`
-	BirthDate *time.Time `json:"birth_date,omitempty"`
+	UserID      uuid.UUID  `json:"user_id"`
+	Username    string     `json:"username"`
+	DisplayName string     `json:"display_name"`
+	Bio         *string    `json:"bio,omitempty"`
+	AvatarURL   *string    `json:"avatar_url,omitempty"`
+	LastSeenAt  time.Time  `json:"last_seen_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"-"`
+}
 
-	LastSeen  time.Time  `json:"last_seen"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-
-	Settings *Settings `json:"settings,omitempty"`
+// PresenceBatchRow — строка для батч-запроса presence (DB часть).
+type PresenceBatchRow struct {
+	UserID           uuid.UUID
+	LastSeenAt       time.Time
+	ShowOnlineStatus bool
 }

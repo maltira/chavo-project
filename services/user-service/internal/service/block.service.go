@@ -4,62 +4,82 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
+	"github.com/maltira/chavo-project-backend/services/user-service/internal/events"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
+	"github.com/maltira/chavo-project-backend/services/user-service/pkg/kafka"
 )
 
 type BlockService interface {
-	GetAllBlocks(ctx context.Context, userID uuid.UUID) ([]models.Block, error)
-	IsBlock(ctx context.Context, userID, targetID uuid.UUID) (bool, error)
-	BlockUser(ctx context.Context, userID, blockedUserID uuid.UUID) (*models.Block, error)
-	UnblockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error
+	GetBlockedUsers(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.BlockedEntry, error)
+	GetBlockStatus(ctx context.Context, myID, targetID uuid.UUID) (blockedByMe, blockedByThem bool, err error)
+	BlockUser(ctx context.Context, myID, targetID uuid.UUID) error
+	UnblockUser(ctx context.Context, myID, targetID uuid.UUID) error
 }
 
 type blockService struct {
 	repo     repository.BlockRepository
-	profRepo repository.ProfileRepository
+	producer *kafka.Producer
+	log      *zap.Logger
 }
 
-func NewBlockService(repo repository.BlockRepository, profRepo repository.ProfileRepository) BlockService {
-	return &blockService{repo: repo, profRepo: profRepo}
+func NewBlockService(repo repository.BlockRepository, producer *kafka.Producer, log *zap.Logger) BlockService {
+	return &blockService{repo: repo, producer: producer, log: log}
 }
 
-func (sc *blockService) GetAllBlocks(ctx context.Context, userID uuid.UUID) ([]models.Block, error) {
-	return sc.repo.GetAllBlocks(ctx, userID)
+func (s *blockService) GetBlockedUsers(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.BlockedEntry, error) {
+	return s.repo.GetBlockedUsers(ctx, userID, limit, offset)
 }
 
-func (sc *blockService) IsBlock(ctx context.Context, userID, targetID uuid.UUID) (bool, error) {
-	return sc.repo.CheckBlock(ctx, userID, targetID)
+func (s *blockService) GetBlockStatus(ctx context.Context, myID, targetID uuid.UUID) (blockedByMe, blockedByThem bool, err error) {
+	return s.repo.CheckBlockBidirectional(ctx, myID, targetID)
 }
 
-func (sc *blockService) BlockUser(ctx context.Context, userID, blockedUserID uuid.UUID) (*models.Block, error) {
-	if userID == blockedUserID {
-		return nil, apperror.ErrSelfBlock
+func (s *blockService) BlockUser(ctx context.Context, myID, targetID uuid.UUID) error {
+	if myID == targetID {
+		return apperror.ErrSelfBlock
 	}
 
-	profile, err := sc.profRepo.FindByID(ctx, blockedUserID)
-	if err != nil {
-		return nil, err
+	if err := s.repo.BlockUser(ctx, myID, targetID); err != nil {
+		return err
 	}
 
-	block := models.Block{
-		ProfileID:        userID,
-		BlockedProfileID: blockedUserID,
+	evt := events.NewEvent(events.TypeUserBlocked, events.BlockPayload{
+		BlockerID: myID,
+		BlockedID: targetID,
+	})
+	if err := s.producer.Publish(ctx, events.TopicUserEvents, myID.String(), evt); err != nil {
+		s.log.Error("Failed to publish user.blocked event",
+			zap.String("blocker_id", myID.String()),
+			zap.String("blocked_id", targetID.String()),
+			zap.Error(err),
+		)
 	}
-
-	if err = sc.repo.BlockUser(ctx, &block); err != nil {
-		return nil, err
-	}
-	block.BlockedProfile = profile
-
-	return &block, nil
+	return nil
 }
 
-func (sc *blockService) UnblockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error {
-	if userID == blockedUserID {
+func (s *blockService) UnblockUser(ctx context.Context, myID, targetID uuid.UUID) error {
+	if myID == targetID {
 		return apperror.ErrSelfUnblock
 	}
-	return sc.repo.UnblockUser(ctx, userID, blockedUserID)
+
+	if err := s.repo.UnblockUser(ctx, myID, targetID); err != nil {
+		return err
+	}
+
+	evt := events.NewEvent(events.TypeUserUnblocked, events.BlockPayload{
+		BlockerID: myID,
+		BlockedID: targetID,
+	})
+	if err := s.producer.Publish(ctx, events.TopicUserEvents, myID.String(), evt); err != nil {
+		s.log.Error("Failed to publish user.unblocked event",
+			zap.String("blocker_id", myID.String()),
+			zap.String("blocked_id", targetID.String()),
+			zap.Error(err),
+		)
+	}
+	return nil
 }

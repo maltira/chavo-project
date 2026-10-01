@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"regexp"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -10,12 +13,20 @@ import (
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
 )
 
+var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
+type CreateProfileInput struct {
+	Username    string
+	DisplayName string
+	Bio         *string
+	AvatarURL   *string
+}
+
 type ProfileService interface {
-	Create(ctx context.Context, userID uuid.UUID) error
-	Update(ctx context.Context, userID uuid.UUID, data map[string]any) error
-	GetAllBySearch(ctx context.Context, search string, limit int) ([]models.Profile, error)
+	Create(ctx context.Context, userID uuid.UUID, input CreateProfileInput) error
+	Update(ctx context.Context, userID uuid.UUID, data map[string]string) error
+	GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error)
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
-	IsUsernameFree(ctx context.Context, username string) (bool, error)
 }
 
 type profileService struct {
@@ -26,81 +37,91 @@ func NewProfileService(repo repository.ProfileRepository) ProfileService {
 	return &profileService{repo: repo}
 }
 
-func (sc *profileService) Create(ctx context.Context, userID uuid.UUID) error {
-	name := "user_" + userID.String()[:8]
+func (s *profileService) Create(ctx context.Context, userID uuid.UUID, input CreateProfileInput) error {
+	n := utf8.RuneCountInString(input.Username)
+	if n < 3 || n > 32 || !usernameRe.MatchString(input.Username) {
+		return apperror.ErrInvalidUsername
+	}
+
+	n = utf8.RuneCountInString(input.DisplayName)
+	if n < 1 || n > 100 {
+		return apperror.ErrInvalidDisplayName
+	}
+
+	if input.Bio != nil && utf8.RuneCountInString(*input.Bio) > 255 {
+		return apperror.ErrInvalidBio
+	}
+
+	exists, err := s.repo.UsernameExists(ctx, input.Username)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return apperror.ErrUsernameExists
+	}
+
 	profile := &models.Profile{
-		ID:        userID,
-		Username:  name,
-		FullName:  name,
-		AvatarURL: "https://i.ibb.co/2Y0R1nDf/avatar-white.png",
+		UserID:      userID,
+		Username:    input.Username,
+		DisplayName: input.DisplayName,
+		Bio:         input.Bio,
+		AvatarURL:   input.AvatarURL,
 	}
-	settings := &models.Settings{
-		ProfileID: userID,
-	}
-	return sc.repo.Create(ctx, profile, settings)
+	return s.repo.Create(ctx, profile, &models.Settings{UserID: userID})
 }
 
-func (sc *profileService) Update(ctx context.Context, userID uuid.UUID, data map[string]any) error {
-	updates := make(map[string]any)
+func (s *profileService) Update(ctx context.Context, userID uuid.UUID, data map[string]string) error {
+	updates := make(map[string]string)
 
 	if v, ok := data["username"]; ok {
-		str, isStr := v.(string)
-		if !isStr || len(str) < 4 || len(str) > 16 {
+		n := utf8.RuneCountInString(v)
+		if n < 3 || n > 32 || !usernameRe.MatchString(v) {
 			return apperror.ErrInvalidUsername
 		}
-		exists, err := sc.repo.UsernameExists(ctx, str)
+		exists, err := s.repo.UsernameExists(ctx, v)
 		if err != nil {
 			return err
 		}
 		if exists {
 			return apperror.ErrUsernameExists
 		}
-		updates["username"] = str
+		updates["username"] = v
 	}
 
-	if v, ok := data["full_name"]; ok {
-		str, isStr := v.(string)
-		if !isStr || len(str) < 1 || len(str) > 100 {
-			return apperror.ErrInvalidFullName
+	if v, ok := data["display_name"]; ok {
+		n := utf8.RuneCountInString(v)
+		if n < 1 || n > 100 {
+			return apperror.ErrInvalidDisplayName
 		}
-		updates["full_name"] = str
+		updates["display_name"] = v
 	}
 
 	if v, ok := data["bio"]; ok {
-		str, isStr := v.(string)
-		if !isStr || len(str) > 500 {
+		if utf8.RuneCountInString(v) > 255 {
 			return apperror.ErrInvalidBio
 		}
-		updates["bio"] = str
+		updates["bio"] = v
 	}
 
 	if v, ok := data["avatar_url"]; ok {
 		updates["avatar_url"] = v
 	}
 
-	if v, ok := data["birth_date"]; ok {
-		updates["birth_date"] = v
-	}
-
 	if len(updates) == 0 {
 		return apperror.ErrNoColumnsToUpdate
 	}
 
-	return sc.repo.Update(ctx, userID, updates)
+	return s.repo.Update(ctx, userID, updates)
 }
 
-func (sc *profileService) GetAllBySearch(ctx context.Context, search string, limit int) ([]models.Profile, error) {
-	return sc.repo.GetAllBySearch(ctx, search, limit)
-}
-
-func (sc *profileService) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {
-	return sc.repo.FindByID(ctx, userID)
-}
-
-func (sc *profileService) IsUsernameFree(ctx context.Context, username string) (bool, error) {
-	exists, err := sc.repo.UsernameExists(ctx, username)
-	if err != nil {
-		return false, err
+func (s *profileService) GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error) {
+	cleanQuery := strings.TrimSpace(strings.TrimPrefix(query, "@"))
+	if utf8.RuneCountInString(cleanQuery) < 3 {
+		return []models.Profile{}, nil
 	}
-	return !exists, nil
+	return s.repo.GetAllBySearch(ctx, cleanQuery, limit, offset)
+}
+
+func (s *profileService) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {
+	return s.repo.FindByID(ctx, userID)
 }

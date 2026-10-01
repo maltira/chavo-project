@@ -1,8 +1,14 @@
 package dto
 
-import "github.com/google/uuid"
+import "github.com/maltira/chavo-project-backend/services/user-service/internal/models"
 
-type BlockRequest struct {
-	ProfileID        uuid.UUID `json:"profile_id" binding:"required"`
-	BlockedProfileID uuid.UUID `json:"blocked_profile_id" binding:"required,nefield=ProfileID"`
+type BlockedListResponse struct {
+	Items  []models.BlockedEntry `json:"items"`
+	Limit  int                   `json:"limit"`
+	Offset int                   `json:"offset"`
+}
+
+type BlockStatusResponse struct {
+	BlockedByMe   bool `json:"blocked_by_me"`
+	BlockedByThem bool `json:"blocked_by_them"`
 }

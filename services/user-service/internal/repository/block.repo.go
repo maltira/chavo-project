@@ -12,9 +12,10 @@ import (
 )
 
 type BlockRepository interface {
-	GetAllBlocks(ctx context.Context, userID uuid.UUID) ([]models.Block, error)
+	GetBlockedUsers(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.BlockedEntry, error)
 	CheckBlock(ctx context.Context, userID, targetID uuid.UUID) (bool, error)
-	BlockUser(ctx context.Context, block *models.Block) error
+	CheckBlockBidirectional(ctx context.Context, userA, userB uuid.UUID) (blockedByA, blockedByB bool, err error)
+	BlockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error
 	UnblockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error
 }
 
@@ -26,55 +27,38 @@ func NewBlockRepository(pool *pgxpool.Pool) BlockRepository {
 	return &blockRepository{pool: pool}
 }
 
-func (r *blockRepository) GetAllBlocks(ctx context.Context, userID uuid.UUID) ([]models.Block, error) {
+func (r *blockRepository) GetBlockedUsers(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.BlockedEntry, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT b.id, b.profile_id, b.blocked_profile_id, b.created_at,
-		        p.id, p.username, p.full_name, p.bio, p.avatar_url, p.birth_date, p.last_seen, p.created_at, p.updated_at
-		 FROM blocks b
-		 JOIN profiles p ON p.id = b.blocked_profile_id
-		 WHERE b.profile_id = $1
-		 ORDER BY b.created_at DESC`,
-		userID,
+		`SELECT b.blocked_user_id, p.username, p.display_name, p.avatar_url, b.created_at
+		 FROM user_blocks b
+		 JOIN profiles p ON p.user_id = b.blocked_user_id AND p.deleted_at IS NULL
+		 WHERE b.user_id = $1
+		 ORDER BY b.created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		userID, limit, offset,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("get all blocks: %w", err)
+		return nil, fmt.Errorf("get blocked users: %w", err)
 	}
 	defer rows.Close()
 
-	var blocks []models.Block
+	result := make([]models.BlockedEntry, 0)
 	for rows.Next() {
-		var b models.Block
-		var p models.Profile
-		var bio, avatarURL *string
-
-		err := rows.Scan(
-			&b.ID, &b.ProfileID, &b.BlockedProfileID, &b.CreatedAt,
-			&p.ID, &p.Username, &p.FullName, &bio, &avatarURL, &p.BirthDate, &p.LastSeen, &p.CreatedAt, &p.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan block row: %w", err)
+		var e models.BlockedEntry
+		if err := rows.Scan(
+			&e.BlockedUserID, &e.Username, &e.DisplayName, &e.AvatarURL, &e.BlockedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan blocked entry: %w", err)
 		}
-		if bio != nil {
-			p.Bio = *bio
-		}
-		if avatarURL != nil {
-			p.AvatarURL = *avatarURL
-		}
-		b.BlockedProfile = &p
-		blocks = append(blocks, b)
+		result = append(result, e)
 	}
-
-	if blocks == nil {
-		blocks = []models.Block{}
-	}
-
-	return blocks, nil
+	return result, nil
 }
 
 func (r *blockRepository) CheckBlock(ctx context.Context, userID, targetID uuid.UUID) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM blocks WHERE profile_id = $1 AND blocked_profile_id = $2)`,
+		`SELECT EXISTS(SELECT 1 FROM user_blocks WHERE user_id = $1 AND blocked_user_id = $2)`,
 		userID, targetID,
 	).Scan(&exists)
 	if err != nil {
@@ -83,25 +67,33 @@ func (r *blockRepository) CheckBlock(ctx context.Context, userID, targetID uuid.
 	return exists, nil
 }
 
-func (r *blockRepository) BlockUser(ctx context.Context, block *models.Block) error {
-	err := r.pool.QueryRow(ctx,
-		`INSERT INTO blocks (profile_id, blocked_profile_id)
-		 VALUES ($1, $2)
-		 RETURNING id, created_at`,
-		block.ProfileID, block.BlockedProfileID,
-	).Scan(&block.ID, &block.CreatedAt)
+func (r *blockRepository) BlockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO user_blocks (user_id, blocked_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		userID, blockedUserID,
+	)
 	if err != nil {
-		if isDuplicateKey(err) {
-			return nil
-		}
 		return fmt.Errorf("block user: %w", err)
 	}
 	return nil
 }
 
+func (r *blockRepository) CheckBlockBidirectional(ctx context.Context, userA, userB uuid.UUID) (blockedByA, blockedByB bool, err error) {
+	err = r.pool.QueryRow(ctx,
+		`SELECT
+			EXISTS(SELECT 1 FROM user_blocks WHERE user_id = $1 AND blocked_user_id = $2),
+			EXISTS(SELECT 1 FROM user_blocks WHERE user_id = $2 AND blocked_user_id = $1)`,
+		userA, userB,
+	).Scan(&blockedByA, &blockedByB)
+	if err != nil {
+		return false, false, fmt.Errorf("check block bidirectional: %w", err)
+	}
+	return
+}
+
 func (r *blockRepository) UnblockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error {
 	ct, err := r.pool.Exec(ctx,
-		`DELETE FROM blocks WHERE profile_id = $1 AND blocked_profile_id = $2`,
+		`DELETE FROM user_blocks WHERE user_id = $1 AND blocked_user_id = $2`,
 		userID, blockedUserID,
 	)
 	if err != nil {

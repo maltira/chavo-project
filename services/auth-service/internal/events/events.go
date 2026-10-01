@@ -9,7 +9,6 @@ import (
 const (
 	TopicAuthEvents = "auth-events"
 
-	TypeEmailVerified  = "user.email_verified"
 	TypeSessionRevoked = "session.revoked"
 	TypeAccountDeleted = "user.account_deleted"
 )
@@ -28,10 +27,6 @@ func NewEvent[T any](eventType string, payload T) Event[T] {
 		OccurredAt: time.Now().UTC(),
 		Payload:    payload,
 	}
-}
-
-type EmailVerifiedPayload struct {
-	UserID uuid.UUID `json:"user_id"`
 }
 
 type SessionRevokedPayload struct {

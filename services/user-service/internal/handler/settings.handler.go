@@ -48,12 +48,6 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	data := make(map[string]any)
-	if req.SystemLanguage != nil {
-		data["system_language"] = *req.SystemLanguage
-	}
-	if req.Theme != nil {
-		data["theme"] = *req.Theme
-	}
 	if req.AllowGroupInvites != nil {
 		data["allow_group_invites"] = *req.AllowGroupInvites
 	}

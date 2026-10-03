@@ -10,8 +10,6 @@ import (
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
 )
 
-var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
-
 type SettingsService interface {
 	GetSettings(ctx context.Context, userID uuid.UUID) (*models.Settings, error)
 	UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error
@@ -31,22 +29,6 @@ func (s *settingsService) GetSettings(ctx context.Context, userID uuid.UUID) (*m
 
 func (s *settingsService) UpdateSettings(ctx context.Context, userID uuid.UUID, data map[string]any) error {
 	updates := make(map[string]any)
-
-	if v, ok := data["system_language"]; ok {
-		str, isStr := v.(string)
-		if !isStr || len(str) == 0 || len(str) > 10 {
-			return apperror.ErrIncorrectData
-		}
-		updates["system_language"] = str
-	}
-
-	if v, ok := data["theme"]; ok {
-		str, isStr := v.(string)
-		if !isStr || !validThemes[str] {
-			return apperror.ErrIncorrectData
-		}
-		updates["theme"] = str
-	}
 
 	if v, ok := data["allow_group_invites"]; ok {
 		updates["allow_group_invites"] = v

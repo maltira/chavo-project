@@ -11,12 +11,12 @@ NETWORK          := chavo-network
 
 DB_AUTH_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(AUTH_DB_NAME)?sslmode=disable
 DB_USER_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(USER_DB_NAME)?sslmode=disable
-DB_MESSAGE_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(MESSAGE_DB_NAME)?sslmode=disable
+DB_CONVERSATION_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(CONVERSATION_DB_NAME)?sslmode=disable
 
 .PHONY: up down restart \
         init-dbs \
         migrate-up migrate-down \
-        migrate-auth-down migrate-user-down migrate-message-down \
+        migrate-auth-down migrate-user-down migrate-conversation-down \
         psql db-tables clean-db clean-redis clean-kafka clean-data \
         kafka-topics kafka-ui
 
@@ -43,7 +43,7 @@ init-dbs:
 	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -c "\
 		SELECT 'CREATE DATABASE $(AUTH_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(AUTH_DB_NAME)')\gexec; \
 		SELECT 'CREATE DATABASE $(USER_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(USER_DB_NAME)')\gexec; \
-		SELECT 'CREATE DATABASE $(MESSAGE_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(MESSAGE_DB_NAME)')\gexec;"
+		SELECT 'CREATE DATABASE $(CONVERSATION_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(CONVERSATION_DB_NAME)')\gexec;"
 	@echo "Базы данных готовы."
 
 psql:
@@ -54,8 +54,8 @@ db-tables:
 	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(AUTH_DB_NAME) -c "\dt" 2>/dev/null || true
 	@echo "=== User DB ($(USER_DB_NAME)) ==="
 	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(USER_DB_NAME) -c "\dt" 2>/dev/null || true
-	@echo "=== Message DB ($(MESSAGE_DB_NAME)) ==="
-	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(MESSAGE_DB_NAME) -c "\dt" 2>/dev/null || true
+	@echo "=== Conversation DB ($(CONVERSATION_DB_NAME)) ==="
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(CONVERSATION_DB_NAME) -c "\dt" 2>/dev/null || true
 
 clean-db:
 	@$(COMPOSE) up -d --wait postgres
@@ -64,7 +64,7 @@ clean-db:
 		TRUNCATE TABLE users, email_verifications, refresh_tokens CASCADE;" 2>/dev/null || true
 	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(USER_DB_NAME) -c "\
 		TRUNCATE TABLE profiles, user_settings, user_blocks CASCADE;" 2>/dev/null || true
-	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(MESSAGE_DB_NAME) -c "\
+	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(CONVERSATION_DB_NAME) -c "\
 		TRUNCATE TABLE conversations, conversation_members, conversation_join_requests, messages, message_receipts CASCADE;" 2>/dev/null || true
 	@echo "Таблицы БД успешно очищены."
 
@@ -101,15 +101,15 @@ migrate-user-down:
 		-database="$(DB_USER_URL)" \
 		down 1
 
-migrate-message-down:
+migrate-conversation-down:
 	@docker run --rm --network $(NETWORK) \
-		-v $(shell pwd)/migrations/message:/migrations \
+		-v $(shell pwd)/migrations/conversation:/migrations \
 		$(MIGRATE_IMG) \
 		-path=/migrations \
-		-database="$(DB_MESSAGE_URL)" \
+		-database="$(DB_CONVERSATION_URL)" \
 		down 1
 
-migrate-down: migrate-auth-down migrate-user-down migrate-message-down
+migrate-down: migrate-auth-down migrate-user-down migrate-conversation-down
 
 
 # ──────────────────────────────────────────────

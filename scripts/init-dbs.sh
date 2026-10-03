@@ -15,4 +15,4 @@ EOSQL
 
 create_database "$AUTH_DB_NAME"
 create_database "$USER_DB_NAME"
-create_database "$MESSAGE_DB_NAME"
+create_database "$CONVERSATION_DB_NAME"

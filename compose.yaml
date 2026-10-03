@@ -13,7 +13,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - AUTH_DB_NAME=${AUTH_DB_NAME}
       - USER_DB_NAME=${USER_DB_NAME}
-      - MESSAGE_DB_NAME=${MESSAGE_DB_NAME}
+      - CONVERSATION_DB_NAME=${CONVERSATION_DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
@@ -42,8 +42,8 @@ services:
         migrate -path=/migrations/auth -database="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_DB_NAME}?sslmode=disable" up
         echo "Running migrations for user-service..."
         migrate -path=/migrations/user -database="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${USER_DB_NAME}?sslmode=disable" up
-        echo "Running migrations for message-service..."
-        migrate -path=/migrations/message -database="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${MESSAGE_DB_NAME}?sslmode=disable" up
+        echo "Running migrations for conversation-service..."
+        migrate -path=/migrations/conversation -database="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CONVERSATION_DB_NAME}?sslmode=disable" up
         echo "All migrations applied successfully."
     networks:
       - chavo-network

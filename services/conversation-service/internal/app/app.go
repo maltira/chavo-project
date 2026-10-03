@@ -65,7 +65,7 @@ func New() (*App, error) {
 	joinRepo := repository.NewJoinRequestRepository()
 	users := userclient.New(cfg.UserServiceURL)
 	producer := pkgkafka.NewProducer(cfg.KafkaBrokers, log)
-	publisher := outbox.NewPublisher(db, outboxRepo, producer, log, outbox.DefaultOptions())
+	publisher := outbox.NewPublisher(db, outboxRepo, producer, cipher, log, outbox.DefaultOptions())
 
 	convSvc := service.NewConversationService(db, convRepo, cipher)
 	msgSvc := service.NewMessageService(db, convRepo, msgRepo, outboxRepo, users, cipher, log)

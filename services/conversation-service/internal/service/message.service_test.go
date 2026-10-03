@@ -172,12 +172,15 @@ func TestMessageLifecycle(t *testing.T) {
 	}
 	convID := m1.ConversationID
 
-	// Plaintext нигде не хранится: ни в messages, ни в outbox.
+	// Plaintext нигде не хранится: ни в messages, ни в outbox (там только шифртекст для publisher'а).
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM messages WHERE position('секретный'::bytea in content_enc) > 0`); n != 0 {
 		t.Fatal("plaintext found in content_enc")
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload::text LIKE '%секретный%'`); n != 0 {
 		t.Fatal("plaintext found in outbox")
+	}
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->>'event_type' = 'message.created' AND payload->'payload'->>'content_enc' IS NOT NULL`); n != 1 {
+		t.Fatalf("message.created events with content_enc = %d, want 1", n)
 	}
 
 	// reply: в тот же чат можно, в чужой — нет.
@@ -223,6 +226,12 @@ func TestMessageLifecycle(t *testing.T) {
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->>'event_type' = 'message.deleted'`); n != 1 {
 		t.Fatalf("message.deleted events = %d, want 1", n)
+	}
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->'payload'->>'message_id' = $1 AND payload->'payload'->>'content_enc' IS NOT NULL`, m2.ID.String()); n != 0 {
+		t.Fatalf("deleted message keeps content_enc in %d outbox events", n)
+	}
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->'payload'->>'message_id' = $1 AND payload->'payload'->>'content_enc' IS NOT NULL`, m1.ID.String()); n == 0 {
+		t.Fatal("scrub must not touch other messages")
 	}
 	if _, err = e.msgs.Edit(ctx, b, m2.ID, "x"); !errors.Is(err, apperror.ErrMessageDeleted) {
 		t.Fatalf("edit deleted: %v", err)

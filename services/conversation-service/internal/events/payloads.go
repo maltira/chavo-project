@@ -6,7 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// Payload'ы не содержат текста сообщений. MemberIDs нужны Gateway, чтобы определить получателей.
+// MemberIDs нужны Gateway, чтобы определить получателей.
+// Текст сообщений: в outbox лежит шифртекст (ContentEnc), publisher расшифровывает его перед отправкой
+// в Kafka и заполняет Content. В БД plaintext не попадает.
 
 type ConversationCreatedPayload struct {
 	ConversationID   uuid.UUID   `json:"conversation_id"`
@@ -22,6 +24,8 @@ type MessageCreatedPayload struct {
 	ReplyToMessageID *uuid.UUID  `json:"reply_to_message_id"`
 	CreatedAt        time.Time   `json:"created_at"`
 	MemberIDs        []uuid.UUID `json:"member_ids"`
+	ContentEnc       []byte      `json:"content_enc,omitempty"`
+	Content          *string     `json:"content,omitempty"`
 }
 
 type MessageUpdatedPayload struct {
@@ -30,6 +34,8 @@ type MessageUpdatedPayload struct {
 	SenderID       uuid.UUID   `json:"sender_id"`
 	UpdatedAt      time.Time   `json:"updated_at"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
+	ContentEnc     []byte      `json:"content_enc,omitempty"`
+	Content        *string     `json:"content,omitempty"`
 }
 
 type MessageDeletedPayload struct {

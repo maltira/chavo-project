@@ -186,6 +186,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			ReplyToMessageID: in.ReplyToMessageID,
 			CreatedAt:        rec.CreatedAt,
 			MemberIDs:        memberIDs,
+			ContentEnc:       enc,
 		}); err != nil {
 			return err
 		}
@@ -301,6 +302,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			SenderID:       userID,
 			UpdatedAt:      *updatedAt,
 			MemberIDs:      memberIDs,
+			ContentEnc:     enc,
 		}); err != nil {
 			return err
 		}
@@ -338,6 +340,9 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 		deleted, err := s.msgs.SoftDelete(ctx, tx, messageID)
 		if err != nil || !deleted {
 			return err // повторное удаление идемпотентно и не порождает событие
+		}
+		if err = s.outbox.ScrubMessageContent(ctx, tx, messageID); err != nil {
+			return err
 		}
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, rec.ConversationID)
 		if err != nil {

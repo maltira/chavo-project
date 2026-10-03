@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // OutboxRecord — неопубликованное событие; Payload — готовый JSON-конверт.
@@ -18,6 +20,9 @@ type OutboxRecord struct {
 
 type OutboxRepository interface {
 	Insert(ctx context.Context, q DBTX, topic, key string, event any) error
+
+	// ScrubMessageContent удаляет шифртекст сообщения из всех его событий (при удалении сообщения).
+	ScrubMessageContent(ctx context.Context, q DBTX, messageID uuid.UUID) error
 
 	// TryLock берёт транзакционный advisory-lock: одновременно публикует только один воркер,
 	// поэтому события уходят строго в порядке id.
@@ -46,6 +51,17 @@ func (r *outboxRepository) Insert(ctx context.Context, q DBTX, topic, key string
 		topic, key, payload,
 	); err != nil {
 		return fmt.Errorf("insert outbox event: %w", err)
+	}
+	return nil
+}
+
+func (r *outboxRepository) ScrubMessageContent(ctx context.Context, q DBTX, messageID uuid.UUID) error {
+	if _, err := q.Exec(ctx,
+		`UPDATE outbox_events SET payload = payload #- '{payload,content_enc}'
+		 WHERE topic = 'message-events' AND payload->'payload'->>'message_id' = $1`,
+		messageID.String(),
+	); err != nil {
+		return fmt.Errorf("scrub outbox message content: %w", err)
 	}
 	return nil
 }

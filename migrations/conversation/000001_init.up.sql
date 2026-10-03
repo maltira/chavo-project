@@ -108,3 +108,4 @@ CREATE TABLE outbox_events (
     published_at TIMESTAMPTZ
 );
 CREATE INDEX idx_outbox_unpublished ON outbox_events(id) WHERE published_at IS NULL;
+CREATE INDEX idx_outbox_message_id ON outbox_events ((payload->'payload'->>'message_id')) WHERE topic = 'message-events';

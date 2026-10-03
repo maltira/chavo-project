@@ -90,7 +90,7 @@ func (f *fixture) publisher(pub outbox.EventPublisher, batch int) *outbox.Publis
 	opts.BatchSize = batch
 	opts.PollInterval = 10 * time.Millisecond
 	opts.PublishTimeout = time.Second
-	return outbox.NewPublisher(f.db, f.repo, pub, zap.NewNop(), opts)
+	return outbox.NewPublisher(f.db, f.repo, pub, testCipher(), zap.NewNop(), opts)
 }
 
 func (f *fixture) count(t *testing.T, where string) int {

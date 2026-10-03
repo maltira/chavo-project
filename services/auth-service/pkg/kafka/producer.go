@@ -18,7 +18,7 @@ type Producer struct {
 func NewProducer(brokers []string, log *zap.Logger) *Producer {
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(brokers...),
-		Balancer:     &kafka.LeastBytes{},
+		Balancer:     &kafka.Hash{}, // ключ определяет партицию: порядок событий одного ключа
 		BatchTimeout: 10 * time.Millisecond,
 		RequiredAcks: kafka.RequireOne,
 		Async:        false,

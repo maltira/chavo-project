@@ -241,6 +241,31 @@ services:
     networks:
       - chavo-network
 
+  conversation-service:
+    build:
+      context: ./services/conversation-service
+      dockerfile: Dockerfile
+    container_name: chavo-conversation
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CONVERSATION_DB_NAME}?sslmode=disable
+      - KAFKA_BROKERS=kafka:29092
+      - ENV=${ENV}
+      - PORT=${CONVERSATION_PORT}
+    ports:
+      - "${CONVERSATION_PORT}:${CONVERSATION_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - chavo-network
+
 networks:
   chavo-network:
     name: chavo-network

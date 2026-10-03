@@ -70,8 +70,9 @@ func New() (*App, error) {
 	profileH := handler.NewProfileHandler(profileSvc, rdb, log)
 	blockH := handler.NewBlockHandler(blockSvc, log)
 	settingsH := handler.NewSettingsHandler(settingsSvc, log)
+	internalH := handler.NewInternalHandler(blockSvc, profileSvc, settingsSvc, log)
 
-	r := router.SetupRouter(profileH, blockH, settingsH)
+	r := router.SetupRouter(profileH, blockH, settingsH, internalH)
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: r,

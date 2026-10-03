@@ -250,6 +250,8 @@ services:
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CONVERSATION_DB_NAME}?sslmode=disable
       - KAFKA_BROKERS=kafka:29092
+      - MESSAGE_ENCRYPTION_KEY=${MESSAGE_ENCRYPTION_KEY}
+      - USER_SERVICE_URL=http://user-service:${USER_PORT}
       - ENV=${ENV}
       - PORT=${CONVERSATION_PORT}
     ports:

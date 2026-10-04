@@ -21,6 +21,7 @@ type JoinRequestRepository interface {
 	List(ctx context.Context, q DBTX, convID uuid.UUID, status string, limit, offset int) ([]models.JoinRequest, error)
 	// PendingStatus возвращает статус pending-заявки пользователя или nil.
 	PendingStatus(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*string, error)
+	CountPending(ctx context.Context, q DBTX, convID uuid.UUID) (int, error)
 }
 
 type joinRequestRepository struct{}
@@ -108,4 +109,15 @@ func (r *joinRequestRepository) PendingStatus(ctx context.Context, q DBTX, convI
 		return nil, fmt.Errorf("pending join request: %w", err)
 	}
 	return &status, nil
+}
+
+func (r *joinRequestRepository) CountPending(ctx context.Context, q DBTX, convID uuid.UUID) (int, error) {
+	var n int
+	if err := q.QueryRow(ctx,
+		`SELECT COUNT(*) FROM conversation_join_requests WHERE conversation_id = $1 AND request_status = 'pending'`,
+		convID,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count pending join requests: %w", err)
+	}
+	return n, nil
 }

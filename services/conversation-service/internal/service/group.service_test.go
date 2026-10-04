@@ -365,3 +365,81 @@ func TestGroupInviteRespectsBlocks(t *testing.T) {
 		t.Fatalf("add unrelated user: %v", err)
 	}
 }
+
+func TestAvatarURLValidation(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin := uuid.New()
+	bad := []string{"javascript:alert(1)", "ftp://host/a.png", "http:///no-host", "not a url", "//host/a.png"}
+
+	for _, u := range bad {
+		u := u
+		if _, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &u}); !errors.Is(err, apperror.ErrIncorrectData) {
+			t.Errorf("create with %q: %v", u, err)
+		}
+	}
+	good := "https://cdn.example.com/a.png"
+	res, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &good})
+	if err != nil || res.Conversation.AvatarURL == nil || *res.Conversation.AvatarURL != good {
+		t.Fatalf("create with valid url: %+v %v", res, err)
+	}
+	id := res.Conversation.ID
+	for _, u := range bad {
+		u := u
+		if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{AvatarURL: &u}); !errors.Is(err, apperror.ErrIncorrectData) {
+			t.Errorf("update with %q: %v", u, err)
+		}
+	}
+	empty := "  "
+	res, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{AvatarURL: &empty})
+	if err != nil || res.Conversation.AvatarURL != nil {
+		t.Fatalf("blank url must clear the avatar: %+v %v", res, err)
+	}
+}
+
+func fillMembers(t *testing.T, e *env, conv uuid.UUID, n int) {
+	t.Helper()
+	if _, err := e.pool.Exec(context.Background(),
+		`INSERT INTO conversation_members (conversation_id, user_id) SELECT $1, gen_random_uuid() FROM generate_series(1, $2)`, conv, n); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPublicGroupMemberLimit(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin := uuid.New()
+	conv := createGroup(t, e, admin, "public").Conversation.ID
+
+	fillMembers(t, e, conv, 4998) // вместе с admin 4999
+	if err := e.groups.Join(ctx, uuid.New(), conv); err != nil {
+		t.Fatalf("join up to the limit: %v", err)
+	}
+	if err := e.groups.Join(ctx, uuid.New(), conv); !errors.Is(err, apperror.ErrGroupFull) {
+		t.Fatalf("join over the limit: %v", err)
+	}
+	if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{uuid.New()}); !errors.Is(err, apperror.ErrGroupFull) {
+		t.Fatalf("add over the limit: %v", err)
+	}
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1`, conv); n != 5000 {
+		t.Fatalf("members = %d, want 5000", n)
+	}
+}
+
+func TestAddMembersCannotCrossLimit(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin := uuid.New()
+	conv := createGroup(t, e, admin, "").Conversation.ID
+
+	fillMembers(t, e, conv, 4998) // 4999
+	if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{uuid.New(), uuid.New()}); !errors.Is(err, apperror.ErrGroupFull) {
+		t.Fatalf("batch crossing the limit: %v", err)
+	}
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1`, conv); n != 4999 {
+		t.Fatalf("rejected batch must add nobody, members = %d", n)
+	}
+	if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{uuid.New()}); err != nil {
+		t.Fatalf("exactly one slot left: %v", err)
+	}
+}

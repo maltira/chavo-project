@@ -12,6 +12,8 @@ import (
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/repository"
 )
 
+const maxPendingJoinRequests = 1000
+
 type JoinService interface {
 	InviteInfo(ctx context.Context, userID uuid.UUID, token string) (*models.InviteInfo, error)
 	RegenerateInvite(ctx context.Context, adminID, convID uuid.UUID) (string, error)
@@ -127,6 +129,14 @@ func (s *joinService) RequestJoin(ctx context.Context, userID, convID uuid.UUID,
 			return apperror.ErrBanned
 		}
 
+		pending, err := s.requests.CountPending(ctx, tx, convID)
+		if err != nil {
+			return err
+		}
+		if pending >= maxPendingJoinRequests {
+			return apperror.ErrJoinRequestsLimit
+		}
+
 		if req, err = s.requests.Create(ctx, tx, convID, userID); err != nil {
 			return err
 		}
@@ -193,6 +203,9 @@ func (s *joinService) resolve(ctx context.Context, adminID, convID, requestID uu
 			return err
 		} else if banned {
 			return apperror.ErrBanned
+		}
+		if err = ensureCapacity(ctx, s.convs, tx, convID, 1); err != nil {
+			return err
 		}
 		if err = s.convs.AddMember(ctx, tx, convID, req.UserID, models.RoleMember); err != nil {
 			return err

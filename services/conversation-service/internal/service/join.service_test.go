@@ -240,3 +240,49 @@ func TestSearchPublicGroups(t *testing.T) {
 		t.Fatalf("literal %% and _ must match literally: %+v", res)
 	}
 }
+
+func TestApproveRespectsGroupLimit(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin, applicant := uuid.New(), uuid.New()
+	res := createGroup(t, e, admin, "")
+	conv := res.Conversation.ID
+
+	req, err := e.joins.RequestJoin(ctx, applicant, conv, *res.InviteToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fillMembers(t, e, conv, 4999) // вместе с admin 5000
+	if err = e.joins.Approve(ctx, admin, conv, req.ID); !errors.Is(err, apperror.ErrGroupFull) {
+		t.Fatalf("approve in a full group: %v", err)
+	}
+	if st := count(t, e.pool, `SELECT COUNT(*) FROM conversation_join_requests WHERE id = $1 AND request_status = 'pending'`, req.ID); st != 1 {
+		t.Fatal("failed approve must leave the request pending")
+	}
+}
+
+func TestPendingJoinRequestsLimit(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin := uuid.New()
+	res := createGroup(t, e, admin, "")
+	conv, token := res.Conversation.ID, *res.InviteToken
+
+	if _, err := e.pool.Exec(ctx,
+		`INSERT INTO conversation_join_requests (conversation_id, user_id) SELECT $1, gen_random_uuid() FROM generate_series(1, 1000)`, conv); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.joins.RequestJoin(ctx, uuid.New(), conv, token); !errors.Is(err, apperror.ErrJoinRequestsLimit) {
+		t.Fatalf("request over the limit: %v", err)
+	}
+
+	// Обработанные заявки лимит освобождают.
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE conversation_join_requests SET request_status = 'rejected'
+		 WHERE id = (SELECT id FROM conversation_join_requests WHERE conversation_id = $1 LIMIT 1)`, conv); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.joins.RequestJoin(ctx, uuid.New(), conv, token); err != nil {
+		t.Fatalf("request after a slot freed up: %v", err)
+	}
+}

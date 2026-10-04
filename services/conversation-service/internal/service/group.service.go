@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"unicode/utf8"
 
@@ -20,6 +21,7 @@ const (
 	maxDescriptionLength = 255
 	maxAvatarURLLength   = 2048
 	maxUsersPerRequest   = 100
+	maxGroupMembers      = 5000
 )
 
 type CreateGroupInput struct {
@@ -99,6 +101,32 @@ func optionalText(v *string, maxLen int) (*string, error) {
 	return &t, nil
 }
 
+// optionalAvatarURL: как optionalText, но допускает только http(s)-ссылки с host.
+func optionalAvatarURL(v *string) (*string, error) {
+	t, err := optionalText(v, maxAvatarURLLength)
+	if err != nil || t == nil {
+		return t, err
+	}
+	u, err := url.Parse(*t)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, apperror.ErrIncorrectData
+	}
+	return t, nil
+}
+
+// ensureCapacity требует, чтобы строка conversation была заблокирована в этой транзакции:
+// иначе параллельные вступления могут вместе превысить лимит.
+func ensureCapacity(ctx context.Context, convs repository.ConversationRepository, q repository.DBTX, convID uuid.UUID, adding int) error {
+	n, err := convs.CountMembers(ctx, q, convID)
+	if err != nil {
+		return err
+	}
+	if n+adding > maxGroupMembers {
+		return apperror.ErrGroupFull
+	}
+	return nil
+}
+
 func validateGroupName(name string) (string, error) {
 	n := strings.TrimSpace(name)
 	if c := utf8.RuneCountInString(n); c < 1 || c > maxGroupNameLength {
@@ -167,7 +195,7 @@ func (s *groupService) Create(ctx context.Context, creatorID uuid.UUID, in Creat
 	if err != nil {
 		return nil, err
 	}
-	avatar, err := optionalText(in.AvatarURL, maxAvatarURLLength)
+	avatar, err := optionalAvatarURL(in.AvatarURL)
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +209,9 @@ func (s *groupService) Create(ctx context.Context, creatorID uuid.UUID, in Creat
 	members := uniqueOthers(in.MemberIDs, creatorID)
 	if len(members) > maxUsersPerRequest {
 		return nil, apperror.ErrIncorrectData
+	}
+	if 1+len(members) > maxGroupMembers {
+		return nil, apperror.ErrGroupFull
 	}
 	if err = s.ensureInvitable(ctx, creatorID, members); err != nil {
 		return nil, err
@@ -254,7 +285,7 @@ func (s *groupService) Update(ctx context.Context, userID, convID uuid.UUID, in 
 		fields = append(fields, "description")
 	}
 	if in.AvatarURL != nil {
-		a, err := optionalText(in.AvatarURL, maxAvatarURLLength)
+		a, err := optionalAvatarURL(in.AvatarURL)
 		if err != nil {
 			return nil, err
 		}
@@ -376,6 +407,9 @@ func (s *groupService) Join(ctx context.Context, userID, convID uuid.UUID) error
 		} else if banned {
 			return apperror.ErrBanned
 		}
+		if err = ensureCapacity(ctx, s.convs, tx, convID, 1); err != nil {
+			return err
+		}
 		if err = s.convs.AddMember(ctx, tx, convID, userID, models.RoleMember); err != nil {
 			return err
 		}
@@ -414,6 +448,9 @@ func (s *groupService) AddMembers(ctx context.Context, adminID, convID uuid.UUID
 			return err
 		}
 		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		if err := ensureCapacity(ctx, s.convs, tx, convID, len(ids)); err != nil {
 			return err
 		}
 		for _, id := range ids {

@@ -24,6 +24,8 @@ var (
 	ErrJoinRequestExists     = errors.New("join request already pending")
 	ErrJoinRequestNotPending = errors.New("join request is not pending")
 	ErrBanned                = errors.New("user is banned in this group")
+	ErrGroupFull             = errors.New("group member limit reached")
+	ErrJoinRequestsLimit     = errors.New("too many pending join requests")
 )
 
 func HTTPCode(err error) int {
@@ -44,6 +46,8 @@ func HTTPCode(err error) int {
 		errors.Is(err, ErrLastAdmin),
 		errors.Is(err, ErrJoinRequestExists),
 		errors.Is(err, ErrJoinRequestNotPending),
+		errors.Is(err, ErrGroupFull),
+		errors.Is(err, ErrJoinRequestsLimit),
 		errors.Is(err, ErrMessageDeleted):
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidUUID),
@@ -71,6 +75,10 @@ func Reason(err error) string {
 		return "LAST_ADMIN"
 	case errors.Is(err, ErrBanned):
 		return "USER_BANNED"
+	case errors.Is(err, ErrGroupFull):
+		return "GROUP_FULL"
+	case errors.Is(err, ErrJoinRequestsLimit):
+		return "JOIN_REQUESTS_LIMIT"
 	case errors.Is(err, ErrJoinRequestExists):
 		return "JOIN_REQUEST_EXISTS"
 	case errors.Is(err, ErrJoinRequestNotPending):
@@ -116,6 +124,10 @@ func UserMessage(err error) string {
 		return "Заявка уже обработана"
 	case errors.Is(err, ErrBanned):
 		return "Пользователь заблокирован в этой группе"
+	case errors.Is(err, ErrGroupFull):
+		return "Достигнут максимальный размер группы"
+	case errors.Is(err, ErrJoinRequestsLimit):
+		return "Слишком много заявок на рассмотрении"
 	case errors.Is(err, ErrUserServiceError):
 		return "Сервис временно недоступен"
 	default:

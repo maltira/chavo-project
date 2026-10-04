@@ -76,9 +76,17 @@ func (h *InternalHandler) UserExists(c *gin.Context) {
 	}
 }
 
-// GET /internal/users/:user_id/group-invite-allowed
+// GET /internal/users/:user_id/group-invite-allowed?inviter=
+// Приглашение запрещено настройкой пользователя или блокировкой между ним и приглашающим (в любую сторону);
+// причина наружу не раскрывается.
 func (h *InternalHandler) GroupInviteAllowed(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("user_id"))
+	if err != nil {
+		respondError(c, apperror.ErrInvalidUUID, h.log)
+		return
+	}
+
+	inviterID, err := uuid.Parse(c.Query("inviter"))
 	if err != nil {
 		respondError(c, apperror.ErrInvalidUUID, h.log)
 		return
@@ -90,5 +98,15 @@ func (h *InternalHandler) GroupInviteAllowed(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.GroupInviteAllowedResponse{Allowed: settings.AllowGroupInvites})
+	allowed := settings.AllowGroupInvites
+	if allowed {
+		blockedByInviter, blockedByInvitee, err := h.blockSvc.GetBlockStatus(c.Request.Context(), inviterID, userID)
+		if err != nil {
+			respondError(c, err, h.log)
+			return
+		}
+		allowed = !blockedByInviter && !blockedByInvitee
+	}
+
+	c.JSON(http.StatusOK, dto.GroupInviteAllowedResponse{Allowed: allowed})
 }

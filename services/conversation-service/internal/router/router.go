@@ -1,14 +1,29 @@
 package router
 
 import (
+	"context"
+	"net/http"
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/handler"
 )
 
-func SetupRouter(convH *handler.ConversationHandler, groupH *handler.GroupHandler, joinH *handler.JoinHandler, msgH *handler.MessageHandler) *gin.Engine {
+// SetupRouter: ping проверяет зависимости (БД) для GET /health.
+func SetupRouter(convH *handler.ConversationHandler, groupH *handler.GroupHandler, joinH *handler.JoinHandler, msgH *handler.MessageHandler, ping func(context.Context) error) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+
+	r.GET("/health", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if err := ping(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
 	conversations := r.Group("/conversations")
 	{

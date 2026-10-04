@@ -257,6 +257,12 @@ services:
       - PORT=${CONVERSATION_PORT}
     ports:
       - "${CONVERSATION_PORT}:${CONVERSATION_PORT}"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:${CONVERSATION_PORT}/health || exit 1" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

@@ -79,7 +79,7 @@ func New() (*App, error) {
 	joinH := handler.NewJoinHandler(joinSvc, log)
 	msgH := handler.NewMessageHandler(msgSvc, log)
 
-	r := router.SetupRouter(convH, groupH, joinH, msgH)
+	r := router.SetupRouter(convH, groupH, joinH, msgH, pool.Ping)
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: r,

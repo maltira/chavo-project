@@ -26,6 +26,7 @@ type joinService struct {
 	convs    repository.ConversationRepository
 	requests repository.JoinRequestRepository
 	outbox   repository.OutboxRepository
+	bans     repository.BanRepository
 }
 
 func NewJoinService(
@@ -33,8 +34,9 @@ func NewJoinService(
 	convs repository.ConversationRepository,
 	requests repository.JoinRequestRepository,
 	outbox repository.OutboxRepository,
+	bans repository.BanRepository,
 ) JoinService {
-	return &joinService{db: db, convs: convs, requests: requests, outbox: outbox}
+	return &joinService{db: db, convs: convs, requests: requests, outbox: outbox, bans: bans}
 }
 
 func (s *joinService) publish(ctx context.Context, q repository.DBTX, convID uuid.UUID, eventType string, payload any) error {
@@ -119,6 +121,12 @@ func (s *joinService) RequestJoin(ctx context.Context, userID, convID uuid.UUID,
 			return err
 		}
 
+		if banned, err := s.bans.IsBanned(ctx, tx, convID, userID); err != nil {
+			return err
+		} else if banned {
+			return apperror.ErrBanned
+		}
+
 		if req, err = s.requests.Create(ctx, tx, convID, userID); err != nil {
 			return err
 		}
@@ -181,6 +189,11 @@ func (s *joinService) resolve(ctx context.Context, adminID, convID, requestID uu
 			return s.requests.SetStatus(ctx, tx, requestID, models.JoinRejected)
 		}
 
+		if banned, err := s.bans.IsBanned(ctx, tx, convID, req.UserID); err != nil {
+			return err
+		} else if banned {
+			return apperror.ErrBanned
+		}
 		if err = s.convs.AddMember(ctx, tx, convID, req.UserID, models.RoleMember); err != nil {
 			return err
 		}

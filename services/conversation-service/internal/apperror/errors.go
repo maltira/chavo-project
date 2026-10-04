@@ -23,6 +23,7 @@ var (
 	ErrInviteNotAllowed      = errors.New("user does not allow group invites")
 	ErrJoinRequestExists     = errors.New("join request already pending")
 	ErrJoinRequestNotPending = errors.New("join request is not pending")
+	ErrBanned                = errors.New("user is banned in this group")
 )
 
 func HTTPCode(err error) int {
@@ -34,7 +35,8 @@ func HTTPCode(err error) int {
 		errors.Is(err, ErrNotMember),
 		errors.Is(err, ErrBlockedByMe),
 		errors.Is(err, ErrBlockedByThem),
-		errors.Is(err, ErrInviteNotAllowed):
+		errors.Is(err, ErrInviteNotAllowed),
+		errors.Is(err, ErrBanned):
 		return http.StatusForbidden
 	case errors.Is(err, ErrUnauthorized):
 		return http.StatusUnauthorized
@@ -67,6 +69,8 @@ func Reason(err error) string {
 		return "GROUP_INVITE_NOT_ALLOWED"
 	case errors.Is(err, ErrLastAdmin):
 		return "LAST_ADMIN"
+	case errors.Is(err, ErrBanned):
+		return "USER_BANNED"
 	case errors.Is(err, ErrJoinRequestExists):
 		return "JOIN_REQUEST_EXISTS"
 	case errors.Is(err, ErrJoinRequestNotPending):
@@ -110,6 +114,8 @@ func UserMessage(err error) string {
 		return "Заявка на вступление уже отправлена"
 	case errors.Is(err, ErrJoinRequestNotPending):
 		return "Заявка уже обработана"
+	case errors.Is(err, ErrBanned):
+		return "Пользователь заблокирован в этой группе"
 	case errors.Is(err, ErrUserServiceError):
 		return "Сервис временно недоступен"
 	default:

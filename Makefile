@@ -65,7 +65,7 @@ clean-db:
 	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(USER_DB_NAME) -c "\
 		TRUNCATE TABLE profiles, user_settings, user_blocks CASCADE;" 2>/dev/null || true
 	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(CONVERSATION_DB_NAME) -c "\
-		TRUNCATE TABLE conversations, conversation_members, conversation_join_requests, messages, outbox_events CASCADE;" 2>/dev/null || true
+		TRUNCATE TABLE conversations, conversation_members, conversation_join_requests, conversation_bans, messages, outbox_events CASCADE;" 2>/dev/null || true
 	@echo "Таблицы БД успешно очищены."
 
 # ──────────────────────────────────────────────

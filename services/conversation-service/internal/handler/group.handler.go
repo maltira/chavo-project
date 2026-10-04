@@ -185,7 +185,7 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.RemoveMember(c.Request.Context(), userID, convID, targetID); err != nil {
+	if err := h.svc.RemoveMember(c.Request.Context(), userID, convID, targetID, c.Query("ban") == "true"); err != nil {
 		respondError(c, err, h.log)
 		return
 	}
@@ -203,9 +203,51 @@ func (h *GroupHandler) Leave(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.RemoveMember(c.Request.Context(), userID, convID, userID); err != nil {
+	if err := h.svc.RemoveMember(c.Request.Context(), userID, convID, userID, false); err != nil {
 		respondError(c, err, h.log)
 		return
 	}
 	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Вы вышли из группы"})
+}
+
+// GET /conversations/:id/bans
+func (h *GroupHandler) ListBans(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+	convID, ok := parseUUIDParam(c, "id", h.log)
+	if !ok {
+		return
+	}
+	limit, offset := parseLimit(c, 50, 200), parseOffset(c)
+
+	items, err := h.svc.ListBans(c.Request.Context(), userID, convID, limit, offset)
+	if err != nil {
+		respondError(c, err, h.log)
+		return
+	}
+	c.JSON(http.StatusOK, dto.BanListResponse{Items: items, Limit: limit, Offset: offset})
+}
+
+// DELETE /conversations/:id/bans/:user_id
+func (h *GroupHandler) Unban(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+	convID, ok := parseUUIDParam(c, "id", h.log)
+	if !ok {
+		return
+	}
+	targetID, ok := parseUUIDParam(c, "user_id", h.log)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.Unban(c.Request.Context(), userID, convID, targetID); err != nil {
+		respondError(c, err, h.log)
+		return
+	}
+	c.JSON(http.StatusOK, dto.MessageResponse{Success: true, Message: "Пользователь разблокирован"})
 }

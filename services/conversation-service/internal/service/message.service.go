@@ -29,6 +29,7 @@ type MessageService interface {
 	Send(ctx context.Context, senderID uuid.UUID, in SendMessageInput) (*models.Message, error)
 	List(ctx context.Context, userID, convID uuid.UUID, before *uuid.UUID, limit int) ([]models.Message, error)
 	Edit(ctx context.Context, userID, messageID uuid.UUID, content string) (*models.Message, error)
+	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
 	Readers(ctx context.Context, userID, convID, messageID uuid.UUID) ([]uuid.UUID, error)
@@ -242,13 +243,13 @@ func (s *messageService) List(ctx context.Context, userID, convID uuid.UUID, bef
 		return nil, err
 	}
 	if before != nil {
-		cur, err := s.msgs.FindByID(ctx, q, *before)
+		cur, err := s.msgs.FindVisible(ctx, q, *before, userID)
 		if err != nil || cur.ConversationID != convID {
 			return nil, apperror.ErrIncorrectData
 		}
 	}
 
-	recs, err := s.msgs.List(ctx, q, convID, before, limit)
+	recs, err := s.msgs.List(ctx, q, convID, userID, before, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -279,6 +280,9 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			return err
 		}
 		if _, err = s.convs.Access(ctx, tx, rec.ConversationID, userID); err != nil {
+			return err
+		}
+		if _, err = s.msgs.FindVisible(ctx, tx, messageID, userID); err != nil {
 			return err
 		}
 		if rec.SenderID != userID {
@@ -319,6 +323,15 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 	return result, nil
 }
 
+// Get отдаёт одно сообщение: видимое участнику или цель reply из видимого ему сообщения.
+func (s *messageService) Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error) {
+	rec, err := s.msgs.FindForViewer(ctx, s.db.Q(), messageID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.toModel(rec)
+}
+
 func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID) error {
 	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
 		rec, err := s.msgs.FindByID(ctx, tx, messageID)
@@ -327,6 +340,9 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 		}
 		access, err := s.convs.Access(ctx, tx, rec.ConversationID, userID)
 		if err != nil {
+			return err
+		}
+		if _, err = s.msgs.FindVisible(ctx, tx, messageID, userID); err != nil {
 			return err
 		}
 
@@ -362,16 +378,16 @@ func (s *messageService) MarkRead(ctx context.Context, userID, convID, messageID
 		if _, err := s.convs.Access(ctx, tx, convID, userID); err != nil {
 			return err
 		}
-		rec, err := s.msgs.FindByID(ctx, tx, messageID)
+		rec, err := s.msgs.FindVisible(ctx, tx, messageID, userID)
 		if err != nil || rec.ConversationID != convID {
 			return apperror.ErrNotFound
 		}
 
-		moved, err := s.msgs.SetReadCursor(ctx, tx, convID, userID, messageID)
+		moved, prev, err := s.msgs.SetReadCursor(ctx, tx, convID, userID, messageID)
 		if err != nil || !moved {
 			return err // курсор уже дальше — ничего не меняем
 		}
-		memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
+		authors, err := s.msgs.AuthorsBetween(ctx, tx, convID, prev, messageID, userID)
 		if err != nil {
 			return err
 		}
@@ -379,7 +395,7 @@ func (s *messageService) MarkRead(ctx context.Context, userID, convID, messageID
 			ConversationID: convID,
 			ReaderID:       userID,
 			MessageID:      messageID,
-			MemberIDs:      memberIDs,
+			AuthorIDs:      authors,
 		})
 	})
 }
@@ -389,7 +405,7 @@ func (s *messageService) Readers(ctx context.Context, userID, convID, messageID 
 	if _, err := s.convs.Access(ctx, q, convID, userID); err != nil {
 		return nil, err
 	}
-	rec, err := s.msgs.FindByID(ctx, q, messageID)
+	rec, err := s.msgs.FindVisible(ctx, q, messageID, userID)
 	if err != nil || rec.ConversationID != convID {
 		return nil, apperror.ErrNotFound
 	}

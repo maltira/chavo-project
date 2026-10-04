@@ -45,11 +45,13 @@ type MessageDeletedPayload struct {
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
 
+// Курсор прочтения покрывает все сообщения от предыдущего курсора до MessageID включительно.
+// AuthorIDs — их авторы (кроме читателя); Gateway уведомляет только их: галочки и список читателей видит автор.
 type MessageReadPayload struct {
 	ConversationID uuid.UUID   `json:"conversation_id"`
 	ReaderID       uuid.UUID   `json:"reader_id"`
 	MessageID      uuid.UUID   `json:"message_id"`
-	MemberIDs      []uuid.UUID `json:"member_ids"`
+	AuthorIDs      []uuid.UUID `json:"author_ids"`
 }
 
 // Для событий участников MemberIDs — все, кого нужно уведомить (включая затронутого пользователя).
@@ -79,6 +81,7 @@ type MemberRemovedPayload struct {
 	ConversationID uuid.UUID   `json:"conversation_id"`
 	UserID         uuid.UUID   `json:"user_id"`
 	RemovedBy      uuid.UUID   `json:"removed_by"`
+	Banned         bool        `json:"banned"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
 

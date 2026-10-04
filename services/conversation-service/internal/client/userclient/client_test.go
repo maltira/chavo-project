@@ -57,8 +57,24 @@ func TestGroupInviteAllowedNotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := New(srv.URL).GroupInviteAllowed(context.Background(), uuid.New())
+	_, err := New(srv.URL).GroupInviteAllowed(context.Background(), uuid.New(), uuid.New())
 	if !errors.Is(err, apperror.ErrUserNotFound) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestGroupInviteAllowedSendsInviter(t *testing.T) {
+	user, inviter := uuid.New(), uuid.New()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/users/"+user.String()+"/group-invite-allowed" || r.URL.Query().Get("inviter") != inviter.String() {
+			t.Errorf("unexpected request %s", r.URL)
+		}
+		_, _ = w.Write([]byte(`{"allowed":false}`))
+	}))
+	defer srv.Close()
+
+	allowed, err := New(srv.URL).GroupInviteAllowed(context.Background(), user, inviter)
+	if err != nil || allowed {
+		t.Fatalf("allowed=%v err=%v", allowed, err)
 	}
 }

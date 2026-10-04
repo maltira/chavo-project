@@ -28,10 +28,17 @@ type MessageRecord struct {
 type MessageRepository interface {
 	Create(ctx context.Context, q DBTX, rec *MessageRecord) error
 	FindByID(ctx context.Context, q DBTX, id uuid.UUID) (*MessageRecord, error)
-	List(ctx context.Context, q DBTX, convID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error)
+	// List отдаёт только сообщения, видимые участнику userID.
+	List(ctx context.Context, q DBTX, convID, userID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error)
+	// FindVisible — сообщение, которое участник вправе видеть (ErrNotFound иначе).
+	FindVisible(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
+	// FindForViewer — как FindVisible, но также отдаёт сообщение, на которое отвечает видимое участнику сообщение.
+	FindForViewer(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
 	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte) (*time.Time, error)
 	SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error)
-	SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (bool, error)
+	SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (moved bool, prev *uuid.UUID, err error)
+	// AuthorsBetween возвращает авторов неудалённых сообщений в (after, upTo], кроме exclude; after == nil — с начала чата.
+	AuthorsBetween(ctx context.Context, q DBTX, convID uuid.UUID, after *uuid.UUID, upTo, exclude uuid.UUID) ([]uuid.UUID, error)
 	ListReaders(ctx context.Context, q DBTX, convID, messageID uuid.UUID) ([]uuid.UUID, error)
 }
 
@@ -40,6 +47,11 @@ type messageRepository struct{}
 func NewMessageRepository() MessageRepository {
 	return &messageRepository{}
 }
+
+// Участник видит сообщения с момента вступления; admin видит всю историю.
+const visibleToMember = `(cm.member_role = 'admin' OR m.created_at >= cm.joined_at)`
+
+const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited, m.created_at, m.updated_at, m.deleted_at`
 
 const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited, created_at, updated_at, deleted_at`
 
@@ -80,17 +92,19 @@ func (r *messageRepository) FindByID(ctx context.Context, q DBTX, id uuid.UUID) 
 }
 
 // List возвращает сообщения от новых к старым; before — id сообщения-курсора (строго старше него).
-func (r *messageRepository) List(ctx context.Context, q DBTX, convID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error) {
+func (r *messageRepository) List(ctx context.Context, q DBTX, convID, userID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error) {
 	rows, err := q.Query(ctx,
 		`WITH cur AS (SELECT created_at, id FROM messages WHERE id = $2 AND conversation_id = $1)
-		 SELECT `+messageColumns+`
+		 SELECT `+messageColumnsM+`
 		 FROM messages m
+		 JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = $4
 		 WHERE m.conversation_id = $1
+		   AND `+visibleToMember+`
 		   AND ($2::uuid IS NULL OR EXISTS (
 		        SELECT 1 FROM cur WHERE (m.created_at, m.id) < (cur.created_at, cur.id)))
 		 ORDER BY m.created_at DESC, m.id DESC
 		 LIMIT $3`,
-		convID, before, limit,
+		convID, before, limit, userID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
@@ -106,6 +120,40 @@ func (r *messageRepository) List(ctx context.Context, q DBTX, convID uuid.UUID, 
 		res = append(res, *m)
 	}
 	return res, rows.Err()
+}
+
+func (r *messageRepository) FindVisible(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error) {
+	m, err := scanMessage(q.QueryRow(ctx,
+		`SELECT `+messageColumnsM+`
+		 FROM messages m
+		 JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = $2
+		 WHERE m.id = $1 AND `+visibleToMember, id, userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotFound
+		}
+		return nil, fmt.Errorf("find visible message: %w", err)
+	}
+	return m, nil
+}
+
+func (r *messageRepository) FindForViewer(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error) {
+	m, err := scanMessage(q.QueryRow(ctx,
+		`SELECT `+messageColumnsM+`
+		 FROM messages m
+		 JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = $2
+		 WHERE m.id = $1
+		   AND (`+visibleToMember+` OR EXISTS (
+		        SELECT 1 FROM messages r
+		        WHERE r.reply_to_message_id = m.id AND r.conversation_id = m.conversation_id
+		          AND (cm.member_role = 'admin' OR r.created_at >= cm.joined_at)))`, id, userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotFound
+		}
+		return nil, fmt.Errorf("find message for viewer: %w", err)
+	}
+	return m, nil
 }
 
 // Update меняет содержимое неудалённого сообщения; ErrMessageDeleted, если оно удалено.
@@ -138,23 +186,60 @@ func (r *messageRepository) SoftDelete(ctx context.Context, q DBTX, id uuid.UUID
 	return ct.RowsAffected() == 1, nil
 }
 
-// SetReadCursor двигает курсор прочтения только вперёд; false — курсор не изменился.
-func (r *messageRepository) SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (bool, error) {
-	ct, err := q.Exec(ctx,
+// SetReadCursor двигает курсор прочтения только вперёд; moved=false — курсор не изменился.
+// prev — прежнее значение курсора (до обновления).
+func (r *messageRepository) SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (bool, *uuid.UUID, error) {
+	var prev *uuid.UUID
+	err := q.QueryRow(ctx,
 		`UPDATE conversation_members cm SET last_read_message_id = $3
-		 FROM messages nm
+		 FROM messages nm, conversation_members old
 		 WHERE nm.id = $3 AND nm.conversation_id = $1
 		   AND cm.conversation_id = $1 AND cm.user_id = $2
+		   AND old.conversation_id = cm.conversation_id AND old.user_id = cm.user_id
 		   AND (cm.last_read_message_id IS NULL OR NOT EXISTS (
 		        SELECT 1 FROM messages om
 		        WHERE om.id = cm.last_read_message_id
-		          AND (om.created_at, om.id) >= (nm.created_at, nm.id)))`,
+		          AND (om.created_at, om.id) >= (nm.created_at, nm.id)))
+		 RETURNING old.last_read_message_id`,
 		convID, userID, messageID,
+	).Scan(&prev)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, fmt.Errorf("set read cursor: %w", err)
+	}
+	return true, prev, nil
+}
+
+func (r *messageRepository) AuthorsBetween(ctx context.Context, q DBTX, convID uuid.UUID, after *uuid.UUID, upTo, exclude uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx,
+		`SELECT DISTINCT m.sender_id
+		 FROM messages m
+		 JOIN messages hi ON hi.id = $3
+		 LEFT JOIN messages lo ON lo.id = $2
+		 WHERE m.conversation_id = $1
+		   AND m.deleted_at IS NULL
+		   AND m.sender_id <> $4
+		   AND (m.created_at, m.id) <= (hi.created_at, hi.id)
+		   AND (lo.id IS NULL OR (m.created_at, m.id) > (lo.created_at, lo.id))
+		 ORDER BY m.sender_id`,
+		convID, after, upTo, exclude,
 	)
 	if err != nil {
-		return false, fmt.Errorf("set read cursor: %w", err)
+		return nil, fmt.Errorf("authors between: %w", err)
 	}
-	return ct.RowsAffected() == 1, nil
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan author: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // ListReaders возвращает участников (кроме автора), прочитавших сообщение включительно.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -38,8 +39,9 @@ func (f *fakeUsers) UserExists(_ context.Context, id uuid.UUID) (bool, error) {
 	return !f.missing[id], nil
 }
 
-func (f *fakeUsers) GroupInviteAllowed(_ context.Context, id uuid.UUID) (bool, error) {
-	return !f.noInvites[id], nil
+func (f *fakeUsers) GroupInviteAllowed(_ context.Context, id, inviter uuid.UUID) (bool, error) {
+	blocked := f.blockedBySender[[2]uuid.UUID{inviter, id}] || f.blockedBySender[[2]uuid.UUID{id, inviter}]
+	return !f.noInvites[id] && !blocked, nil
 }
 
 type env struct {
@@ -67,8 +69,8 @@ func setup(t *testing.T) *env {
 		pool:   pool,
 		msgs:   service.NewMessageService(db, cr, mr, or, users, cipher, zap.NewNop()),
 		convs:  service.NewConversationService(db, cr, cipher),
-		groups: service.NewGroupService(db, cr, or, users),
-		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or),
+		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository()),
+		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository()),
 		users:  users,
 	}
 }
@@ -345,4 +347,112 @@ func mustConv(t *testing.T, e *env, user uuid.UUID) uuid.UUID {
 		t.Fatalf("list: %v %v", list, err)
 	}
 	return list[0].ID
+}
+
+func readEventAuthors(t *testing.T, e *env) [][]string {
+	t.Helper()
+	rows, err := e.pool.Query(context.Background(),
+		`SELECT payload->'payload'->'author_ids' FROM outbox_events WHERE payload->>'event_type' = 'message.read' ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var res [][]string
+	for rows.Next() {
+		var ids []string
+		if err := rows.Scan(&ids); err != nil {
+			t.Fatal(err)
+		}
+		sort.Strings(ids)
+		res = append(res, ids)
+	}
+	return res
+}
+
+func sorted(ids ...uuid.UUID) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = id.String()
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestReadEventNotifiesAuthorsOfAllCoveredMessages(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+
+	var convID uuid.UUID
+	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, name) VALUES ('group','g') RETURNING id`).Scan(&convID); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []uuid.UUID{a, b, c} {
+		if _, err := e.pool.Exec(ctx, `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1,$2)`, convID, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send := func(from uuid.UUID, text string) uuid.UUID {
+		m, err := e.msgs.Send(ctx, from, service.SendMessageInput{ConversationID: &convID, Content: text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m.ID
+	}
+
+	m1, m2 := send(a, "m1"), send(b, "m2")
+	if err := e.msgs.MarkRead(ctx, c, convID, m2); err != nil {
+		t.Fatal(err)
+	}
+	m3 := send(a, "m3")
+	if err := e.msgs.MarkRead(ctx, c, convID, m3); err != nil {
+		t.Fatal(err)
+	}
+	// Повторная отметка до уже прочитанного не порождает события; свои сообщения читателю в авторы не попадают.
+	if err := e.msgs.MarkRead(ctx, c, convID, m1); err != nil {
+		t.Fatal(err)
+	}
+	m4 := send(c, "m4")
+	if err := e.msgs.MarkRead(ctx, c, convID, m4); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readEventAuthors(t, e)
+	want := [][]string{sorted(a, b), sorted(a), {}}
+	if len(got) != len(want) {
+		t.Fatalf("message.read events = %v, want %v", got, want)
+	}
+	for i := range want {
+		if len(got[i]) != len(want[i]) {
+			t.Fatalf("event %d authors = %v, want %v", i, got[i], want[i])
+		}
+		for j := range want[i] {
+			if got[i][j] != want[i][j] {
+				t.Fatalf("event %d authors = %v, want %v", i, got[i], want[i])
+			}
+		}
+	}
+}
+
+func TestReadEventInDirectWhenReaderMarksOwnMessage(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	a, b := uuid.New(), uuid.New()
+
+	if _, err := e.msgs.Send(ctx, a, service.SendMessageInput{RecipientID: &b, Content: "привет"}); err != nil {
+		t.Fatal(err)
+	}
+	conv := mustConv(t, e, a)
+	reply, err := e.msgs.Send(ctx, b, service.SendMessageInput{ConversationID: &conv, Content: "ответ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// B отмечает прочитанным собственную реплику: прочитано и сообщение A, A должен узнать.
+	if err = e.msgs.MarkRead(ctx, b, conv, reply.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := readEventAuthors(t, e)
+	if len(got) != 1 || len(got[0]) != 1 || got[0][0] != a.String() {
+		t.Fatalf("authors = %v, want [%s]", got, a)
+	}
 }

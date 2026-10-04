@@ -63,6 +63,7 @@ func New() (*App, error) {
 	msgRepo := repository.NewMessageRepository()
 	outboxRepo := repository.NewOutboxRepository()
 	joinRepo := repository.NewJoinRequestRepository()
+	banRepo := repository.NewBanRepository()
 	users := userclient.New(cfg.UserServiceURL)
 	producer := pkgkafka.NewProducer(cfg.KafkaBrokers, log)
 	publisher := outbox.NewPublisher(db, outboxRepo, producer, cipher, log, outbox.DefaultOptions())
@@ -70,8 +71,8 @@ func New() (*App, error) {
 	convSvc := service.NewConversationService(db, convRepo, cipher)
 	msgSvc := service.NewMessageService(db, convRepo, msgRepo, outboxRepo, users, cipher, log)
 
-	groupSvc := service.NewGroupService(db, convRepo, outboxRepo, users)
-	joinSvc := service.NewJoinService(db, convRepo, joinRepo, outboxRepo)
+	groupSvc := service.NewGroupService(db, convRepo, outboxRepo, users, banRepo)
+	joinSvc := service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo)
 
 	convH := handler.NewConversationHandler(convSvc, log)
 	groupH := handler.NewGroupHandler(groupSvc, log)

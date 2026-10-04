@@ -72,11 +72,25 @@ CREATE TABLE conversation_members (
         REFERENCES messages(id)
         ON DELETE SET NULL,
 
-    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- История видна участнику с этого момента (admin видит всё); clock_timestamp() согласован с messages.created_at.
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
     PRIMARY KEY (conversation_id, user_id)
 );
 CREATE INDEX idx_conversation_members_user ON conversation_members(user_id);
+
+-- Чёрный список группы: забаненный не может вступить ни в открытую группу, ни подать заявку в закрытую.
+CREATE TABLE conversation_bans (
+    conversation_id UUID NOT NULL
+        REFERENCES conversations(id)
+        ON DELETE CASCADE,
+
+    user_id UUID NOT NULL,
+    banned_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+
+    PRIMARY KEY (conversation_id, user_id)
+);
 
 CREATE TABLE conversation_join_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

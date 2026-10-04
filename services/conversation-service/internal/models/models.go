@@ -41,6 +41,12 @@ type Member struct {
 	JoinedAt          time.Time  `json:"joined_at"`
 }
 
+type Ban struct {
+	UserID    uuid.UUID `json:"user_id"`
+	BannedBy  uuid.UUID `json:"banned_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // Message — расшифрованное сообщение; Content == nil у удалённых.
 type Message struct {
 	ID               uuid.UUID  `json:"id"`

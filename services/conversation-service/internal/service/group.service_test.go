@@ -275,22 +275,22 @@ func TestRemoveMemberLeaveAndDelete(t *testing.T) {
 	admin, m1, m2 := uuid.New(), uuid.New(), uuid.New()
 	id := createGroup(t, e, admin, "private", m1, m2).Conversation.ID
 
-	if err := e.groups.RemoveMember(ctx, m1, id, m2); !errors.Is(err, apperror.ErrForbidden) {
+	if err := e.groups.RemoveMember(ctx, m1, id, m2, false); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("member kicks: %v", err)
 	}
-	if err := e.groups.RemoveMember(ctx, admin, id, uuid.New()); !errors.Is(err, apperror.ErrNotFound) {
+	if err := e.groups.RemoveMember(ctx, admin, id, uuid.New(), false); !errors.Is(err, apperror.ErrNotFound) {
 		t.Fatalf("kick non-member: %v", err)
 	}
-	if err := e.groups.RemoveMember(ctx, admin, id, m2); err != nil {
+	if err := e.groups.RemoveMember(ctx, admin, id, m2, false); err != nil {
 		t.Fatal(err)
 	}
 	if memberRole(t, e, id, m2) != "" {
 		t.Fatal("kicked member still present")
 	}
-	if err := e.groups.RemoveMember(ctx, admin, id, admin); !errors.Is(err, apperror.ErrLastAdmin) {
+	if err := e.groups.RemoveMember(ctx, admin, id, admin, false); !errors.Is(err, apperror.ErrLastAdmin) {
 		t.Fatalf("last admin leaves: %v", err)
 	}
-	if err := e.groups.RemoveMember(ctx, admin, id, m1); err != nil {
+	if err := e.groups.RemoveMember(ctx, admin, id, m1, false); err != nil {
 		t.Fatal(err)
 	}
 	if events(t, e, "conversation.member.removed") != 2 {
@@ -328,7 +328,40 @@ func TestRemoveMemberLeaveAndDelete(t *testing.T) {
 	if err := e.groups.Delete(ctx, a, m.ConversationID); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("delete direct: %v", err)
 	}
-	if err := e.groups.RemoveMember(ctx, a, m.ConversationID, a); !errors.Is(err, apperror.ErrForbidden) {
+	if err := e.groups.RemoveMember(ctx, a, m.ConversationID, a, false); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("leave direct: %v", err)
+	}
+}
+
+func TestGroupInviteRespectsBlocks(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin, blockedByAdmin, blockedAdmin, ok := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	e.users.blockedBySender[[2]uuid.UUID{admin, blockedByAdmin}] = true // админ заблокировал
+	e.users.blockedBySender[[2]uuid.UUID{blockedAdmin, admin}] = true   // админа заблокировали
+
+	for name, target := range map[string]uuid.UUID{"blocked by admin": blockedByAdmin, "admin is blocked": blockedAdmin} {
+		_, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", MemberIDs: []uuid.UUID{target}})
+		if !errors.Is(err, apperror.ErrInviteNotAllowed) {
+			t.Errorf("create, %s: %v", name, err)
+		}
+	}
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM conversations`); n != 0 {
+		t.Fatalf("rejected create left %d conversations", n)
+	}
+
+	conv := createGroup(t, e, admin, "", ok).Conversation.ID
+	for name, target := range map[string]uuid.UUID{"blocked by admin": blockedByAdmin, "admin is blocked": blockedAdmin} {
+		if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{target}); !errors.Is(err, apperror.ErrInviteNotAllowed) {
+			t.Errorf("add, %s: %v", name, err)
+		}
+	}
+	if memberRole(t, e, conv, blockedByAdmin) != "" || memberRole(t, e, conv, blockedAdmin) != "" {
+		t.Fatal("blocked users must not become members")
+	}
+	// Блокировка касается только пары: остальным админ приглашать по-прежнему может.
+	other := uuid.New()
+	if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{other}); err != nil {
+		t.Fatalf("add unrelated user: %v", err)
 	}
 }

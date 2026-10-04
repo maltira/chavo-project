@@ -19,7 +19,8 @@ type Client interface {
 	// CheckMessagingAllowed возвращает ErrBlockedByMe / ErrBlockedByThem (с точки зрения sender).
 	CheckMessagingAllowed(ctx context.Context, sender, recipient uuid.UUID) error
 	UserExists(ctx context.Context, userID uuid.UUID) (bool, error)
-	GroupInviteAllowed(ctx context.Context, userID uuid.UUID) (bool, error)
+	// GroupInviteAllowed: false, если пользователь запретил приглашения или между ним и inviter есть блокировка.
+	GroupInviteAllowed(ctx context.Context, userID, inviterID uuid.UUID) (bool, error)
 }
 
 type httpClient struct {
@@ -63,11 +64,11 @@ func (c *httpClient) UserExists(ctx context.Context, userID uuid.UUID) (bool, er
 	return resp.Exists, nil
 }
 
-func (c *httpClient) GroupInviteAllowed(ctx context.Context, userID uuid.UUID) (bool, error) {
+func (c *httpClient) GroupInviteAllowed(ctx context.Context, userID, inviterID uuid.UUID) (bool, error) {
 	var resp struct {
 		Allowed bool `json:"allowed"`
 	}
-	status, err := c.get(ctx, "/internal/users/"+userID.String()+"/group-invite-allowed", &resp)
+	status, err := c.get(ctx, "/internal/users/"+userID.String()+"/group-invite-allowed?inviter="+url.QueryEscape(inviterID.String()), &resp)
 	if status == http.StatusNotFound {
 		return false, apperror.ErrUserNotFound
 	}

@@ -41,6 +41,12 @@ type MemberListResponse struct {
 	Offset int             `json:"offset"`
 }
 
+type BanListResponse struct {
+	Items  []models.Ban `json:"items"`
+	Limit  int          `json:"limit"`
+	Offset int          `json:"offset"`
+}
+
 type RequestJoinRequest struct {
 	InviteToken string `json:"invite_token" binding:"required"`
 }

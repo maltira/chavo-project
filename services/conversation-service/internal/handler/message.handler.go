@@ -45,6 +45,25 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	c.JSON(http.StatusCreated, msg)
 }
 
+// GET /messages/:message_id — одно сообщение (в т.ч. цель reply до момента вступления)
+func (h *MessageHandler) Get(c *gin.Context) {
+	userID, ok := parseUserID(c, h.log)
+	if !ok {
+		return
+	}
+	messageID, ok := parseUUIDParam(c, "message_id", h.log)
+	if !ok {
+		return
+	}
+
+	msg, err := h.svc.Get(c.Request.Context(), userID, messageID)
+	if err != nil {
+		respondError(c, err, h.log)
+		return
+	}
+	c.JSON(http.StatusOK, msg)
+}
+
 // GET /messages?conversation_id=&limit=&before=
 func (h *MessageHandler) List(c *gin.Context) {
 	userID, ok := parseUserID(c, h.log)

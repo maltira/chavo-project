@@ -52,7 +52,10 @@ type GroupService interface {
 	ListMembers(ctx context.Context, userID, convID uuid.UUID, limit, offset int) ([]models.Member, error)
 	AddMembers(ctx context.Context, adminID, convID uuid.UUID, userIDs []uuid.UUID) error
 	SetRole(ctx context.Context, adminID, convID, targetID uuid.UUID, role string) error
-	RemoveMember(ctx context.Context, actorID, convID, targetID uuid.UUID) error
+	// RemoveMember: kick или выход; ban=true (только admin, не себя) ещё и закрывает возвращение в группу.
+	RemoveMember(ctx context.Context, actorID, convID, targetID uuid.UUID, ban bool) error
+	ListBans(ctx context.Context, adminID, convID uuid.UUID, limit, offset int) ([]models.Ban, error)
+	Unban(ctx context.Context, adminID, convID, targetID uuid.UUID) error
 }
 
 type groupService struct {
@@ -60,6 +63,7 @@ type groupService struct {
 	convs  repository.ConversationRepository
 	outbox repository.OutboxRepository
 	users  userclient.Client
+	bans   repository.BanRepository
 }
 
 func NewGroupService(
@@ -67,8 +71,9 @@ func NewGroupService(
 	convs repository.ConversationRepository,
 	outbox repository.OutboxRepository,
 	users userclient.Client,
+	bans repository.BanRepository,
 ) GroupService {
-	return &groupService{db: db, convs: convs, outbox: outbox, users: users}
+	return &groupService{db: db, convs: convs, outbox: outbox, users: users, bans: bans}
 }
 
 func (s *groupService) publish(ctx context.Context, q repository.DBTX, topic string, convID uuid.UUID, eventType string, payload any) error {
@@ -115,8 +120,9 @@ func uniqueOthers(ids []uuid.UUID, self uuid.UUID) []uuid.UUID {
 	return res
 }
 
-// ensureInvitable проверяет в user-service, что пользователи существуют и разрешают приглашения в группы.
-func (s *groupService) ensureInvitable(ctx context.Context, ids []uuid.UUID) error {
+// ensureInvitable проверяет в user-service, что пользователи существуют и их можно пригласить в группу:
+// приглашения не запрещены и нет блокировки между ними и приглашающим.
+func (s *groupService) ensureInvitable(ctx context.Context, inviterID uuid.UUID, ids []uuid.UUID) error {
 	for _, id := range ids {
 		exists, err := s.users.UserExists(ctx, id)
 		if err != nil {
@@ -125,7 +131,7 @@ func (s *groupService) ensureInvitable(ctx context.Context, ids []uuid.UUID) err
 		if !exists {
 			return apperror.ErrUserNotFound
 		}
-		allowed, err := s.users.GroupInviteAllowed(ctx, id)
+		allowed, err := s.users.GroupInviteAllowed(ctx, id, inviterID)
 		if err != nil {
 			return err
 		}
@@ -176,7 +182,7 @@ func (s *groupService) Create(ctx context.Context, creatorID uuid.UUID, in Creat
 	if len(members) > maxUsersPerRequest {
 		return nil, apperror.ErrIncorrectData
 	}
-	if err = s.ensureInvitable(ctx, members); err != nil {
+	if err = s.ensureInvitable(ctx, creatorID, members); err != nil {
 		return nil, err
 	}
 
@@ -335,7 +341,7 @@ func (s *groupService) Delete(ctx context.Context, userID, convID uuid.UUID) err
 			return apperror.ErrForbidden
 		}
 		if access.Role == models.RoleMember {
-			return s.removeLocked(ctx, tx, convID, userID, userID)
+			return s.removeLocked(ctx, tx, convID, userID, userID, false)
 		}
 
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
@@ -364,6 +370,11 @@ func (s *groupService) Join(ctx context.Context, userID, convID uuid.UUID) error
 			return apperror.ErrAlreadyMember
 		} else if !errors.Is(err, apperror.ErrNotFound) {
 			return err
+		}
+		if banned, err := s.bans.IsBanned(ctx, tx, convID, userID); err != nil {
+			return err
+		} else if banned {
+			return apperror.ErrBanned
 		}
 		if err = s.convs.AddMember(ctx, tx, convID, userID, models.RoleMember); err != nil {
 			return err
@@ -394,7 +405,7 @@ func (s *groupService) AddMembers(ctx context.Context, adminID, convID uuid.UUID
 	if err := s.requireGroupAdmin(ctx, s.db.Q(), convID, adminID); err != nil {
 		return err
 	}
-	if err := s.ensureInvitable(ctx, ids); err != nil {
+	if err := s.ensureInvitable(ctx, adminID, ids); err != nil {
 		return err
 	}
 
@@ -410,6 +421,11 @@ func (s *groupService) AddMembers(ctx context.Context, adminID, convID uuid.UUID
 				return apperror.ErrAlreadyMember
 			} else if !errors.Is(err, apperror.ErrNotFound) {
 				return err
+			}
+			if banned, err := s.bans.IsBanned(ctx, tx, convID, id); err != nil {
+				return err
+			} else if banned {
+				return apperror.ErrBanned
 			}
 			if err := s.convs.AddMember(ctx, tx, convID, id, models.RoleMember); err != nil {
 				return err
@@ -465,18 +481,48 @@ func (s *groupService) SetRole(ctx context.Context, adminID, convID, targetID uu
 	})
 }
 
-// RemoveMember: kick (admin) или выход (target == actor).
-func (s *groupService) RemoveMember(ctx context.Context, actorID, convID, targetID uuid.UUID) error {
+// RemoveMember: kick (admin) или выход (target == actor); ban возможен только при kick.
+func (s *groupService) RemoveMember(ctx context.Context, actorID, convID, targetID uuid.UUID, ban bool) error {
+	if ban && actorID == targetID {
+		return apperror.ErrIncorrectData
+	}
 	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
 		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
 			return err
 		}
-		return s.removeLocked(ctx, tx, convID, actorID, targetID)
+		return s.removeLocked(ctx, tx, convID, actorID, targetID, ban)
+	})
+}
+
+func (s *groupService) ListBans(ctx context.Context, adminID, convID uuid.UUID, limit, offset int) ([]models.Ban, error) {
+	q := s.db.Q()
+	if err := s.requireGroupAdmin(ctx, q, convID, adminID); err != nil {
+		return nil, err
+	}
+	return s.bans.List(ctx, q, convID, limit, offset)
+}
+
+func (s *groupService) Unban(ctx context.Context, adminID, convID, targetID uuid.UUID) error {
+	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		removed, err := s.bans.Unban(ctx, tx, convID, targetID)
+		if err != nil {
+			return err
+		}
+		if !removed {
+			return apperror.ErrNotFound
+		}
+		return nil
 	})
 }
 
 // removeLocked требует, чтобы строка conversation уже была заблокирована в этой транзакции.
-func (s *groupService) removeLocked(ctx context.Context, tx repository.DBTX, convID, actorID, targetID uuid.UUID) error {
+func (s *groupService) removeLocked(ctx context.Context, tx repository.DBTX, convID, actorID, targetID uuid.UUID, ban bool) error {
 	access, err := s.convs.Access(ctx, tx, convID, actorID)
 	if err != nil {
 		return err
@@ -504,12 +550,17 @@ func (s *groupService) removeLocked(ctx context.Context, tx repository.DBTX, con
 	if _, err = s.convs.RemoveMember(ctx, tx, convID, targetID); err != nil {
 		return err
 	}
+	if ban {
+		if err = s.bans.Ban(ctx, tx, convID, targetID, actorID); err != nil {
+			return err
+		}
+	}
 
 	remaining, err := s.convs.MemberIDs(ctx, tx, convID)
 	if err != nil {
 		return err
 	}
 	return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeMemberRemoved, events.MemberRemovedPayload{
-		ConversationID: convID, UserID: targetID, RemovedBy: actorID, MemberIDs: append(remaining, targetID),
+		ConversationID: convID, UserID: targetID, RemovedBy: actorID, Banned: ban, MemberIDs: append(remaining, targetID),
 	})
 }

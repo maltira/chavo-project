@@ -32,6 +32,9 @@ func SetupRouter(convH *handler.ConversationHandler, groupH *handler.GroupHandle
 		conversations.DELETE("/:id/members/me", groupH.Leave)
 		conversations.DELETE("/:id/members/:user_id", groupH.RemoveMember)
 
+		conversations.GET("/:id/bans", groupH.ListBans)
+		conversations.DELETE("/:id/bans/:user_id", groupH.Unban)
+
 		conversations.POST("/:id/read", msgH.MarkRead)
 		conversations.GET("/:id/messages/:message_id/readers", msgH.Readers)
 	}
@@ -42,6 +45,7 @@ func SetupRouter(convH *handler.ConversationHandler, groupH *handler.GroupHandle
 	{
 		messages.GET("", msgH.List)
 		messages.POST("", msgH.Send)
+		messages.GET("/:message_id", msgH.Get)
 		messages.PATCH("/:message_id", msgH.Edit)
 		messages.DELETE("/:message_id", msgH.Delete)
 	}

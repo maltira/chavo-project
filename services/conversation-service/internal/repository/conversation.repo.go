@@ -172,6 +172,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		        lm.created_at, lm.updated_at, lm.deleted_at,
 		        (SELECT COUNT(*) FROM messages m
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
+		            AND m.created_at >= cm.joined_at
 		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id)))
 		 FROM conversation_members cm
 		 JOIN conversations c ON c.id = cm.conversation_id
@@ -180,6 +181,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		        ON c.conversation_type = 'direct' AND peer.conversation_id = c.id AND peer.user_id <> $1
 		 LEFT JOIN LATERAL (
 		        SELECT * FROM messages x WHERE x.conversation_id = c.id
+		           AND (cm.member_role = 'admin' OR x.created_at >= cm.joined_at)
 		        ORDER BY x.created_at DESC, x.id DESC LIMIT 1) lm ON TRUE
 		 WHERE cm.user_id = $1 AND ($2::uuid IS NULL OR c.id = $2)
 		 ORDER BY c.last_message_at DESC, c.id DESC

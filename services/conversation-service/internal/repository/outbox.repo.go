@@ -30,6 +30,8 @@ type OutboxRepository interface {
 	FetchUnpublished(ctx context.Context, q DBTX, limit int) ([]OutboxRecord, error)
 	MarkPublished(ctx context.Context, q DBTX, id int64) error
 	RecordFailure(ctx context.Context, q DBTX, id int64) error
+	// Park выводит «ядовитое» событие из очереди (failed_at); остальные события продолжают публиковаться.
+	Park(ctx context.Context, q DBTX, id int64) error
 	DeletePublishedBefore(ctx context.Context, q DBTX, olderThan time.Duration) (int64, error)
 }
 
@@ -77,7 +79,7 @@ func (r *outboxRepository) TryLock(ctx context.Context, q DBTX) (bool, error) {
 func (r *outboxRepository) FetchUnpublished(ctx context.Context, q DBTX, limit int) ([]OutboxRecord, error) {
 	rows, err := q.Query(ctx,
 		`SELECT id, topic, event_key, payload, attempts FROM outbox_events
-		 WHERE published_at IS NULL ORDER BY id LIMIT $1`, limit)
+		 WHERE published_at IS NULL AND failed_at IS NULL ORDER BY id LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("fetch outbox events: %w", err)
 	}
@@ -104,6 +106,13 @@ func (r *outboxRepository) MarkPublished(ctx context.Context, q DBTX, id int64) 
 func (r *outboxRepository) RecordFailure(ctx context.Context, q DBTX, id int64) error {
 	if _, err := q.Exec(ctx, `UPDATE outbox_events SET attempts = attempts + 1 WHERE id = $1`, id); err != nil {
 		return fmt.Errorf("record outbox failure: %w", err)
+	}
+	return nil
+}
+
+func (r *outboxRepository) Park(ctx context.Context, q DBTX, id int64) error {
+	if _, err := q.Exec(ctx, `UPDATE outbox_events SET attempts = attempts + 1, failed_at = clock_timestamp() WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("park outbox event: %w", err)
 	}
 	return nil
 }

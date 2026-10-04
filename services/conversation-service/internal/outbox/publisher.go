@@ -28,6 +28,7 @@ type Options struct {
 	PublishTimeout time.Duration // лимит на одну отправку в Kafka
 	MaxBackoff     time.Duration // потолок паузы после ошибки
 	PurgeEvery     time.Duration
+	PoisonAttempts int           // после стольких неудачных подготовок payload событие паркуется
 	Retention      time.Duration // сколько хранить опубликованные события (для повторной публикации)
 }
 
@@ -38,6 +39,7 @@ func DefaultOptions() Options {
 		PublishTimeout: 5 * time.Second,
 		MaxBackoff:     30 * time.Second,
 		PurgeEvery:     time.Hour,
+		PoisonAttempts: 3,
 		Retention:      24 * time.Hour,
 	}
 }
@@ -151,13 +153,24 @@ func (p *Publisher) RunOnce(ctx context.Context) (int, error) {
 		}
 
 		for _, rec := range batch {
-			payload, sendErr := p.preparePayload(rec)
-			if sendErr == nil {
-				sendCtx, cancel := context.WithTimeout(ctx, p.opts.PublishTimeout)
-				sendErr = p.pub.Publish(sendCtx, rec.Topic, rec.Key, json.RawMessage(payload))
-				cancel()
+			payload, prepErr := p.preparePayload(rec)
+			if prepErr != nil {
+				// Ошибка в самом событии (разбор, расшифровка), а не в Kafka: повторы не помогут,
+				// поэтому после PoisonAttempts событие паркуется, а очередь идёт дальше.
+				if rec.Attempts+1 >= p.opts.PoisonAttempts {
+					p.log.Error("Outbox event parked", zap.Int64("outbox_id", rec.ID), zap.String("topic", rec.Topic), zap.Error(prepErr))
+					if err := p.repo.Park(dbCtx, tx, rec.ID); err != nil {
+						return err
+					}
+					continue
+				}
+				pubErr = fmt.Errorf("prepare outbox event %d (attempt %d): %w", rec.ID, rec.Attempts+1, prepErr)
+				return p.repo.RecordFailure(dbCtx, tx, rec.ID)
 			}
 
+			sendCtx, cancel := context.WithTimeout(ctx, p.opts.PublishTimeout)
+			sendErr := p.pub.Publish(sendCtx, rec.Topic, rec.Key, json.RawMessage(payload))
+			cancel()
 			if sendErr != nil {
 				pubErr = fmt.Errorf("publish outbox event %d (attempt %d): %w", rec.ID, rec.Attempts+1, sendErr)
 				return p.repo.RecordFailure(dbCtx, tx, rec.ID)

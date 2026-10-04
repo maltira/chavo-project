@@ -10,6 +10,7 @@ func SetupRouter(
 	profileH *handler.ProfileHandler,
 	blockH *handler.BlockHandler,
 	settingsH *handler.SettingsHandler,
+	internalH *handler.InternalHandler,
 ) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -29,6 +30,13 @@ func SetupRouter(
 		users.GET("/:user_id/block-status", blockH.GetBlockStatus)
 		users.POST("/:user_id/block", blockH.BlockUser)
 		users.DELETE("/:user_id/block", blockH.UnblockUser)
+	}
+
+	internal := r.Group("/internal")
+	{
+		internal.GET("/messaging-allowed", internalH.MessagingAllowed)
+		internal.GET("/users/:user_id/exists", internalH.UserExists)
+		internal.GET("/users/:user_id/group-invite-allowed", internalH.GroupInviteAllowed)
 	}
 
 	return r

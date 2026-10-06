@@ -1,0 +1,345 @@
+syntax = "proto3";
+
+package conversation.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1;conversationv1";
+
+// Методы работают от имени пользователя из metadata x-user-id (ставит Gateway).
+service ConversationService {
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+  rpc SearchPublicGroups(SearchPublicGroupsRequest) returns (SearchPublicGroupsResponse);
+
+  rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
+  rpc UpdateGroup(UpdateGroupRequest) returns (UpdateGroupResponse);
+  // DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
+  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
+  rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
+  rpc SetMemberRole(SetMemberRoleRequest) returns (SetMemberRoleResponse);
+  // RemoveMember: kick (admin) или выход (user_id = вызывающий); ban только при kick.
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc ListBans(ListBansRequest) returns (ListBansResponse);
+  rpc Unban(UnbanRequest) returns (UnbanResponse);
+
+  rpc GetInviteInfo(GetInviteInfoRequest) returns (GetInviteInfoResponse);
+  rpc RegenerateInvite(RegenerateInviteRequest) returns (RegenerateInviteResponse);
+  rpc RequestJoin(RequestJoinRequest) returns (RequestJoinResponse);
+  rpc ListJoinRequests(ListJoinRequestsRequest) returns (ListJoinRequestsResponse);
+  rpc ApproveJoinRequest(ApproveJoinRequestRequest) returns (ApproveJoinRequestResponse);
+  rpc RejectJoinRequest(RejectJoinRequestRequest) returns (RejectJoinRequestResponse);
+
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
+  rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  rpc ListReaders(ListReadersRequest) returns (ListReadersResponse);
+}
+
+// Вызовы между сервисами; Gateway их наружу не открывает.
+service ConversationInternalService {
+  // ListDirectPeers — собеседники пользователя по direct-чатам (presence в Gateway).
+  rpc ListDirectPeers(ListDirectPeersRequest) returns (ListDirectPeersResponse);
+}
+
+message Conversation {
+  string id = 1;
+  string conversation_type = 2;
+  string visibility = 3;
+  optional string name = 4;
+  optional string description = 5;
+  optional string avatar_url = 6;
+  google.protobuf.Timestamp last_message_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// Message — расшифрованное сообщение; content отсутствует у удалённых.
+message Message {
+  string id = 1;
+  string conversation_id = 2;
+  string sender_id = 3;
+  optional string content = 4;
+  optional string reply_to_message_id = 5;
+  bool is_edited = 6;
+  bool is_deleted = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message ConversationSummary {
+  Conversation conversation = 1;
+  string my_role = 2;
+  optional string peer_id = 3;
+  Message last_message = 4;
+  int32 unread_count = 5;
+}
+
+message Member {
+  string conversation_id = 1;
+  string user_id = 2;
+  string role = 3;
+  optional string last_read_message_id = 4;
+  google.protobuf.Timestamp joined_at = 5;
+}
+
+message Ban {
+  string user_id = 1;
+  string banned_by = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message JoinRequest {
+  string id = 1;
+  string conversation_id = 2;
+  string user_id = 3;
+  string status = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message InviteInfo {
+  string conversation_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string avatar_url = 4;
+  int32 members_count = 5;
+  bool is_member = 6;
+  optional string request_status = 7;
+}
+
+message PublicGroup {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  optional string avatar_url = 4;
+  int32 members_count = 5;
+  bool is_member = 6;
+}
+
+message ListConversationsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+message ListConversationsResponse {
+  repeated ConversationSummary items = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetConversationRequest {
+  string conversation_id = 1;
+}
+message GetConversationResponse {
+  ConversationSummary conversation = 1;
+}
+
+message SearchPublicGroupsRequest {
+  string query = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+message SearchPublicGroupsResponse {
+  repeated PublicGroup items = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message CreateGroupRequest {
+  string name = 1;
+  optional string description = 2;
+  optional string avatar_url = 3;
+  string visibility = 4;
+  repeated string member_ids = 5;
+}
+message CreateGroupResponse {
+  Conversation conversation = 1;
+  // invite_token возвращается только в момент создания токена.
+  optional string invite_token = 2;
+}
+
+message UpdateGroupRequest {
+  string conversation_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string avatar_url = 4;
+  optional string visibility = 5;
+}
+message UpdateGroupResponse {
+  Conversation conversation = 1;
+  optional string invite_token = 2;
+}
+
+message DeleteConversationRequest {
+  string conversation_id = 1;
+}
+message DeleteConversationResponse {}
+
+message JoinGroupRequest {
+  string conversation_id = 1;
+}
+message JoinGroupResponse {}
+
+message ListMembersRequest {
+  string conversation_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+message ListMembersResponse {
+  repeated Member items = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message AddMembersRequest {
+  string conversation_id = 1;
+  repeated string user_ids = 2;
+}
+message AddMembersResponse {}
+
+message SetMemberRoleRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+  string role = 3;
+}
+message SetMemberRoleResponse {}
+
+message RemoveMemberRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+  bool ban = 3;
+}
+message RemoveMemberResponse {}
+
+message ListBansRequest {
+  string conversation_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+message ListBansResponse {
+  repeated Ban items = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message UnbanRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+}
+message UnbanResponse {}
+
+message GetInviteInfoRequest {
+  string token = 1;
+}
+message GetInviteInfoResponse {
+  InviteInfo info = 1;
+}
+
+message RegenerateInviteRequest {
+  string conversation_id = 1;
+}
+message RegenerateInviteResponse {
+  string invite_token = 1;
+}
+
+message RequestJoinRequest {
+  string conversation_id = 1;
+  string invite_token = 2;
+}
+message RequestJoinResponse {
+  JoinRequest request = 1;
+}
+
+message ListJoinRequestsRequest {
+  string conversation_id = 1;
+  // pending (по умолчанию), approved или rejected.
+  string status = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+message ListJoinRequestsResponse {
+  repeated JoinRequest items = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ApproveJoinRequestRequest {
+  string conversation_id = 1;
+  string request_id = 2;
+}
+message ApproveJoinRequestResponse {}
+
+message RejectJoinRequestRequest {
+  string conversation_id = 1;
+  string request_id = 2;
+}
+message RejectJoinRequestResponse {}
+
+// SendMessageRequest: ровно одно из conversation_id / recipient_id.
+message SendMessageRequest {
+  optional string conversation_id = 1;
+  optional string recipient_id = 2;
+  string content = 3;
+  optional string reply_to_message_id = 4;
+}
+message SendMessageResponse {
+  Message message = 1;
+}
+
+message GetMessageRequest {
+  string message_id = 1;
+}
+message GetMessageResponse {
+  Message message = 1;
+}
+
+message ListMessagesRequest {
+  string conversation_id = 1;
+  optional string before = 2;
+  int32 limit = 3;
+}
+message ListMessagesResponse {
+  repeated Message items = 1;
+  int32 limit = 2;
+  optional string next_before = 3;
+}
+
+message EditMessageRequest {
+  string message_id = 1;
+  string content = 2;
+}
+message EditMessageResponse {
+  Message message = 1;
+}
+
+message DeleteMessageRequest {
+  string message_id = 1;
+}
+message DeleteMessageResponse {}
+
+message MarkReadRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+}
+message MarkReadResponse {}
+
+message ListReadersRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+}
+message ListReadersResponse {
+  repeated string user_ids = 1;
+}
+
+message ListDirectPeersRequest {
+  string user_id = 1;
+}
+message ListDirectPeersResponse {
+  repeated string user_ids = 1;
+}

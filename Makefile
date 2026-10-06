@@ -18,7 +18,8 @@ DB_CONVERSATION_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgr
         migrate-up migrate-down \
         migrate-auth-down migrate-user-down migrate-conversation-down \
         psql db-tables clean-db clean-redis clean-kafka clean-data \
-        kafka-topics kafka-ui
+        kafka-topics kafka-ui \
+        proto proto-tools
 
 
 # ──────────────────────────────────────────────
@@ -136,3 +137,19 @@ kafka-ui:
 		echo "Открой в браузере: http://localhost:$(KAFKA_UI_PORT)"
 
 clean-data: clean-db clean-kafka clean-redis
+
+
+# ──────────────────────────────────────────────
+# Proto (gRPC-контракты)
+# ──────────────────────────────────────────────
+
+PROTO_BIN := $(CURDIR)/proto/bin
+
+proto-tools:
+	@cd proto && GOTOOLCHAIN=local GOBIN=$(PROTO_BIN) go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+	@cd proto && GOTOOLCHAIN=local GOBIN=$(PROTO_BIN) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+	@cd proto && GOTOOLCHAIN=local GOBIN=$(PROTO_BIN) go install github.com/bufbuild/buf/cmd/buf@v1.70.0
+
+proto: proto-tools
+	@cd proto && ./bin/buf lint && ./bin/buf generate
+	@echo "Proto-код сгенерирован в proto/gen/go"

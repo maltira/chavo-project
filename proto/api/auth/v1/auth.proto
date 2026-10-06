@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package auth.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1;authv1";
+
+// Методы, требующие пользователя, читают его id из metadata x-user-id (ставит Gateway)
+service AuthService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc VerifyRegister(VerifyRegisterRequest) returns (VerifyRegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
+  rpc ResendOTP(ResendOTPRequest) returns (ResendOTPResponse);
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  // Logout отзывает сессию по refresh-токену; пользователь из metadata не нужен.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
+  rpc ConfirmPasswordReset(ConfirmPasswordResetRequest) returns (ConfirmPasswordResetResponse);
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
+  // ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway)
+  rpc ResolveSession(ResolveSessionRequest) returns (ResolveSessionResponse);
+}
+
+// ClientInfo — данные клиента, которые Gateway берёт из HTTP-запроса
+message ClientInfo {
+  string ip = 1;
+  string user_agent = 2;
+}
+
+// TokenPair — результат входа или обновления; refresh-токен Gateway кладёт в cookie
+message TokenPair {
+  string access_token = 1;
+  string refresh_token = 2;
+  google.protobuf.Timestamp refresh_expires_at = 3;
+  string user_id = 4;
+  string session_id = 5;
+}
+
+message Session {
+  string id = 1;
+  optional string device_name = 2;
+  optional string user_agent = 3;
+  optional string ip_address = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+}
+message RegisterResponse {}
+
+message VerifyRegisterRequest {
+  string token = 1;
+}
+message VerifyRegisterResponse {}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+message LoginResponse {
+  string challenge_id = 1;
+}
+
+message VerifyOTPRequest {
+  string challenge_id = 1;
+  string code = 2;
+  ClientInfo client = 3;
+}
+message VerifyOTPResponse {
+  TokenPair tokens = 1;
+}
+
+message ResendOTPRequest {
+  string challenge_id = 1;
+}
+message ResendOTPResponse {}
+
+message RefreshRequest {
+  string refresh_token = 1;
+  ClientInfo client = 2;
+}
+message RefreshResponse {
+  TokenPair tokens = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+message LogoutResponse {}
+
+message RequestPasswordResetRequest {
+  string email = 1;
+}
+message RequestPasswordResetResponse {}
+
+message ConfirmPasswordResetRequest {
+  string token = 1;
+  string password = 2;
+}
+message ConfirmPasswordResetResponse {}
+
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+message ChangePasswordResponse {}
+
+message ListSessionsRequest {}
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message TerminateSessionRequest {
+  string session_id = 1;
+}
+message TerminateSessionResponse {}
+
+message ResolveSessionRequest {
+  string refresh_token = 1;
+}
+message ResolveSessionResponse {
+  string user_id = 1;
+  string session_id = 2;
+}

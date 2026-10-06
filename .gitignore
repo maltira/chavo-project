@@ -10,6 +10,9 @@ out
 *.so
 *.dylib
 
+# Proto: локально собранные buf и плагины генерации
+proto/bin/
+
 # Test
 *.test
 *.out

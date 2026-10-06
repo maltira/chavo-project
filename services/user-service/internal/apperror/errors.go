@@ -3,6 +3,8 @@ package apperror
 import (
 	"errors"
 	"net/http"
+
+	"github.com/maltira/chavo-project-backend/proto/grpcx"
 )
 
 var (
@@ -77,4 +79,23 @@ func UserMessage(err error) string {
 	default:
 		return "Внутренняя ошибка сервера"
 	}
+}
+
+// Reason — машинный код ошибки для клиента ("" — без кода).
+func Reason(err error) string {
+	switch {
+	case errors.Is(err, ErrProfileAlreadyExists):
+		return "PROFILE_ALREADY_EXISTS"
+	case errors.Is(err, ErrUsernameExists):
+		return "USERNAME_TAKEN"
+	case errors.Is(err, ErrNotFound):
+		return "NOT_FOUND"
+	default:
+		return ""
+	}
+}
+
+// GRPCStatus переводит ошибку в gRPC status по той же таблице, что и HTTP-коды; текст внутренних ошибок не раскрывается.
+func GRPCStatus(err error) error {
+	return grpcx.Error(grpcx.CodeFromHTTP(HTTPCode(err)), Reason(err), UserMessage(err))
 }

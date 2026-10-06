@@ -11,6 +11,11 @@ const (
 
 	TypeUserBlocked   = "user.blocked"
 	TypeUserUnblocked = "user.unblocked"
+
+	// Публикует Gateway
+	TopicPresenceEvents = "presence-events"
+	TypeUserOnline      = "user.online"
+	TypeUserOffline     = "user.offline"
 )
 
 type Event[T any] struct {
@@ -32,4 +37,11 @@ func NewEvent[T any](eventType string, payload T) Event[T] {
 type BlockPayload struct {
 	BlockerID uuid.UUID `json:"blocker_id"`
 	BlockedID uuid.UUID `json:"blocked_id"`
+}
+
+// PresencePayload — переход online/offline; At — момент перехода по часам Gateway
+type PresencePayload struct {
+	UserID  uuid.UUID `json:"user_id"`
+	At      time.Time `json:"at"`
+	Visible bool      `json:"visible"`
 }

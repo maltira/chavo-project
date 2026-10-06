@@ -173,16 +173,13 @@ func (r *profileRepository) UsernameExists(ctx context.Context, username string)
 	return exists, nil
 }
 
+// UpdateLastSeenAt двигает last_seen_at только вперёд: повтор или запоздавшее событие ничего не меняют
 func (r *profileRepository) UpdateLastSeenAt(ctx context.Context, userID uuid.UUID, lastSeen time.Time) error {
-	ct, err := r.pool.Exec(ctx,
-		`UPDATE profiles SET last_seen_at = $1, updated_at = $1 WHERE user_id = $2 AND deleted_at IS NULL`,
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE profiles SET last_seen_at = $1 WHERE user_id = $2 AND deleted_at IS NULL AND last_seen_at < $1`,
 		lastSeen, userID,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("update last_seen_at: %w", err)
-	}
-	if ct.RowsAffected() == 0 {
-		return apperror.ErrNotFound
 	}
 	return nil
 }

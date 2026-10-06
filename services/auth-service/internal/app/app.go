@@ -2,9 +2,8 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
+	"net"
 	"os/signal"
 	"syscall"
 	"time"
@@ -12,12 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
+	authv1 "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1"
 	"github.com/maltira/chavo-project-backend/services/auth-service/config"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/email"
-	handler "github.com/maltira/chavo-project-backend/services/auth-service/internal/handler/http"
+	"github.com/maltira/chavo-project-backend/services/auth-service/internal/grpcserver"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/repository"
-	"github.com/maltira/chavo-project-backend/services/auth-service/internal/router"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/service"
 	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
 	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/logger"
@@ -31,10 +34,10 @@ type App struct {
 	pool     *pgxpool.Pool
 	rdb      *redis.Client
 	producer *kafka.Producer
-	server   *http.Server
+	server   *grpc.Server
+	health   *health.Server
 }
 
-// New инициализирует инфраструктуру и собирает все зависимости приложения
 func New() (*App, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -60,29 +63,24 @@ func New() (*App, error) {
 	}
 
 	producer := kafka.NewProducer(cfg.KafkaBrokers, log)
-
 	mail := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, log)
 
-	// Repositories
 	userRepo := repository.NewUserRepository(pool)
 	verRepo := repository.NewVerificationRepository(pool)
 	resetRepo := repository.NewPasswordResetRepository(pool)
 	tokenRepo := repository.NewTokenRepository(pool)
 
-	// Services
 	otpSvc := service.NewOtpService(rdb, userRepo, mail, log)
 	tokenSvc := service.NewTokenService(tokenRepo, rdb, producer, cfg, log)
 	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, otpSvc, pool, rdb, producer, mail, cfg, log)
 
-	// Handlers
-	authHandler := handler.NewAuthHandler(authSvc, tokenSvc, log)
-	otpHandler := handler.NewOtpHandler(otpSvc, tokenSvc, cfg, log)
-	refreshHandler := handler.NewRefreshHandler(tokenSvc, cfg, log)
+	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
+	authv1.RegisterAuthServiceServer(server, grpcserver.New(authSvc, otpSvc, tokenSvc))
 
-	r := router.SetupRouter(authHandler, otpHandler, refreshHandler)
-	server := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
+	healthSrv := health.NewServer()
+	healthpb.RegisterHealthServer(server, healthSrv)
+	if cfg.Env != "production" {
+		reflection.Register(server)
 	}
 
 	return &App{
@@ -92,6 +90,7 @@ func New() (*App, error) {
 		rdb:      rdb,
 		producer: producer,
 		server:   server,
+		health:   healthSrv,
 	}, nil
 }
 
@@ -106,43 +105,48 @@ func Run() error {
 	return application.Start()
 }
 
-// Start запускает HTTP-сервер
+// Start запускает gRPC-сервер до SIGINT/SIGTERM.
 func (a *App) Start() error {
-	srvCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	lis, err := net.Listen("tcp", ":"+a.cfg.Port)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
 
 	serverErr := make(chan error, 1)
 	go func() {
-		a.log.Info("Auth service starting", zap.String("port", a.cfg.Port))
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
-		}
+		a.log.Info("Auth service (gRPC) starting", zap.String("port", a.cfg.Port))
+		serverErr <- a.server.Serve(lis)
 	}()
+	a.health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 	select {
 	case err := <-serverErr:
-		return fmt.Errorf("server failed to start: %w", err)
-	case <-srvCtx.Done():
+		return fmt.Errorf("grpc server failed: %w", err)
+	case <-ctx.Done():
 		a.log.Info("Shutting down server...")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		a.log.Error("Server forced to shutdown", zap.Error(err))
-		return fmt.Errorf("server forced shutdown: %w", err)
+	a.health.Shutdown()
+	stopped := make(chan struct{})
+	go func() {
+		a.server.GracefulStop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		a.log.Error("Server forced to shutdown")
+		a.server.Stop()
 	}
 
 	a.log.Info("Server exited gracefully")
 	return nil
 }
 
-// Close закрывает все открытые соединения и ресурсы.
 func (a *App) Close() {
-	if a.server != nil {
-		_ = a.server.Close()
-	}
 	if a.producer != nil {
 		_ = a.producer.Close()
 	}

@@ -3,6 +3,8 @@ package apperror
 import (
 	"errors"
 	"net/http"
+
+	"github.com/maltira/chavo-project-backend/proto/grpcx"
 )
 
 var (
@@ -18,10 +20,13 @@ var (
 	ErrUnauthorized        = errors.New("unauthorized")
 	ErrWrongPassword       = errors.New("wrong password")
 	ErrSamePassword        = errors.New("new password cannot be the same as old password")
+	ErrIncorrectData       = errors.New("incorrect data")
 )
 
 func HTTPCode(err error) int {
 	switch {
+	case errors.Is(err, ErrIncorrectData):
+		return http.StatusBadRequest
 	case errors.Is(err, ErrEmailExists):
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrWrongPassword):
@@ -45,6 +50,8 @@ func HTTPCode(err error) int {
 
 func UserMessage(err error) string {
 	switch {
+	case errors.Is(err, ErrIncorrectData):
+		return "Некорректные входные данные"
 	case errors.Is(err, ErrEmailExists):
 		return "Пользователь с такой почтой уже существует"
 	case errors.Is(err, ErrInvalidCredentials):
@@ -72,4 +79,35 @@ func UserMessage(err error) string {
 	default:
 		return "Внутренняя ошибка сервера"
 	}
+}
+
+// Reason — машинный код ошибки для клиента ("" — без кода).
+func Reason(err error) string {
+	switch {
+	case errors.Is(err, ErrEmailExists):
+		return "EMAIL_EXISTS"
+	case errors.Is(err, ErrInvalidCredentials):
+		return "INVALID_CREDENTIALS"
+	case errors.Is(err, ErrAccountNotVerified):
+		return "ACCOUNT_NOT_VERIFIED"
+	case errors.Is(err, ErrInvalidOTP):
+		return "INVALID_OTP"
+	case errors.Is(err, ErrOTPAttemptsExceeded):
+		return "OTP_ATTEMPTS_EXCEEDED"
+	case errors.Is(err, ErrInvalidChallenge):
+		return "INVALID_CHALLENGE"
+	case errors.Is(err, ErrInvalidToken):
+		return "INVALID_TOKEN"
+	case errors.Is(err, ErrWrongPassword):
+		return "WRONG_PASSWORD"
+	case errors.Is(err, ErrSamePassword):
+		return "SAME_PASSWORD"
+	default:
+		return ""
+	}
+}
+
+// GRPCStatus переводит ошибку в gRPC status по тем же таблицам, что и HTTP-коды; текст внутренних ошибок не раскрывается.
+func GRPCStatus(err error) error {
+	return grpcx.Error(grpcx.CodeFromHTTP(HTTPCode(err)), Reason(err), UserMessage(err))
 }

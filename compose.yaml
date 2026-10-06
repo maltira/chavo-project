@@ -289,6 +289,43 @@ services:
     networks:
       - chavo-network
 
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: chavo-gateway
+    restart: unless-stopped
+    # Порт опубликован, пока перед Gateway нет nginx.
+    ports:
+      - "${GATEWAY_PORT:-8000}:${GATEWAY_PORT:-8000}"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=${REDIS_URL}
+      - AUTH_SERVICE_ADDR=auth-service:${AUTH_PORT}
+      - USER_SERVICE_ADDR=user-service:${USER_PORT}
+      - CONVERSATION_SERVICE_ADDR=conversation-service:${CONVERSATION_PORT}
+      - GRPC_TIMEOUT=${GRPC_TIMEOUT}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES}
+      - ENV=${ENV}
+      - PORT=${GATEWAY_PORT:-8000}
+    healthcheck:
+      test: [ "CMD", "./gateway", "healthcheck" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      conversation-service:
+        condition: service_healthy
+    networks:
+      - chavo-network
+
 networks:
   chavo-network:
     name: chavo-network

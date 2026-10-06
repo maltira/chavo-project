@@ -35,6 +35,8 @@ type ConversationRepository interface {
 	AddMember(ctx context.Context, q DBTX, convID, userID uuid.UUID, role string) error
 	Access(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*Access, error)
 	MemberIDs(ctx context.Context, q DBTX, convID uuid.UUID) ([]uuid.UUID, error)
+	// DirectPeers — собеседники пользователя по всем его direct-чатам.
+	DirectPeers(ctx context.Context, q DBTX, userID uuid.UUID) ([]uuid.UUID, error)
 	TouchLastMessage(ctx context.Context, q DBTX, convID uuid.UUID, at time.Time) error
 	ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, limit, offset int) ([]SummaryRecord, error)
 
@@ -428,4 +430,28 @@ func (r *conversationRepository) SearchPublicGroups(ctx context.Context, q DBTX,
 		res = append(res, g)
 	}
 	return res, rows.Err()
+}
+
+func (r *conversationRepository) DirectPeers(ctx context.Context, q DBTX, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx,
+		`SELECT peer.user_id
+		 FROM conversation_members me
+		 JOIN conversations c ON c.id = me.conversation_id AND c.conversation_type = 'direct'
+		 JOIN conversation_members peer ON peer.conversation_id = c.id AND peer.user_id <> me.user_id
+		 WHERE me.user_id = $1
+		 ORDER BY peer.user_id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("direct peers: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan direct peer: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

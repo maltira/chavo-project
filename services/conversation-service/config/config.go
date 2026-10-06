@@ -13,7 +13,8 @@ type Config struct {
 	Port        string
 	DatabaseURL string
 
-	UserServiceURL string
+	// UserServiceAddr — host:port gRPC user-service
+	UserServiceAddr string
 
 	// EncryptionKey - 32-байтный ключ AES-256 для шифрования сообщений
 	EncryptionKey []byte
@@ -28,7 +29,7 @@ func Load() (*Config, error) {
 		Port:        getEnv("PORT", "8003"),
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 
-		UserServiceURL: getEnv("USER_SERVICE_URL", "http://user-service:8002"),
+		UserServiceAddr: getEnv("USER_SERVICE_ADDR", "user-service:8002"),
 
 		KafkaBrokers: parseStringSlice("KAFKA_BROKERS", []string{"kafka:29092"}),
 	}

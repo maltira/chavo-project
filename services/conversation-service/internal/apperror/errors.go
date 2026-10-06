@@ -3,6 +3,8 @@ package apperror
 import (
 	"errors"
 	"net/http"
+
+	"github.com/maltira/chavo-project-backend/proto/grpcx"
 )
 
 var (
@@ -133,4 +135,9 @@ func UserMessage(err error) string {
 	default:
 		return "Внутренняя ошибка сервера"
 	}
+}
+
+// GRPCStatus переводит ошибку в gRPC status по тем же таблицам, что и HTTP-коды; текст внутренних ошибок не раскрывается.
+func GRPCStatus(err error) error {
+	return grpcx.Error(grpcx.CodeFromHTTP(HTTPCode(err)), Reason(err), UserMessage(err))
 }

@@ -2,17 +2,19 @@ package userclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
+	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
+	"github.com/maltira/chavo-project-backend/proto/grpcx"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 )
+
+const callTimeout = 3 * time.Second
 
 // Client — синхронные обращения к internal-API user-service.
 type Client interface {
@@ -23,78 +25,54 @@ type Client interface {
 	GroupInviteAllowed(ctx context.Context, userID, inviterID uuid.UUID) (bool, error)
 }
 
-type httpClient struct {
-	baseURL string
-	http    *http.Client
+type grpcClient struct {
+	api userv1.UserInternalServiceClient
 }
 
-func New(baseURL string) Client {
-	return &httpClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: 3 * time.Second},
-	}
+// New — клиент поверх gRPC-соединения с user-service.
+func New(conn grpc.ClientConnInterface) Client {
+	return &grpcClient{api: userv1.NewUserInternalServiceClient(conn)}
 }
 
-func (c *httpClient) CheckMessagingAllowed(ctx context.Context, sender, recipient uuid.UUID) error {
-	q := url.Values{"sender": {sender.String()}, "recipient": {recipient.String()}}
-	var resp struct {
-		Allowed            bool `json:"allowed"`
-		BlockedBySender    bool `json:"blocked_by_sender"`
-		BlockedByRecipient bool `json:"blocked_by_recipient"`
-	}
-	if _, err := c.get(ctx, "/internal/messaging-allowed?"+q.Encode(), &resp); err != nil {
-		return err
+func unavailable(err error) error {
+	return fmt.Errorf("%w: %v", apperror.ErrUserServiceError, err)
+}
+
+func (c *grpcClient) CheckMessagingAllowed(ctx context.Context, sender, recipient uuid.UUID) error {
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	resp, err := c.api.MessagingAllowed(ctx, &userv1.MessagingAllowedRequest{SenderId: sender.String(), RecipientId: recipient.String()})
+	if err != nil {
+		return unavailable(err)
 	}
 	switch {
-	case resp.BlockedBySender:
+	case resp.GetBlockedBySender():
 		return apperror.ErrBlockedByMe
-	case resp.BlockedByRecipient, !resp.Allowed:
+	case resp.GetBlockedByRecipient(), !resp.GetAllowed():
 		return apperror.ErrBlockedByThem
 	}
 	return nil
 }
 
-func (c *httpClient) UserExists(ctx context.Context, userID uuid.UUID) (bool, error) {
-	var resp struct {
-		Exists bool `json:"exists"`
+func (c *grpcClient) UserExists(ctx context.Context, userID uuid.UUID) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	resp, err := c.api.UserExists(ctx, &userv1.UserExistsRequest{UserId: userID.String()})
+	if err != nil {
+		return false, unavailable(err)
 	}
-	if _, err := c.get(ctx, "/internal/users/"+userID.String()+"/exists", &resp); err != nil {
-		return false, err
-	}
-	return resp.Exists, nil
+	return resp.GetExists(), nil
 }
 
-func (c *httpClient) GroupInviteAllowed(ctx context.Context, userID, inviterID uuid.UUID) (bool, error) {
-	var resp struct {
-		Allowed bool `json:"allowed"`
-	}
-	status, err := c.get(ctx, "/internal/users/"+userID.String()+"/group-invite-allowed?inviter="+url.QueryEscape(inviterID.String()), &resp)
-	if status == http.StatusNotFound {
-		return false, apperror.ErrUserNotFound
-	}
+func (c *grpcClient) GroupInviteAllowed(ctx context.Context, userID, inviterID uuid.UUID) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	resp, err := c.api.GroupInviteAllowed(ctx, &userv1.GroupInviteAllowedRequest{UserId: userID.String(), InviterId: inviterID.String()})
 	if err != nil {
-		return false, err
+		if code, _, _ := grpcx.Details(err); code == codes.NotFound {
+			return false, apperror.ErrUserNotFound
+		}
+		return false, unavailable(err)
 	}
-	return resp.Allowed, nil
-}
-
-// get выполняет GET и декодирует JSON при 200; для остальных статусов возвращает ErrUserServiceError.
-func (c *httpClient) get(ctx context.Context, path string, out any) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
-	if err != nil {
-		return 0, fmt.Errorf("%w: build request: %v", apperror.ErrUserServiceError, err)
-	}
-	res, err := c.http.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %v", apperror.ErrUserServiceError, err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return res.StatusCode, fmt.Errorf("%w: status %d", apperror.ErrUserServiceError, res.StatusCode)
-	}
-	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-		return res.StatusCode, fmt.Errorf("%w: decode: %v", apperror.ErrUserServiceError, err)
-	}
-	return res.StatusCode, nil
+	return resp.GetAllowed(), nil
 }

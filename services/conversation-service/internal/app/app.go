@@ -2,35 +2,46 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
+	"net"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
+
+	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
+	"github.com/maltira/chavo-project-backend/proto/grpcx"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/config"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/client/userclient"
-	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/handler"
+	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/grpcserver"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/outbox"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/repository"
-	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/router"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/pkg/crypto"
 	pkgkafka "github.com/maltira/chavo-project-backend/services/conversation-service/pkg/kafka"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/pkg/logger"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/pkg/postgres"
-	"go.uber.org/zap"
 )
+
+const healthCheckInterval = 10 * time.Second
 
 type App struct {
 	cfg       *config.Config
 	log       *zap.Logger
 	pool      *pgxpool.Pool
+	userConn  *grpc.ClientConn
 	producer  *pkgkafka.Producer
 	publisher *outbox.Publisher
-	server    *http.Server
+	server    *grpc.Server
+	health    *health.Server
 }
 
 // New инициализирует инфраструктуру и собирает все зависимости приложения
@@ -45,9 +56,7 @@ func New() (*App, error) {
 	}
 	log := logger.Log
 
-	ctx := context.Background()
-
-	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := postgres.NewPool(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -58,40 +67,49 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("failed to init cipher: %w", err)
 	}
 
+	userConn, err := grpc.NewClient(cfg.UserServiceAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(grpcx.PropagateTrace()))
+	if err != nil {
+		postgres.ClosePool(pool)
+		return nil, fmt.Errorf("failed to create user-service client: %w", err)
+	}
+
 	db := repository.NewDB(pool)
 	convRepo := repository.NewConversationRepository()
 	msgRepo := repository.NewMessageRepository()
 	outboxRepo := repository.NewOutboxRepository()
 	joinRepo := repository.NewJoinRequestRepository()
 	banRepo := repository.NewBanRepository()
-	users := userclient.New(cfg.UserServiceURL)
+	users := userclient.New(userConn)
 	producer := pkgkafka.NewProducer(cfg.KafkaBrokers, log)
 	publisher := outbox.NewPublisher(db, outboxRepo, producer, cipher, log, outbox.DefaultOptions())
 
-	convSvc := service.NewConversationService(db, convRepo, cipher)
-	msgSvc := service.NewMessageService(db, convRepo, msgRepo, outboxRepo, users, cipher, log)
+	srv := grpcserver.New(
+		service.NewConversationService(db, convRepo, cipher),
+		service.NewGroupService(db, convRepo, outboxRepo, users, banRepo),
+		service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo),
+		service.NewMessageService(db, convRepo, msgRepo, outboxRepo, users, cipher, log),
+	)
+	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
+	conversationv1.RegisterConversationServiceServer(server, srv)
+	conversationv1.RegisterConversationInternalServiceServer(server, srv)
 
-	groupSvc := service.NewGroupService(db, convRepo, outboxRepo, users, banRepo)
-	joinSvc := service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo)
-
-	convH := handler.NewConversationHandler(convSvc, log)
-	groupH := handler.NewGroupHandler(groupSvc, log)
-	joinH := handler.NewJoinHandler(joinSvc, log)
-	msgH := handler.NewMessageHandler(msgSvc, log)
-
-	r := router.SetupRouter(convH, groupH, joinH, msgH, pool.Ping)
-	server := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
+	healthSrv := health.NewServer()
+	healthpb.RegisterHealthServer(server, healthSrv)
+	if cfg.Env != "production" {
+		reflection.Register(server)
 	}
 
 	return &App{
 		cfg:       cfg,
 		log:       log,
 		pool:      pool,
+		userConn:  userConn,
 		producer:  producer,
 		publisher: publisher,
 		server:    server,
+		health:    healthSrv,
 	}, nil
 }
 
@@ -106,57 +124,96 @@ func Run() error {
 	return application.Start()
 }
 
-// Start запускает HTTP-сервер
+// Start запускает gRPC-сервер, outbox publisher и проверку БД для health до SIGINT/SIGTERM.
 func (a *App) Start() error {
-	srvCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	publisherDone := make(chan struct{})
+	lis, err := net.Listen("tcp", ":"+a.cfg.Port)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
-		defer close(publisherDone)
-		a.publisher.Run(srvCtx)
+		defer wg.Done()
+		a.publisher.Run(ctx)
 	}()
-	// Пул закрывается в Close() после Start(), поэтому дожидаемся остановки publisher'а.
-	defer func() {
-		stop()
-		select {
-		case <-publisherDone:
-		case <-time.After(15 * time.Second):
-			a.log.Error("Outbox publisher did not stop in time")
-		}
+	go func() {
+		defer wg.Done()
+		a.watchDatabase(ctx)
 	}()
 
 	serverErr := make(chan error, 1)
 	go func() {
-		a.log.Info("Conversation service starting", zap.String("port", a.cfg.Port))
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
-		}
+		a.log.Info("Conversation service (gRPC) starting", zap.String("port", a.cfg.Port))
+		serverErr <- a.server.Serve(lis)
 	}()
 
 	select {
 	case err := <-serverErr:
-		return fmt.Errorf("server failed to start: %w", err)
-	case <-srvCtx.Done():
+		stop()
+		wg.Wait()
+		return fmt.Errorf("grpc server failed: %w", err)
+	case <-ctx.Done():
 		a.log.Info("Shutting down server...")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	a.health.Shutdown()
+	stopped := make(chan struct{})
+	go func() {
+		a.server.GracefulStop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		a.log.Error("Server forced to shutdown")
+		a.server.Stop()
+	}
 
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		a.log.Error("Server forced to shutdown", zap.Error(err))
-		return fmt.Errorf("server forced shutdown: %w", err)
+	// Пул закрывается в Close(), поэтому дожидаемся остановки publisher'а.
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		a.log.Error("Background workers did not stop in time")
 	}
 
 	a.log.Info("Server exited gracefully")
 	return nil
 }
 
+// watchDatabase держит статус grpc.health в соответствии с доступностью PostgreSQL.
+func (a *App) watchDatabase(ctx context.Context) {
+	ticker := time.NewTicker(healthCheckInterval)
+	defer ticker.Stop()
+	for {
+		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		status := healthpb.HealthCheckResponse_SERVING
+		if err := a.pool.Ping(pingCtx); err != nil {
+			status = healthpb.HealthCheckResponse_NOT_SERVING
+		}
+		cancel()
+		a.health.SetServingStatus("", status)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 // Close закрывает все открытые соединения и ресурсы.
 func (a *App) Close() {
-	if a.server != nil {
-		_ = a.server.Close()
+	if a.userConn != nil {
+		_ = a.userConn.Close()
 	}
 	if a.producer != nil {
 		_ = a.producer.Close()

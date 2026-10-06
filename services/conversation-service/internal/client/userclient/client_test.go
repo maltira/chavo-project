@@ -3,35 +3,79 @@ package userclient
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
+	"net"
 	"testing"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 
+	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 )
 
+type fakeUserService struct {
+	userv1.UnimplementedUserInternalServiceServer
+	messaging *userv1.MessagingAllowedResponse
+	inviteErr error
+	lastReq   *userv1.GroupInviteAllowedRequest
+	failAll   bool
+}
+
+func (f *fakeUserService) MessagingAllowed(context.Context, *userv1.MessagingAllowedRequest) (*userv1.MessagingAllowedResponse, error) {
+	if f.failAll {
+		return nil, status.Error(codes.Unavailable, "down")
+	}
+	return f.messaging, nil
+}
+
+func (f *fakeUserService) UserExists(context.Context, *userv1.UserExistsRequest) (*userv1.UserExistsResponse, error) {
+	if f.failAll {
+		return nil, status.Error(codes.Internal, "boom")
+	}
+	return &userv1.UserExistsResponse{Exists: true}, nil
+}
+
+func (f *fakeUserService) GroupInviteAllowed(_ context.Context, req *userv1.GroupInviteAllowedRequest) (*userv1.GroupInviteAllowedResponse, error) {
+	f.lastReq = req
+	if f.inviteErr != nil {
+		return nil, f.inviteErr
+	}
+	return &userv1.GroupInviteAllowedResponse{Allowed: false}, nil
+}
+
+func newClient(t *testing.T, fake *fakeUserService) Client {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	srv := grpc.NewServer()
+	userv1.RegisterUserInternalServiceServer(srv, fake)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return New(conn)
+}
+
 func TestCheckMessagingAllowed(t *testing.T) {
 	cases := map[string]struct {
-		body string
+		resp *userv1.MessagingAllowedResponse
 		want error
 	}{
-		"allowed":      {`{"allowed":true,"blocked_by_sender":false,"blocked_by_recipient":false}`, nil},
-		"by sender":    {`{"allowed":false,"blocked_by_sender":true,"blocked_by_recipient":false}`, apperror.ErrBlockedByMe},
-		"by recipient": {`{"allowed":false,"blocked_by_sender":false,"blocked_by_recipient":true}`, apperror.ErrBlockedByThem},
+		"allowed":      {&userv1.MessagingAllowedResponse{Allowed: true}, nil},
+		"by sender":    {&userv1.MessagingAllowedResponse{BlockedBySender: true}, apperror.ErrBlockedByMe},
+		"by recipient": {&userv1.MessagingAllowedResponse{BlockedByRecipient: true}, apperror.ErrBlockedByThem},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/internal/messaging-allowed" || r.URL.Query().Get("sender") == "" {
-					t.Errorf("unexpected request %s", r.URL)
-				}
-				_, _ = w.Write([]byte(tc.body))
-			}))
-			defer srv.Close()
-
-			err := New(srv.URL).CheckMessagingAllowed(context.Background(), uuid.New(), uuid.New())
+			err := newClient(t, &fakeUserService{messaging: tc.resp}).CheckMessagingAllowed(context.Background(), uuid.New(), uuid.New())
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("got %v, want %v", err, tc.want)
 			}
@@ -40,41 +84,27 @@ func TestCheckMessagingAllowed(t *testing.T) {
 }
 
 func TestUserServiceFailure(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	_, err := New(srv.URL).UserExists(context.Background(), uuid.New())
-	if !errors.Is(err, apperror.ErrUserServiceError) {
-		t.Fatalf("got %v", err)
+	c := newClient(t, &fakeUserService{failAll: true})
+	if _, err := c.UserExists(context.Background(), uuid.New()); !errors.Is(err, apperror.ErrUserServiceError) {
+		t.Fatalf("UserExists: %v", err)
+	}
+	if err := c.CheckMessagingAllowed(context.Background(), uuid.New(), uuid.New()); !errors.Is(err, apperror.ErrUserServiceError) {
+		t.Fatalf("CheckMessagingAllowed: %v", err)
 	}
 }
 
-func TestGroupInviteAllowedNotFound(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	_, err := New(srv.URL).GroupInviteAllowed(context.Background(), uuid.New(), uuid.New())
-	if !errors.Is(err, apperror.ErrUserNotFound) {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestGroupInviteAllowedSendsInviter(t *testing.T) {
+func TestGroupInviteAllowed(t *testing.T) {
+	fake := &fakeUserService{}
+	c := newClient(t, fake)
 	user, inviter := uuid.New(), uuid.New()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/users/"+user.String()+"/group-invite-allowed" || r.URL.Query().Get("inviter") != inviter.String() {
-			t.Errorf("unexpected request %s", r.URL)
-		}
-		_, _ = w.Write([]byte(`{"allowed":false}`))
-	}))
-	defer srv.Close()
 
-	allowed, err := New(srv.URL).GroupInviteAllowed(context.Background(), user, inviter)
-	if err != nil || allowed {
-		t.Fatalf("allowed=%v err=%v", allowed, err)
+	allowed, err := c.GroupInviteAllowed(context.Background(), user, inviter)
+	if err != nil || allowed || fake.lastReq.GetInviterId() != inviter.String() || fake.lastReq.GetUserId() != user.String() {
+		t.Fatalf("allowed=%v err=%v req=%v", allowed, err, fake.lastReq)
+	}
+
+	fake.inviteErr = status.Error(codes.NotFound, "no user")
+	if _, err = c.GroupInviteAllowed(context.Background(), user, inviter); !errors.Is(err, apperror.ErrUserNotFound) {
+		t.Fatalf("not found: %v", err)
 	}
 }

@@ -18,6 +18,8 @@ import (
 type SettingsRepository interface {
 	GetSettings(ctx context.Context, userID uuid.UUID) (*models.Settings, error)
 	UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error
+	// ShowOnlineStatus возвращает настройку для найденных пользователей; отсутствующие не попадают в map
+	ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 type settingsRepository struct {
@@ -85,4 +87,28 @@ func (r *settingsRepository) UpdateSettings(ctx context.Context, userID uuid.UUI
 		return apperror.ErrNotFound
 	}
 	return nil
+}
+
+func (r *settingsRepository) ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	res := make(map[uuid.UUID]bool, len(userIDs))
+	if len(userIDs) == 0 {
+		return res, nil
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id, show_online_status FROM user_settings WHERE user_id = ANY($1)`, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("select show_online_status: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id      uuid.UUID
+			visible bool
+		)
+		if err := rows.Scan(&id, &visible); err != nil {
+			return nil, fmt.Errorf("scan show_online_status: %w", err)
+		}
+		res[id] = visible
+	}
+	return res, rows.Err()
 }

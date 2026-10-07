@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +19,8 @@ type TokenRepository interface {
 	FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*models.RefreshToken, error)
 	RevokeByID(ctx context.Context, id uuid.UUID) error
+	// Rotate заменяет refresh-токен действующей сессии, если её хэш всё ещё oldHash; false — токен уже сменили или отозвали.
+	Rotate(ctx context.Context, id uuid.UUID, oldHash, newHash string, expiresAt time.Time, ip, userAgent, device *string) (bool, error)
 	RevokeAllByUserTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, excludeID *uuid.UUID) ([]uuid.UUID, error)
 	ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error)
 }
@@ -45,13 +49,13 @@ func (r *tokenRepository) Save(ctx context.Context, token *models.RefreshToken) 
 
 func (r *tokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
 	return r.scanToken(ctx,
-		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, host(ip_address), expires_at, created_at, revoked_at
 		 FROM refresh_tokens WHERE token_hash = $1`, tokenHash)
 }
 
 func (r *tokenRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.RefreshToken, error) {
 	return r.scanToken(ctx,
-		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, host(ip_address), expires_at, created_at, revoked_at
 		 FROM refresh_tokens WHERE id = $1`, id)
 }
 
@@ -98,7 +102,7 @@ func (r *tokenRepository) RevokeAllByUserTx(ctx context.Context, tx pgx.Tx, user
 
 func (r *tokenRepository) ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, host(ip_address), expires_at, created_at, revoked_at
 		 FROM refresh_tokens
 		 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
 		 ORDER BY created_at DESC`, userID)
@@ -136,4 +140,19 @@ func (r *tokenRepository) scanToken(ctx context.Context, query string, args ...a
 		return nil, err
 	}
 	return &t, nil
+}
+
+func (r *tokenRepository) Rotate(ctx context.Context, id uuid.UUID, oldHash, newHash string, expiresAt time.Time, ip, userAgent, device *string) (bool, error) {
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE refresh_tokens
+		 SET token_hash = $3, expires_at = $4,
+		     ip_address = COALESCE($5::inet, ip_address),
+		     user_agent = COALESCE($6, user_agent),
+		     device_name = COALESCE($7, device_name)
+		 WHERE id = $1 AND token_hash = $2 AND revoked_at IS NULL`,
+		id, oldHash, newHash, expiresAt, ip, userAgent, device)
+	if err != nil {
+		return false, fmt.Errorf("rotate refresh token: %w", err)
+	}
+	return ct.RowsAffected() == 1, nil
 }

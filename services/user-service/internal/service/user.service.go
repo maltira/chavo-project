@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -27,6 +28,8 @@ type ProfileService interface {
 	Update(ctx context.Context, userID uuid.UUID, data map[string]string) error
 	GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error)
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
+	UpdateLastSeen(ctx context.Context, userID uuid.UUID, at time.Time) error
+	LastSeen(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
 }
 
 type profileService struct {
@@ -124,4 +127,12 @@ func (s *profileService) GetAllBySearch(ctx context.Context, query string, limit
 
 func (s *profileService) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {
 	return s.repo.FindByID(ctx, userID)
+}
+
+func (s *profileService) UpdateLastSeen(ctx context.Context, userID uuid.UUID, at time.Time) error {
+	return s.repo.UpdateLastSeenAt(ctx, userID, at)
+}
+
+func (s *profileService) LastSeen(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	return s.repo.LastSeenAt(ctx, userIDs)
 }

@@ -2,21 +2,27 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
+	"net"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
+	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/user-service/config"
-	"github.com/maltira/chavo-project-backend/services/user-service/internal/handler"
+	"github.com/maltira/chavo-project-backend/services/user-service/internal/grpcserver"
+	consumer "github.com/maltira/chavo-project-backend/services/user-service/internal/kafka"
+	"github.com/maltira/chavo-project-backend/services/user-service/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
-	"github.com/maltira/chavo-project-backend/services/user-service/internal/router"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/service"
 	"github.com/maltira/chavo-project-backend/services/user-service/pkg/db"
 	pkgkafka "github.com/maltira/chavo-project-backend/services/user-service/pkg/kafka"
@@ -30,7 +36,9 @@ type App struct {
 	pool     *pgxpool.Pool
 	rdb      *redis.Client
 	producer *pkgkafka.Producer
-	server   *http.Server
+	consumer *consumer.PresenceConsumer
+	server   *grpc.Server
+	health   *health.Server
 }
 
 func New() (*App, error) {
@@ -59,23 +67,19 @@ func New() (*App, error) {
 
 	producer := pkgkafka.NewProducer(cfg.KafkaBrokers, log)
 
-	pRepo := repository.NewProfileRepository(pool)
-	bRepo := repository.NewBlockRepository(pool)
-	sRepo := repository.NewSettingsRepository(pool)
+	profileSvc := service.NewProfileService(repository.NewProfileRepository(pool))
+	blockSvc := service.NewBlockService(repository.NewBlockRepository(pool), producer, log)
+	settingsSvc := service.NewSettingsService(repository.NewSettingsRepository(pool))
 
-	profileSvc := service.NewProfileService(pRepo)
-	blockSvc := service.NewBlockService(bRepo, producer, log)
-	settingsSvc := service.NewSettingsService(sRepo)
+	srv := grpcserver.New(profileSvc, blockSvc, settingsSvc, presence.NewChecker(rdb))
+	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
+	userv1.RegisterUserServiceServer(server, srv)
+	userv1.RegisterUserInternalServiceServer(server, srv)
 
-	profileH := handler.NewProfileHandler(profileSvc, rdb, log)
-	blockH := handler.NewBlockHandler(blockSvc, log)
-	settingsH := handler.NewSettingsHandler(settingsSvc, log)
-	internalH := handler.NewInternalHandler(blockSvc, profileSvc, settingsSvc, log)
-
-	r := router.SetupRouter(profileH, blockH, settingsH, internalH)
-	server := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
+	healthSrv := health.NewServer()
+	healthpb.RegisterHealthServer(server, healthSrv)
+	if cfg.Env != "production" {
+		reflection.Register(server)
 	}
 
 	return &App{
@@ -84,7 +88,9 @@ func New() (*App, error) {
 		pool:     pool,
 		rdb:      rdb,
 		producer: producer,
+		consumer: consumer.NewPresenceConsumer(cfg.KafkaBrokers, profileSvc, log),
 		server:   server,
+		health:   healthSrv,
 	}, nil
 }
 
@@ -97,40 +103,60 @@ func Run() error {
 	return application.Start()
 }
 
+// Start запускает gRPC-сервер и consumer presence-events до SIGINT/SIGTERM.
 func (a *App) Start() error {
-	srvCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	lis, err := net.Listen("tcp", ":"+a.cfg.Port)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		a.consumer.Run(ctx)
+	}()
 
 	serverErr := make(chan error, 1)
 	go func() {
-		a.log.Info("User service starting", zap.String("port", a.cfg.Port))
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
-		}
+		a.log.Info("User service (gRPC) starting", zap.String("port", a.cfg.Port))
+		serverErr <- a.server.Serve(lis)
 	}()
+	a.health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 	select {
 	case err := <-serverErr:
-		return fmt.Errorf("server failed to start: %w", err)
-	case <-srvCtx.Done():
+		stop()
+		wg.Wait()
+		return fmt.Errorf("grpc server failed: %w", err)
+	case <-ctx.Done():
 		a.log.Info("Shutting down server...")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		a.log.Error("Server forced to shutdown", zap.Error(err))
-		return fmt.Errorf("server forced shutdown: %w", err)
+	a.health.Shutdown()
+	stopped := make(chan struct{})
+	go func() {
+		a.server.GracefulStop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		a.log.Error("Server forced to shutdown")
+		a.server.Stop()
 	}
+	wg.Wait()
 
 	a.log.Info("Server exited gracefully")
 	return nil
 }
 
 func (a *App) Close() {
-	if a.server != nil {
-		_ = a.server.Close()
+	if a.consumer != nil {
+		_ = a.consumer.Close()
 	}
 	if a.producer != nil {
 		_ = a.producer.Close()

@@ -17,6 +17,7 @@ type ConversationService interface {
 	List(ctx context.Context, userID uuid.UUID, limit, offset int) ([]models.ConversationSummary, error)
 	Get(ctx context.Context, userID, convID uuid.UUID) (*models.ConversationSummary, error)
 	SearchPublicGroups(ctx context.Context, userID uuid.UUID, query string, limit, offset int) ([]models.PublicGroup, error)
+	DirectPeers(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
 
 type conversationService struct {
@@ -83,4 +84,8 @@ func (s *conversationService) SearchPublicGroups(ctx context.Context, userID uui
 		return []models.PublicGroup{}, nil
 	}
 	return s.convs.SearchPublicGroups(ctx, s.db.Q(), userID, q, limit, offset)
+}
+
+func (s *conversationService) DirectPeers(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	return s.convs.DirectPeers(ctx, s.db.Q(), userID)
 }

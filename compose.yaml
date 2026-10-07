@@ -38,6 +38,7 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
+        set -e
         echo "Running migrations for auth-service..."
         migrate -path=/migrations/auth -database="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_DB_NAME}?sslmode=disable" up
         echo "Running migrations for user-service..."
@@ -130,6 +131,14 @@ services:
           --replication-factor 1 \
           --config retention.ms=86400000
 
+        kafka-topics \
+          --bootstrap-server kafka:29092 \
+          --create \
+          --if-not-exists \
+          --topic presence-events \
+          --partitions 3 \
+          --replication-factor 1
+
         echo "Kafka topics created successfully."
 
         kafka-topics \
@@ -173,14 +182,26 @@ services:
     networks:
       - chavo-network
 
+  # Локальный SMTP: письма никуда не уходят, видны в UI. auth-service: SMTP_HOST=mailpit, SMTP_PORT=1025.
+  mailpit:
+    image: axllent/mailpit:v1.31.4
+    container_name: chavo-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+    networks:
+      - chavo-network
+
   # ==============================================
   # BACKEND SERVICES
   # ==============================================
 
   auth-service:
     build:
-      context: ./services/auth-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     container_name: chavo-auth
     restart: unless-stopped
     environment:
@@ -198,8 +219,12 @@ services:
       - SMTP_PASS=${SMTP_PASS}
       - ENV=${ENV}
       - PORT=${AUTH_PORT}
-    ports:
-      - "${AUTH_PORT}:${AUTH_PORT}"
+    healthcheck:
+      test: [ "CMD", "./auth", "healthcheck" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -216,8 +241,8 @@ services:
 
   user-service:
     build:
-      context: ./services/user-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/user-service/Dockerfile
     container_name: chavo-user
     restart: unless-stopped
     environment:
@@ -226,8 +251,12 @@ services:
       - KAFKA_BROKERS=kafka:29092
       - ENV=${ENV}
       - PORT=${USER_PORT}
-    ports:
-      - "${USER_PORT}:${USER_PORT}"
+    healthcheck:
+      test: [ "CMD", "./user", "healthcheck" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -244,21 +273,19 @@ services:
 
   conversation-service:
     build:
-      context: ./services/conversation-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/conversation-service/Dockerfile
     container_name: chavo-conversation
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CONVERSATION_DB_NAME}?sslmode=disable
       - KAFKA_BROKERS=kafka:29092
       - MESSAGE_ENCRYPTION_KEY=${MESSAGE_ENCRYPTION_KEY}
-      - USER_SERVICE_URL=http://user-service:${USER_PORT}
+      - USER_SERVICE_ADDR=user-service:${USER_PORT}
       - ENV=${ENV}
       - PORT=${CONVERSATION_PORT}
-    ports:
-      - "${CONVERSATION_PORT}:${CONVERSATION_PORT}"
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:${CONVERSATION_PORT}/health || exit 1" ]
+      test: [ "CMD", "./conversation", "healthcheck" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -275,10 +302,81 @@ services:
     networks:
       - chavo-network
 
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: chavo-gateway
+    restart: unless-stopped
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=${REDIS_URL}
+      - AUTH_SERVICE_ADDR=auth-service:${AUTH_PORT}
+      - USER_SERVICE_ADDR=user-service:${USER_PORT}
+      - CONVERSATION_SERVICE_ADDR=conversation-service:${CONVERSATION_PORT}
+      - GRPC_TIMEOUT=${GRPC_TIMEOUT:-5s}
+      # По умолчанию — только nginx
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES}
+      - FRONTEND_ORIGIN=${FRONTEND_URL}
+      - KAFKA_BROKERS=kafka:29092
+      - ENV=${ENV}
+      - PORT=${GATEWAY_PORT}
+      - RATE_LIMIT_API=${RATE_LIMIT_API:-300/1m}
+      - RATE_LIMIT_MESSAGES=${RATE_LIMIT_MESSAGES:-30/10s}
+      - RATE_LIMIT_WS=${RATE_LIMIT_WS:-20/1s}
+    healthcheck:
+      test: [ "CMD", "./gateway", "healthcheck" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      conversation-service:
+        condition: service_healthy
+    networks:
+      - chavo-network
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: chavo-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    environment:
+      - GATEWAY_PORT=${GATEWAY_PORT}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/proxy_params.conf:/etc/nginx/chavo/proxy_params.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      chavo-network:
+        # Фиксированный адрес: Gateway доверяет X-Forwarded-For только от него (TRUSTED_PROXIES)
+        ipv4_address: 172.28.10.10
+
 networks:
   chavo-network:
     name: chavo-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.10.0/24
+          ip_range: 172.28.10.128/25
 
 volumes:
   postgres_data:

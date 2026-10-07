@@ -13,6 +13,7 @@ import (
 type SettingsService interface {
 	GetSettings(ctx context.Context, userID uuid.UUID) (*models.Settings, error)
 	UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error
+	ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 type settingsService struct {
@@ -43,4 +44,8 @@ func (s *settingsService) UpdateSettings(ctx context.Context, userID uuid.UUID, 
 	}
 
 	return s.repo.UpdateSettings(ctx, userID, updates)
+}
+
+func (s *settingsService) ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	return s.repo.ShowOnlineStatus(ctx, userIDs)
 }

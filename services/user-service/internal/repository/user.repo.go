@@ -23,6 +23,7 @@ type ProfileRepository interface {
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
 	UsernameExists(ctx context.Context, username string) (bool, error)
 	UpdateLastSeenAt(ctx context.Context, userID uuid.UUID, lastSeen time.Time) error
+	LastSeenAt(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
 }
 
 type profileRepository struct {
@@ -173,18 +174,39 @@ func (r *profileRepository) UsernameExists(ctx context.Context, username string)
 	return exists, nil
 }
 
+// UpdateLastSeenAt двигает last_seen_at только вперёд: повтор или запоздавшее событие ничего не меняют
 func (r *profileRepository) UpdateLastSeenAt(ctx context.Context, userID uuid.UUID, lastSeen time.Time) error {
-	ct, err := r.pool.Exec(ctx,
-		`UPDATE profiles SET last_seen_at = $1, updated_at = $1 WHERE user_id = $2 AND deleted_at IS NULL`,
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE profiles SET last_seen_at = $1 WHERE user_id = $2 AND deleted_at IS NULL AND last_seen_at < $1`,
 		lastSeen, userID,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("update last_seen_at: %w", err)
 	}
-	if ct.RowsAffected() == 0 {
-		return apperror.ErrNotFound
-	}
 	return nil
+}
+
+func (r *profileRepository) LastSeenAt(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	res := make(map[uuid.UUID]time.Time, len(userIDs))
+	if len(userIDs) == 0 {
+		return res, nil
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id, last_seen_at FROM profiles WHERE user_id = ANY($1) AND deleted_at IS NULL`, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("select last_seen_at: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id uuid.UUID
+			at time.Time
+		)
+		if err := rows.Scan(&id, &at); err != nil {
+			return nil, fmt.Errorf("scan last_seen_at: %w", err)
+		}
+		res[id] = at
+	}
+	return res, rows.Err()
 }
 
 func isDuplicateKey(err error) bool {

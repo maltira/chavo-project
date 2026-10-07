@@ -49,13 +49,13 @@ func (r *tokenRepository) Save(ctx context.Context, token *models.RefreshToken) 
 
 func (r *tokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
 	return r.scanToken(ctx,
-		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, host(ip_address), expires_at, created_at, revoked_at
 		 FROM refresh_tokens WHERE token_hash = $1`, tokenHash)
 }
 
 func (r *tokenRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.RefreshToken, error) {
 	return r.scanToken(ctx,
-		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, host(ip_address), expires_at, created_at, revoked_at
 		 FROM refresh_tokens WHERE id = $1`, id)
 }
 
@@ -102,7 +102,7 @@ func (r *tokenRepository) RevokeAllByUserTx(ctx context.Context, tx pgx.Tx, user
 
 func (r *tokenRepository) ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at, revoked_at
+		`SELECT id, user_id, token_hash, device_name, user_agent, host(ip_address), expires_at, created_at, revoked_at
 		 FROM refresh_tokens
 		 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
 		 ORDER BY created_at DESC`, userID)

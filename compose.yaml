@@ -38,6 +38,7 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
+        set -e
         echo "Running migrations for auth-service..."
         migrate -path=/migrations/auth -database="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_DB_NAME}?sslmode=disable" up
         echo "Running migrations for user-service..."

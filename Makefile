@@ -41,10 +41,10 @@ restart: down up
 init-dbs:
 	@$(COMPOSE) up -d --wait postgres
 	@echo "Инициализация баз данных..."
-	@docker exec chavo-postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -c "\
-		SELECT 'CREATE DATABASE $(AUTH_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(AUTH_DB_NAME)')\gexec; \
-		SELECT 'CREATE DATABASE $(USER_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(USER_DB_NAME)')\gexec; \
-		SELECT 'CREATE DATABASE $(CONVERSATION_DB_NAME)' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$(CONVERSATION_DB_NAME)')\gexec;"
+	@for db in $(AUTH_DB_NAME) $(USER_DB_NAME) $(CONVERSATION_DB_NAME); do \
+		echo "SELECT 'CREATE DATABASE \"$$db\"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$$db')\gexec" | \
+			docker exec -i chavo-postgres psql -v ON_ERROR_STOP=1 -q -U $(POSTGRES_USER) -d $(POSTGRES_DB) || exit 1; \
+	done
 	@echo "Базы данных готовы."
 
 psql:

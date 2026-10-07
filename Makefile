@@ -13,13 +13,21 @@ DB_AUTH_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:54
 DB_USER_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(USER_DB_NAME)?sslmode=disable
 DB_CONVERSATION_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(CONVERSATION_DB_NAME)?sslmode=disable
 
+# Тесты: SERVICE=auth-service — только один сервис
+SERVICES         := auth-service user-service conversation-service api-gateway
+SERVICE          ?= $(SERVICES)
+TEST_PG          := chavo-test-pg
+# Ниже 32768: выше ядро раздаёт исходящим соединениям, и порт может оказаться занят
+TEST_PG_PORT     ?= 15432
+
 .PHONY: up down restart \
         init-dbs \
         migrate-up migrate-down \
         migrate-auth-down migrate-user-down migrate-conversation-down \
         psql db-tables clean-db clean-redis clean-kafka clean-data \
         kafka-topics kafka-ui \
-        proto proto-tools
+        proto proto-tools \
+        test test-integration e2e
 
 
 # ──────────────────────────────────────────────
@@ -153,3 +161,39 @@ proto-tools:
 proto: proto-tools
 	@cd proto && ./bin/buf lint && ./bin/buf generate
 	@echo "Proto-код сгенерирован в proto/gen/go"
+
+# ──────────────────────────────────────────────
+# Тесты
+# ──────────────────────────────────────────────
+
+# Модульные: без БД и стека. Тесты с БД пропускаются (SKIP). Гоняет все сервисы, даже если какой-то упал.
+test:
+	@failed=""; \
+	for s in $(SERVICE); do \
+		echo "== $$s"; \
+		(cd services/$$s && go test -race -count=1 ./...) || failed="$$failed $$s"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "Упали:$$failed"; exit 1; fi; \
+	echo "Все тесты прошли"
+
+# Модульные + интеграционные: поднимает временный PostgreSQL и убирает его даже при падении тестов.
+# Миграции тесты применяют сами, каждому пакету — своя схема.
+test-integration:
+	@docker rm -f $(TEST_PG) >/dev/null 2>&1 || true
+	@docker run -d --rm --name $(TEST_PG) -e POSTGRES_PASSWORD=test -p $(TEST_PG_PORT):5432 postgres:16-alpine >/dev/null
+	@trap 'docker stop $(TEST_PG) >/dev/null' EXIT; \
+	echo "Ожидание PostgreSQL..."; \
+	until docker exec $(TEST_PG) pg_isready -h 127.0.0.1 -U postgres -q; do sleep 0.5; done; \
+	failed=""; \
+	for s in $(SERVICE); do \
+		echo "== $$s"; \
+		(cd services/$$s && TEST_DATABASE_URL="postgres://postgres:test@localhost:$(TEST_PG_PORT)/postgres?sslmode=disable" \
+			go test -race -count=1 ./...) || failed="$$failed $$s"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "Упали:$$failed"; exit 1; fi; \
+	echo "Все тесты прошли"
+
+# Клиент через nginx против поднятого стека (make up). Почта — только через Mailpit (SMTP_HOST=mailpit),
+# иначе тест не запустится. Перезапускает Gateway; после теста /api/auth/ с этого IP минуту под лимитом nginx.
+e2e:
+	@cd tests/e2e && go test -tags e2e -count=1 -timeout 10m -v ./...

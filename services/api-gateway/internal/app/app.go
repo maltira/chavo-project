@@ -22,6 +22,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/config"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/api"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/events"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
@@ -31,12 +32,13 @@ import (
 )
 
 type App struct {
-	cfg    *config.Config
-	log    *zap.Logger
-	rdb    *redis.Client
-	conns  []*grpc.ClientConn
-	hub    *hub.Hub
-	server *http.Server
+	cfg      *config.Config
+	log      *zap.Logger
+	rdb      *redis.Client
+	conns    []*grpc.ClientConn
+	hub      *hub.Hub
+	consumer *events.Consumer
+	server   *http.Server
 }
 
 func New() (*App, error) {
@@ -121,6 +123,7 @@ func New() (*App, error) {
 		a.Close()
 		return nil, err
 	}
+	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, profiles, events.DefaultOptions(), log), log)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -164,6 +167,20 @@ func Run() error {
 func (a *App) Start() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	consumerCtx, stopConsumer := context.WithCancel(context.Background())
+	consumerDone := make(chan struct{})
+	go func() {
+		defer close(consumerDone)
+		a.consumer.Run(consumerCtx)
+	}()
+	defer func() {
+		stopConsumer()
+		<-consumerDone
+		if err := a.consumer.Close(); err != nil {
+			a.log.Error("Kafka consumer close failed", zap.Error(err))
+		}
+	}()
 
 	serverErr := make(chan error, 1)
 	go func() {

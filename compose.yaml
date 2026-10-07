@@ -307,6 +307,7 @@ services:
       - GRPC_TIMEOUT=${GRPC_TIMEOUT}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES}
       - FRONTEND_ORIGIN=${FRONTEND_URL}
+      - KAFKA_BROKERS=kafka:29092
       - ENV=${ENV}
       - PORT=${GATEWAY_PORT:-8000}
     healthcheck:
@@ -318,6 +319,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       auth-service:
         condition: service_healthy
       user-service:

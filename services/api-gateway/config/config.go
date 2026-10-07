@@ -25,6 +25,8 @@ type Config struct {
 
 	// FrontendOrigin — единственный Origin, с которого принимаются WebSocket-подключения.
 	FrontendOrigin string
+
+	KafkaBrokers []string
 }
 
 func Load() (*Config, error) {
@@ -38,6 +40,7 @@ func Load() (*Config, error) {
 		ConversationAddr: os.Getenv("CONVERSATION_SERVICE_ADDR"),
 		TrustedProxies:   parseList(os.Getenv("TRUSTED_PROXIES")),
 		FrontendOrigin:   os.Getenv("FRONTEND_ORIGIN"),
+		KafkaBrokers:     parseList(getEnv("KAFKA_BROKERS", "kafka:29092")),
 	}
 
 	timeout, err := time.ParseDuration(getEnv("GRPC_TIMEOUT", "5s"))

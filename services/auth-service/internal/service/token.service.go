@@ -191,10 +191,16 @@ func (s *tokenService) RevokeByToken(ctx context.Context, refreshToken string) e
 	if rt.RevokedAt != nil {
 		return nil
 	}
-	return s.RevokeByID(ctx, rt.UserID, rt.ID)
+	return s.revoke(ctx, rt.UserID, rt.ID, "logout")
 }
 
+// RevokeByID завершает сессию из списка устройств (с другого устройства или вкладки).
 func (s *tokenService) RevokeByID(ctx context.Context, userID, sessionID uuid.UUID) error {
+	return s.revoke(ctx, userID, sessionID, "remote_logout")
+}
+
+// reason уходит в session.revoked: клиент отличает собственный выход от завершения сессии с другого устройства.
+func (s *tokenService) revoke(ctx context.Context, userID, sessionID uuid.UUID, reason string) error {
 	rt, err := s.repo.FindByID(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, apperror.ErrNotFound) {
@@ -215,7 +221,7 @@ func (s *tokenService) RevokeByID(ctx context.Context, userID, sessionID uuid.UU
 	_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
 
 	// Публикуем событие в Kafka
-	s.publishRevokedEvent(ctx, sessionID, userID, "remote_logout")
+	s.publishRevokedEvent(ctx, sessionID, userID, reason)
 
 	return nil
 }

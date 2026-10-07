@@ -24,6 +24,7 @@ const (
 	ReasonUnavailable     = "SERVICE_UNAVAILABLE"
 	ReasonTimeout         = "TIMEOUT"
 	ReasonNotFound        = "NOT_FOUND"
+	ReasonRateLimited     = "RATE_LIMITED"
 )
 
 const msgInternal = "Внутренняя ошибка сервера"

@@ -18,6 +18,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/middleware"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ratelimit"
 )
 
 const maxBodyBytes = 1 << 20
@@ -37,9 +38,18 @@ type Deps struct {
 	Health        []HealthCheck
 	// WS — обработчик GET /ws (nil — без WebSocket).
 	WS gin.HandlerFunc
+	// Limiter — лимиты по пользователю (nil — без лимитов): Limits.API на все авторизованные запросы,
+	// Limits.Messages — дополнительно на отправку сообщений.
+	Limiter *ratelimit.Limiter
+	Limits  Limits
 	// TrustedProxies — IP или CIDR; пусто = не доверять никому.
 	TrustedProxies []string
 	Log            *zap.Logger
+}
+
+type Limits struct {
+	API      ratelimit.Rule
+	Messages ratelimit.Rule
 }
 
 type Handler struct {
@@ -117,6 +127,11 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 
 	// Авторизованные, профиль не нужен: управление аккаунтом и создание профиля.
 	authed := api.Group("", middleware.Authenticate(d.Verifier, d.Log))
+	sendLimit := []gin.HandlerFunc{}
+	if d.Limiter != nil {
+		authed.Use(middleware.RateLimit(d.Limiter, d.Limits.API, d.Log))
+		sendLimit = append(sendLimit, middleware.RateLimit(d.Limiter, d.Limits.Messages, d.Log))
+	}
 	authed.POST("/auth/change-password", h.changePassword)
 	authed.GET("/auth/sessions", h.listSessions)
 	authed.DELETE("/auth/sessions/:session_id", h.terminateSession)
@@ -162,7 +177,7 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 
 	msg := p.Group("/messages")
 	msg.GET("", h.listMessages)
-	msg.POST("", h.sendMessage)
+	msg.POST("", append(sendLimit, h.sendMessage)...)
 	msg.GET("/:message_id", h.getMessage)
 	msg.PATCH("/:message_id", h.editMessage)
 	msg.DELETE("/:message_id", h.deleteMessage)

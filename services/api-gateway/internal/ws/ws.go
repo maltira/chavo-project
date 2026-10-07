@@ -45,7 +45,13 @@ type Options struct {
 	SendBuffer int
 	// MaxMessageBytes — лимит входящего сообщения клиента.
 	MaxMessageBytes int64
+	// MessageLimit сообщений клиента за MessageWindow (0 — без лимита). Сверх лимита сообщения отбрасываются,
+	// в abuseFactor раз сверх — соединение закрывается.
+	MessageLimit  int
+	MessageWindow time.Duration
 }
+
+const abuseFactor = 5
 
 func DefaultOptions() Options {
 	return Options{
@@ -54,6 +60,8 @@ func DefaultOptions() Options {
 		WriteWait:       10 * time.Second,
 		SendBuffer:      256,
 		MaxMessageBytes: 4 << 10,
+		MessageLimit:    20,
+		MessageWindow:   time.Second,
 	}
 }
 
@@ -266,6 +274,7 @@ func (h *Handler) readLoop(ctx context.Context, conn *websocket.Conn, c *hub.Con
 	alive()
 	conn.SetPongHandler(func(string) error { alive(); return nil })
 
+	var rate rateWindow
 	for {
 		kind, data, err := conn.ReadMessage()
 		if err != nil {
@@ -279,11 +288,57 @@ func (h *Handler) readLoop(ctx context.Context, conn *websocket.Conn, c *hub.Con
 			return
 		}
 		alive()
+		switch rate.hit(time.Now(), h.opts.MessageLimit, h.opts.MessageWindow) {
+		case rateAbuse:
+			c.Close(hub.ClosePolicy, "rate limit")
+			return
+		case rateExceeded:
+			continue
+		case rateFirstExceeded:
+			c.Enqueue(errorFrame(httpx.ReasonRateLimited, "Слишком много сообщений, попробуйте позже"))
+			continue
+		}
 		if kind != websocket.TextMessage {
 			c.Enqueue(errorFrame(ReasonInvalidMessage, "Ожидается JSON-сообщение"))
 			continue
 		}
 		h.dispatch(ctx, c, data)
+	}
+}
+
+type rateVerdict int
+
+const (
+	rateOK rateVerdict = iota
+	rateFirstExceeded
+	rateExceeded
+	rateAbuse
+)
+
+// rateWindow — фиксированное окно сообщений одного соединения (используется только горутиной чтения).
+// Об ошибке клиент узнаёт один раз за окно: ответ на каждое лишнее сообщение сам был бы потоком.
+type rateWindow struct {
+	start time.Time
+	count int
+}
+
+func (w *rateWindow) hit(now time.Time, limit int, window time.Duration) rateVerdict {
+	if limit <= 0 {
+		return rateOK
+	}
+	if now.Sub(w.start) >= window {
+		w.start, w.count = now, 0
+	}
+	w.count++
+	switch {
+	case w.count <= limit:
+		return rateOK
+	case w.count > limit*abuseFactor:
+		return rateAbuse
+	case w.count == limit+1:
+		return rateFirstExceeded
+	default:
+		return rateExceeded
 	}
 }
 

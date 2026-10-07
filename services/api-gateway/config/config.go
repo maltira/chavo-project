@@ -27,6 +27,11 @@ type Config struct {
 	FrontendOrigin string
 
 	KafkaBrokers []string
+
+	// Лимиты по пользователю, формат "<limit>/<window>".
+	RateLimitAPI      string
+	RateLimitMessages string
+	RateLimitWS       string
 }
 
 func Load() (*Config, error) {
@@ -41,6 +46,10 @@ func Load() (*Config, error) {
 		TrustedProxies:   parseList(os.Getenv("TRUSTED_PROXIES")),
 		FrontendOrigin:   os.Getenv("FRONTEND_ORIGIN"),
 		KafkaBrokers:     parseList(getEnv("KAFKA_BROKERS", "kafka:29092")),
+
+		RateLimitAPI:      getEnv("RATE_LIMIT_API", "300/1m"),
+		RateLimitMessages: getEnv("RATE_LIMIT_MESSAGES", "30/10s"),
+		RateLimitWS:       getEnv("RATE_LIMIT_WS", "20/1s"),
 	}
 
 	timeout, err := time.ParseDuration(getEnv("GRPC_TIMEOUT", "5s"))

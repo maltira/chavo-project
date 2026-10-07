@@ -295,21 +295,22 @@ services:
       dockerfile: services/api-gateway/Dockerfile
     container_name: chavo-gateway
     restart: unless-stopped
-    # Порт опубликован, пока перед Gateway нет nginx.
-    ports:
-      - "${GATEWAY_PORT:-8000}:${GATEWAY_PORT:-8000}"
     environment:
       - JWT_SECRET=${JWT_SECRET}
       - REDIS_URL=${REDIS_URL}
       - AUTH_SERVICE_ADDR=auth-service:${AUTH_PORT}
       - USER_SERVICE_ADDR=user-service:${USER_PORT}
       - CONVERSATION_SERVICE_ADDR=conversation-service:${CONVERSATION_PORT}
-      - GRPC_TIMEOUT=${GRPC_TIMEOUT}
+      - GRPC_TIMEOUT=${GRPC_TIMEOUT:-5s}
+      # По умолчанию — только nginx
       - TRUSTED_PROXIES=${TRUSTED_PROXIES}
       - FRONTEND_ORIGIN=${FRONTEND_URL}
       - KAFKA_BROKERS=kafka:29092
       - ENV=${ENV}
-      - PORT=${GATEWAY_PORT:-8000}
+      - PORT=${GATEWAY_PORT}
+      - RATE_LIMIT_API=${RATE_LIMIT_API:-300/1m}
+      - RATE_LIMIT_MESSAGES=${RATE_LIMIT_MESSAGES:-30/10s}
+      - RATE_LIMIT_WS=${RATE_LIMIT_WS:-20/1s}
     healthcheck:
       test: [ "CMD", "./gateway", "healthcheck" ]
       interval: 10s
@@ -330,10 +331,38 @@ services:
     networks:
       - chavo-network
 
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: chavo-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    environment:
+      - GATEWAY_PORT=${GATEWAY_PORT}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/proxy_params.conf:/etc/nginx/chavo/proxy_params.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      chavo-network:
+        # Фиксированный адрес: Gateway доверяет X-Forwarded-For только от него (TRUSTED_PROXIES)
+        ipv4_address: 172.28.10.10
+
 networks:
   chavo-network:
     name: chavo-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.10.0/24
 
 volumes:
   postgres_data:

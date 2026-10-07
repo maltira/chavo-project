@@ -26,6 +26,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ratelimit"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ws"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/pkg/logger"
@@ -103,6 +104,23 @@ func New() (*App, error) {
 		}})
 	}
 
+	var limits api.Limits
+	if limits.API, err = ratelimit.ParseRule("api", cfg.RateLimitAPI); err != nil {
+		a.Close()
+		return nil, err
+	}
+	if limits.Messages, err = ratelimit.ParseRule("messages", cfg.RateLimitMessages); err != nil {
+		a.Close()
+		return nil, err
+	}
+	wsRule, err := ratelimit.ParseRule("ws", cfg.RateLimitWS)
+	if err != nil {
+		a.Close()
+		return nil, err
+	}
+	wsOpts := ws.DefaultOptions()
+	wsOpts.MessageLimit, wsOpts.MessageWindow = wsRule.Limit, wsRule.Window
+
 	// Gateway один: записи ws:user:* от прошлого запуска принадлежат соединениям, которых уже нет.
 	registry := hub.NewRedisRegistry(rdb)
 	resetCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -122,7 +140,7 @@ func New() (*App, error) {
 		presence.NewKafkaPublisher(cfg.KafkaBrokers, log), presence.DefaultOptions(), log)
 	wsHandler, err := ws.New(ws.Deps{
 		Auth: authClient, Profiles: profiles, Hub: a.hub, Presence: a.presence,
-		Origin: cfg.FrontendOrigin, Options: ws.DefaultOptions(), Log: log,
+		Origin: cfg.FrontendOrigin, Options: wsOpts, Log: log,
 	})
 	if err != nil {
 		a.Close()
@@ -140,6 +158,8 @@ func New() (*App, error) {
 		Verifier:       auth.NewVerifier(cfg.JWTSecret, auth.NewRedisSessions(rdb)),
 		Profiles:       profiles,
 		Health:         health,
+		Limiter:        ratelimit.New(ratelimit.NewRedisCounter(rdb)),
+		Limits:         limits,
 		WS:             wsHandler.Handle,
 		TrustedProxies: cfg.TrustedProxies,
 		Log:            log,

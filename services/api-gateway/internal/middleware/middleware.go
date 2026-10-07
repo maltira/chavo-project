@@ -4,8 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +17,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ratelimit"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
 )
 
@@ -123,6 +126,23 @@ func Authenticate(v *auth.Verifier, log *zap.Logger) gin.HandlerFunc {
 		}
 		info := reqctx.From(c.Request.Context())
 		info.UserID, info.SessionID = userID, sid
+		c.Next()
+	}
+}
+
+// RateLimit ограничивает запросы пользователя (после Authenticate). Недоступный Redis лимит не применяет:
+// без Redis не работает и проверка сессии, так что запрос всё равно получит 503.
+func RateLimit(l *ratelimit.Limiter, rule ratelimit.Rule, log *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ok, retry, err := l.Allow(c.Request.Context(), rule, reqctx.From(c.Request.Context()).UserID)
+		if err != nil {
+			log.Warn("rate limit check failed", zap.String("rule", rule.Name), zap.Error(err))
+		}
+		if !ok {
+			c.Header("Retry-After", strconv.Itoa(int(math.Ceil(retry.Seconds()))))
+			httpx.Abort(c, http.StatusTooManyRequests, "Слишком много запросов, попробуйте позже", httpx.ReasonRateLimited)
+			return
+		}
 		c.Next()
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/api"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ratelimit"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
 )
 
@@ -197,7 +198,26 @@ type env struct {
 	convs    *fakeConversations
 }
 
-func newEnv(t *testing.T) *env {
+type memCounter struct {
+	mu     sync.Mutex
+	counts map[string]int64
+}
+
+func (m *memCounter) Incr(_ context.Context, key string, _ time.Duration) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.counts[key]++
+	return m.counts[key], nil
+}
+
+var generousLimits = api.Limits{
+	API:      ratelimit.Rule{Name: "api", Limit: 1000, Window: time.Minute},
+	Messages: ratelimit.Rule{Name: "messages", Limit: 1000, Window: time.Minute},
+}
+
+func newEnv(t *testing.T) *env { return newEnvWithLimits(t, generousLimits) }
+
+func newEnvWithLimits(t *testing.T, limits api.Limits) *env {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -235,6 +255,8 @@ func newEnv(t *testing.T) *env {
 		Conversations:  conversationv1.NewConversationServiceClient(conn),
 		Verifier:       auth.NewVerifier(secret, e.sessions),
 		Profiles:       profile.NewGate(e.cache, userv1.NewUserInternalServiceClient(conn), log),
+		Limiter:        ratelimit.New(&memCounter{counts: map[string]int64{}}),
+		Limits:         limits,
 		TrustedProxies: []string{"10.0.0.0/8"},
 		Log:            log,
 	})
@@ -592,5 +614,46 @@ func TestHealth(t *testing.T) {
 func TestInvalidTrustedProxy(t *testing.T) {
 	if _, err := api.NewRouter(api.Deps{TrustedProxies: []string{"nginx"}, Log: zap.NewNop()}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestRateLimitPerUser(t *testing.T) {
+	e := newEnvWithLimits(t, api.Limits{
+		API:      ratelimit.Rule{Name: "api", Limit: 4, Window: time.Minute},
+		Messages: ratelimit.Rule{Name: "messages", Limit: 2, Window: 10 * time.Second},
+	})
+	_, alice := e.login(t, true)
+	_, bob := e.login(t, true)
+	send := func(token string) *httptest.ResponseRecorder {
+		return e.do(http.MethodPost, "/api/messages", token, `{"conversation_id":"`+uuid.NewString()+`","content":"hi"}`)
+	}
+
+	// Отправка сообщений ограничена строже общего лимита.
+	for i := range 2 {
+		if w := send(alice); w.Code == http.StatusTooManyRequests {
+			t.Fatalf("message %d limited", i)
+		}
+	}
+	w := send(alice)
+	expect(t, w, http.StatusTooManyRequests, "RATE_LIMITED")
+	if ra := w.Header().Get("Retry-After"); ra == "" || ra == "0" {
+		t.Fatalf("Retry-After %q", ra)
+	}
+
+	// Общий лимит засчитал все три отправки; четвёртый запрос — последний разрешённый.
+	if w := e.do(http.MethodGet, "/api/conversations", alice, ""); w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	expect(t, e.do(http.MethodGet, "/api/conversations", alice, ""), http.StatusTooManyRequests, "RATE_LIMITED")
+
+	// Лимит у каждого пользователя свой.
+	if w := e.do(http.MethodGet, "/api/conversations", bob, ""); w.Code != http.StatusOK {
+		t.Fatalf("other user limited: %d", w.Code)
+	}
+	// Публичные маршруты лимитом по пользователю не покрыты (их режет nginx по IP).
+	for range 6 {
+		if w := e.do(http.MethodPost, "/api/auth/logout", "", ""); w.Code == http.StatusTooManyRequests {
+			t.Fatal("public route limited")
+		}
 	}
 }

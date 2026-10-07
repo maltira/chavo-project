@@ -449,3 +449,32 @@ func TestPresenceCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestMessageRateLimit(t *testing.T) {
+	opts := ws.DefaultOptions()
+	opts.MessageLimit, opts.MessageWindow = 3, time.Minute
+	e := newEnv(t, opts)
+	conn, _ := connect(t, e, "tab")
+
+	ping := func() { _ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"ping"}`)) }
+	for range 3 {
+		ping()
+		if m := read(t, conn); m["type"] != "pong" {
+			t.Fatalf("got %v", m)
+		}
+	}
+	// Сверх лимита: одна ошибка за окно, остальное молча отбрасывается.
+	for range 3 {
+		ping()
+	}
+	if m := read(t, conn); m["type"] != "error" || m["reason"] != "RATE_LIMITED" {
+		t.Fatalf("got %v", m)
+	}
+	// Злоупотребление (в 5 раз сверх лимита) закрывает соединение.
+	for range 15 {
+		ping()
+	}
+	if code := closeCode(t, conn); code != hub.ClosePolicy {
+		t.Fatalf("close code %d", code)
+	}
+}

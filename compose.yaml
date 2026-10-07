@@ -182,6 +182,18 @@ services:
     networks:
       - chavo-network
 
+  # Локальный SMTP: письма никуда не уходят, видны в UI. auth-service: SMTP_HOST=mailpit, SMTP_PORT=1025.
+  mailpit:
+    image: axllent/mailpit:v1.31.4
+    container_name: chavo-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+    networks:
+      - chavo-network
+
   # ==============================================
   # BACKEND SERVICES
   # ==============================================

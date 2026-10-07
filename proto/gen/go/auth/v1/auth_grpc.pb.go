@@ -38,7 +38,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Методы, требующие пользователя, читают его id из metadata x-user-id (ставит Gateway).
+// Методы, требующие пользователя, читают его id из metadata x-user-id (ставит Gateway)
 type AuthServiceClient interface {
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	VerifyRegister(ctx context.Context, in *VerifyRegisterRequest, opts ...grpc.CallOption) (*VerifyRegisterResponse, error)
@@ -53,7 +53,7 @@ type AuthServiceClient interface {
 	ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error)
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	TerminateSession(ctx context.Context, in *TerminateSessionRequest, opts ...grpc.CallOption) (*TerminateSessionResponse, error)
-	// ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway).
+	// ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway)
 	ResolveSession(ctx context.Context, in *ResolveSessionRequest, opts ...grpc.CallOption) (*ResolveSessionResponse, error)
 }
 
@@ -199,7 +199,7 @@ func (c *authServiceClient) ResolveSession(ctx context.Context, in *ResolveSessi
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
 //
-// Методы, требующие пользователя, читают его id из metadata x-user-id (ставит Gateway).
+// Методы, требующие пользователя, читают его id из metadata x-user-id (ставит Gateway)
 type AuthServiceServer interface {
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	VerifyRegister(context.Context, *VerifyRegisterRequest) (*VerifyRegisterResponse, error)
@@ -214,7 +214,7 @@ type AuthServiceServer interface {
 	ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error)
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	TerminateSession(context.Context, *TerminateSessionRequest) (*TerminateSessionResponse, error)
-	// ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway).
+	// ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway)
 	ResolveSession(context.Context, *ResolveSessionRequest) (*ResolveSessionResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }

@@ -22,7 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ClientInfo — данные клиента, которые Gateway берёт из HTTP-запроса.
+// ClientInfo — данные клиента, которые Gateway берёт из HTTP-запроса
 type ClientInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
@@ -75,7 +75,7 @@ func (x *ClientInfo) GetUserAgent() string {
 	return ""
 }
 
-// TokenPair — результат входа или обновления; refresh-токен Gateway кладёт в cookie.
+// TokenPair — результат входа или обновления; refresh-токен Gateway кладёт в cookie
 type TokenPair struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	AccessToken      string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`

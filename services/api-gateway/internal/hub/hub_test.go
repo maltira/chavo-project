@@ -183,3 +183,50 @@ func TestShutdown(t *testing.T) {
 		t.Fatalf("register after shutdown: %v", err)
 	}
 }
+
+func TestWatchers(t *testing.T) {
+	h := New(newRegistry(), zap.NewNop())
+	a := register(t, h, "s1:a", "u1", "s1")
+	b := register(t, h, "s2:a", "u2", "s2")
+
+	h.WatchDirect(a, []string{"peer", "u1"}) // себя не наблюдают
+	if err := h.Subscribe(a, []string{"peer", "x"}, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Subscribe(a, []string{"y"}, 2); !errors.Is(err, ErrWatchLimit) {
+		t.Fatalf("limit: %v", err)
+	}
+	h.SendToWatchers("u1", []byte("self"))
+	if len(a.Send()) != 0 {
+		t.Fatal("connection watches its own user")
+	}
+
+	// Отписка от собеседника по direct его не снимает, от остальных — снимает.
+	h.Unsubscribe(a, []string{"peer", "x"})
+	h.SendToWatchers("peer", []byte("p"))
+	h.SendToWatchers("x", []byte("x"))
+	if len(a.Send()) != 1 || string(<-a.Send()) != "p" {
+		t.Fatal("unsubscribe routed wrong")
+	}
+
+	h.WatchPeers("u1", "u2")
+	h.SendToWatchers("u2", []byte("to-a"))
+	h.SendToWatchers("u1", []byte("to-b"))
+	if string(<-a.Send()) != "to-a" || string(<-b.Send()) != "to-b" {
+		t.Fatal("WatchPeers routed wrong")
+	}
+
+	h.Unregister(a)
+	h.Unregister(b)
+	h.mu.RLock()
+	n := len(h.watchers)
+	h.mu.RUnlock()
+	if n != 0 {
+		t.Fatalf("watchers left after unregister: %d", n)
+	}
+	// Подписка закрытого соединения ничего не добавляет.
+	h.WatchDirect(a, []string{"peer"})
+	if err := h.Subscribe(a, []string{"x"}, 2); err != nil || len(h.watchers) != 0 {
+		t.Fatal("closed connection subscribed")
+	}
+}

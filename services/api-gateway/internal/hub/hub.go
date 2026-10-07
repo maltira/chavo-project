@@ -13,12 +13,12 @@ import (
 
 // Коды закрытия WebSocket (RFC 6455 и диапазон приложения 4000–4999).
 const (
-	CloseGoingAway      = 1001
-	ClosePolicy         = 1008
-	CloseInternal       = 1011
-	CloseTryAgainLater  = 1013
-	CloseSessionRevoked = 4001
-	CloseUnauthorized   = 4401
+	CloseGoingAway       = 1001
+	ClosePolicy          = 1008
+	CloseInternal        = 1011
+	CloseTryAgainLater   = 1013
+	CloseSessionRevoked  = 4001
+	CloseUnauthorized    = 4401
 	CloseProfileRequired = 4403
 )
 
@@ -43,10 +43,17 @@ type Conn struct {
 	code   int
 	reason string
 	final  []byte
+
+	// Чьё присутствие видит соединение (под Hub.mu): собеседники по direct и явные подписки клиента.
+	direct map[string]struct{}
+	subs   map[string]struct{}
 }
 
 func NewConn(id, userID, sid string, buffer int) *Conn {
-	return &Conn{ID: id, UserID: userID, SID: sid, send: make(chan []byte, buffer), done: make(chan struct{})}
+	return &Conn{
+		ID: id, UserID: userID, SID: sid, send: make(chan []byte, buffer), done: make(chan struct{}),
+		direct: map[string]struct{}{}, subs: map[string]struct{}{},
+	}
 }
 
 // Send — исходящие сообщения для writer-горутины.
@@ -96,8 +103,10 @@ type Hub struct {
 	conns  map[string]*Conn
 	bySID  map[string]map[string]*Conn
 	byUser map[string]map[string]*Conn
-	closed bool
-	wg     sync.WaitGroup
+	// watchers: user_id → соединения, которым нужны его переходы online/offline.
+	watchers map[string]map[string]*Conn
+	closed   bool
+	wg       sync.WaitGroup
 }
 
 func New(registry Registry, log *zap.Logger) *Hub {
@@ -107,6 +116,7 @@ func New(registry Registry, log *zap.Logger) *Hub {
 		conns:    map[string]*Conn{},
 		bySID:    map[string]map[string]*Conn{},
 		byUser:   map[string]map[string]*Conn{},
+		watchers: map[string]map[string]*Conn{},
 	}
 }
 
@@ -148,6 +158,12 @@ func (h *Hub) Unregister(c *Conn) (last bool) {
 	delete(h.conns, c.ID)
 	remove(h.bySID, c.SID, c.ID)
 	last = remove(h.byUser, c.UserID, c.ID)
+	for id := range c.direct {
+		remove(h.watchers, id, c.ID)
+	}
+	for id := range c.subs {
+		remove(h.watchers, id, c.ID)
+	}
 	h.mu.Unlock()
 
 	h.removeFromRegistry(c)
@@ -199,6 +215,88 @@ func (h *Hub) CloseUser(userID string, final []byte, code int, reason string) {
 	defer h.mu.RUnlock()
 	for _, c := range h.byUser[userID] {
 		c.CloseWith(final, code, reason)
+	}
+}
+
+// ErrWatchLimit — у соединения слишком много явных подписок на присутствие.
+var ErrWatchLimit = errors.New("watch limit exceeded")
+
+// WatchDirect добавляет собеседников по direct: они наблюдаются всё время жизни соединения.
+func (h *Hub) WatchDirect(c *Conn, userIDs []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conns[c.ID] != c {
+		return
+	}
+	for _, id := range userIDs {
+		if id != c.UserID {
+			c.direct[id] = struct{}{}
+			add(h.watchers, id, c)
+		}
+	}
+}
+
+// WatchPeers — новый direct между a и b: каждый начинает наблюдать другого во всех своих соединениях.
+func (h *Hub) WatchPeers(a, b string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, pair := range [2][2]string{{a, b}, {b, a}} {
+		for _, c := range h.byUser[pair[0]] {
+			c.direct[pair[1]] = struct{}{}
+			add(h.watchers, pair[1], c)
+		}
+	}
+}
+
+// Subscribe — явная подписка клиента; limit ограничивает число подписок соединения целиком (без direct).
+func (h *Hub) Subscribe(c *Conn, userIDs []string, limit int) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conns[c.ID] != c {
+		return nil
+	}
+	added := 0
+	for _, id := range userIDs {
+		if _, ok := c.subs[id]; !ok && id != c.UserID {
+			added++
+		}
+	}
+	if len(c.subs)+added > limit {
+		return ErrWatchLimit
+	}
+	for _, id := range userIDs {
+		if id != c.UserID {
+			c.subs[id] = struct{}{}
+			add(h.watchers, id, c)
+		}
+	}
+	return nil
+}
+
+// Unsubscribe снимает явные подписки; собеседники по direct остаются.
+func (h *Hub) Unsubscribe(c *Conn, userIDs []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conns[c.ID] != c {
+		return
+	}
+	for _, id := range userIDs {
+		if _, ok := c.subs[id]; !ok {
+			continue
+		}
+		delete(c.subs, id)
+		if _, ok := c.direct[id]; !ok {
+			remove(h.watchers, id, c.ID)
+		}
+	}
+}
+
+// SendToWatchers доставляет переход присутствия userID всем, кто за ним наблюдает.
+func (h *Hub) SendToWatchers(userID string, msg []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, c := range h.watchers[userID] {
+		c.Enqueue(msg)
 	}
 }
 

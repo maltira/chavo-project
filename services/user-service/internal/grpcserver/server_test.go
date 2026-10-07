@@ -48,6 +48,16 @@ func (f *fakeProfiles) Create(context.Context, uuid.UUID, service.CreateProfileI
 	return f.createErr
 }
 
+func (f *fakeProfiles) LastSeen(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	res := map[uuid.UUID]time.Time{}
+	for _, id := range ids {
+		if p, ok := f.byID[id]; ok {
+			res[id] = p.LastSeenAt
+		}
+	}
+	return res, nil
+}
+
 type fakeBlocks struct {
 	service.BlockService
 	blocked map[[2]uuid.UUID]bool // {blocker, blocked}
@@ -252,5 +262,17 @@ func TestMessagingAllowedUserExistsPresenceVisible(t *testing.T) {
 	v, err := internal.PresenceVisible(ctx, &userv1.PresenceVisibleRequest{UserIds: []string{a.String(), b.String(), c.String()}})
 	if err != nil || len(v.GetVisible()) != 2 || !v.GetVisible()[a.String()] || v.GetVisible()[b.String()] {
 		t.Fatalf("presence visible: %v %v", v, err)
+	}
+	if len(v.GetLastSeenAt()) != 0 {
+		t.Fatal("last_seen_at returned without with_last_seen")
+	}
+
+	// last_seen_at — только для тех, кто показывает онлайн.
+	seen := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	d.profiles.byID[b] = models.Profile{UserID: b, LastSeenAt: seen}
+	d.profiles.byID[a] = models.Profile{UserID: a, LastSeenAt: seen}
+	v, err = internal.PresenceVisible(ctx, &userv1.PresenceVisibleRequest{UserIds: []string{a.String(), b.String()}, WithLastSeen: true})
+	if err != nil || len(v.GetLastSeenAt()) != 1 || !v.GetLastSeenAt()[a.String()].AsTime().Equal(seen) {
+		t.Fatalf("last seen: %v %v", v, err)
 	}
 }

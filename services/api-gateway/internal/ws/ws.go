@@ -21,6 +21,7 @@ import (
 	authv1 "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
 )
@@ -31,6 +32,7 @@ const (
 	ReasonForbiddenOrigin = "FORBIDDEN_ORIGIN"
 	ReasonInvalidMessage  = "INVALID_MESSAGE"
 	ReasonUnknownType     = "UNKNOWN_TYPE"
+	ReasonPresenceLimit   = "PRESENCE_LIMIT"
 )
 
 type Options struct {
@@ -55,10 +57,19 @@ func DefaultOptions() Options {
 	}
 }
 
+// Presence — учёт присутствия (пакет presence); nil — без presence.
+type Presence interface {
+	Connected(ctx context.Context, c *hub.Conn, first bool)
+	Disconnected(c *hub.Conn, last bool)
+	Subscribe(ctx context.Context, c *hub.Conn, userIDs []string) error
+	Unsubscribe(c *hub.Conn, userIDs []string) error
+}
+
 type Deps struct {
 	Auth     authv1.AuthServiceClient
 	Profiles *profile.Gate
 	Hub      *hub.Hub
+	Presence Presence
 	Origin   string
 	Options  Options
 	Log      *zap.Logger
@@ -68,6 +79,7 @@ type Handler struct {
 	auth     authv1.AuthServiceClient
 	profiles *profile.Gate
 	hub      *hub.Hub
+	presence Presence
 	origin   string
 	opts     Options
 	log      *zap.Logger
@@ -79,7 +91,7 @@ func New(d Deps) (*Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid frontend origin %q", d.Origin)
 	}
-	h := &Handler{auth: d.Auth, profiles: d.Profiles, hub: d.Hub, origin: origin, opts: d.Options, log: d.Log}
+	h := &Handler{auth: d.Auth, profiles: d.Profiles, hub: d.Hub, presence: d.Presence, origin: origin, opts: d.Options, log: d.Log}
 	h.upgrader = websocket.Upgrader{
 		HandshakeTimeout: 10 * time.Second,
 		// Origin уже проверен в Handle.
@@ -115,7 +127,8 @@ type errorMsg struct {
 }
 
 type clientMsg struct {
-	Type string `json:"type"`
+	Type    string   `json:"type"`
+	UserIDs []string `json:"user_ids"`
 }
 
 func encode(v any) []byte {
@@ -210,7 +223,8 @@ func (h *Handler) serve(ctx context.Context, conn *websocket.Conn, c *hub.Conn) 
 	log := h.log.With(zap.String("connection_id", c.ID), zap.String("user_id", c.UserID), zap.String("session_id", c.SID),
 		zap.String("request_id", reqctx.From(ctx).RequestID))
 
-	if _, err := h.hub.Register(ctx, c); err != nil {
+	first, err := h.hub.Register(ctx, c)
+	if err != nil {
 		log.Error("ws register failed", zap.Error(err))
 		r := rejectUnavailable
 		if errors.Is(err, hub.ErrClosed) {
@@ -223,16 +237,22 @@ func (h *Handler) serve(ctx context.Context, conn *websocket.Conn, c *hub.Conn) 
 	log.Info("ws connected")
 
 	c.Enqueue(encode(readyMsg{Type: "ready", ConnectionID: c.ID}))
+	if h.presence != nil {
+		h.presence.Connected(ctx, c, first)
+	}
 
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
 		h.writeLoop(conn, c)
 	}()
-	h.readLoop(conn, c)
+	h.readLoop(ctx, conn, c)
 	c.Close(websocket.CloseNormalClosure, "")
 	<-writerDone
-	h.hub.Unregister(c)
+	last := h.hub.Unregister(c)
+	if h.presence != nil {
+		h.presence.Disconnected(c, last)
+	}
 
 	code, reason, _ := c.CloseInfo()
 	log.Info("ws disconnected", zap.Int("close_code", code), zap.String("close_reason", reason),
@@ -240,7 +260,7 @@ func (h *Handler) serve(ctx context.Context, conn *websocket.Conn, c *hub.Conn) 
 }
 
 // readLoop читает команды клиента до ошибки чтения: закрытие вкладки, отсутствие pong, превышение лимита.
-func (h *Handler) readLoop(conn *websocket.Conn, c *hub.Conn) {
+func (h *Handler) readLoop(ctx context.Context, conn *websocket.Conn, c *hub.Conn) {
 	conn.SetReadLimit(h.opts.MaxMessageBytes)
 	alive := func() { _ = conn.SetReadDeadline(time.Now().Add(h.opts.PongWait)) }
 	alive()
@@ -263,21 +283,47 @@ func (h *Handler) readLoop(conn *websocket.Conn, c *hub.Conn) {
 			c.Enqueue(errorFrame(ReasonInvalidMessage, "Ожидается JSON-сообщение"))
 			continue
 		}
-		h.dispatch(c, data)
+		h.dispatch(ctx, c, data)
 	}
 }
 
-func (h *Handler) dispatch(c *hub.Conn, data []byte) {
+func (h *Handler) dispatch(ctx context.Context, c *hub.Conn, data []byte) {
 	var msg clientMsg
-	if err := json.Unmarshal(data, &msg); err != nil {
+	err := json.Unmarshal(data, &msg)
+	if err != nil {
 		c.Enqueue(errorFrame(ReasonInvalidMessage, "Некорректное сообщение"))
 		return
 	}
 	switch msg.Type {
 	case "ping":
 		c.Enqueue(pongFrame)
+	case "presence.subscribe", "presence.unsubscribe":
+		if h.presence == nil {
+			c.Enqueue(errorFrame(ReasonUnknownType, "Неизвестный тип сообщения"))
+			return
+		}
+		if msg.Type == "presence.subscribe" {
+			err = h.presence.Subscribe(ctx, c, msg.UserIDs)
+		} else {
+			err = h.presence.Unsubscribe(c, msg.UserIDs)
+		}
+		if err != nil {
+			c.Enqueue(h.presenceError(c, err))
+		}
 	default:
 		c.Enqueue(errorFrame(ReasonUnknownType, "Неизвестный тип сообщения"))
+	}
+}
+
+func (h *Handler) presenceError(c *hub.Conn, err error) []byte {
+	switch {
+	case errors.Is(err, presence.ErrInvalidIDs):
+		return errorFrame(ReasonInvalidMessage, "user_ids: ожидается непустой список UUID")
+	case errors.Is(err, presence.ErrTooMany), errors.Is(err, hub.ErrWatchLimit):
+		return errorFrame(ReasonPresenceLimit, "Слишком много подписок на статус")
+	default:
+		h.log.Warn("presence snapshot failed", zap.String("connection_id", c.ID), zap.Error(err))
+		return errorFrame(httpx.ReasonUnavailable, "Сервис временно недоступен")
 	}
 }
 

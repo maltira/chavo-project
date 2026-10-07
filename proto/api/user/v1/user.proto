@@ -164,8 +164,12 @@ message GroupInviteAllowedResponse {
 
 message PresenceVisibleRequest {
   repeated string user_ids = 1;
+  // with_last_seen — вернуть и last_seen_at (снимок presence для клиента).
+  bool with_last_seen = 2;
 }
 message PresenceVisibleResponse {
   // user_id → виден ли онлайн другим; отсутствующие пользователи не попадают в ответ.
   map<string, bool> visible = 1;
+  // Только при with_last_seen и только для видимых пользователей.
+  map<string, google.protobuf.Timestamp> last_seen_at = 2;
 }

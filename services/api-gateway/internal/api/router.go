@@ -91,7 +91,9 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	r.RemoteIPHeaders = []string{"X-Forwarded-For"}
 	r.HandleMethodNotAllowed = true
 	r.NoRoute(func(c *gin.Context) { httpx.Abort(c, http.StatusNotFound, "Не найдено", httpx.ReasonNotFound) })
-	r.NoMethod(func(c *gin.Context) { httpx.Abort(c, http.StatusMethodNotAllowed, "Метод не поддерживается", "") })
+	r.NoMethod(func(c *gin.Context) {
+		httpx.Abort(c, http.StatusMethodNotAllowed, "Метод не поддерживается", "")
+	})
 	r.Use(middleware.Recovery(d.Log), middleware.Trace(), middleware.Logger(d.Log), middleware.BodyLimit(maxBodyBytes))
 
 	r.GET("/health", h.healthCheck)

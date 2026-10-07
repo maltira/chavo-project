@@ -1596,8 +1596,10 @@ func (x *GroupInviteAllowedResponse) GetAllowed() bool {
 }
 
 type PresenceVisibleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	UserIds []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	// with_last_seen — вернуть и last_seen_at (снимок presence для клиента).
+	WithLastSeen  bool `protobuf:"varint,2,opt,name=with_last_seen,json=withLastSeen,proto3" json:"with_last_seen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1639,10 +1641,19 @@ func (x *PresenceVisibleRequest) GetUserIds() []string {
 	return nil
 }
 
+func (x *PresenceVisibleRequest) GetWithLastSeen() bool {
+	if x != nil {
+		return x.WithLastSeen
+	}
+	return false
+}
+
 type PresenceVisibleResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// user_id → виден ли онлайн другим; отсутствующие пользователи не попадают в ответ.
-	Visible       map[string]bool `protobuf:"bytes,1,rep,name=visible,proto3" json:"visible,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Visible map[string]bool `protobuf:"bytes,1,rep,name=visible,proto3" json:"visible,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// Только при with_last_seen и только для видимых пользователей.
+	LastSeenAt    map[string]*timestamppb.Timestamp `protobuf:"bytes,2,rep,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1680,6 +1691,13 @@ func (*PresenceVisibleResponse) Descriptor() ([]byte, []int) {
 func (x *PresenceVisibleResponse) GetVisible() map[string]bool {
 	if x != nil {
 		return x.Visible
+	}
+	return nil
+}
+
+func (x *PresenceVisibleResponse) GetLastSeenAt() map[string]*timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenAt
 	}
 	return nil
 }
@@ -1798,14 +1816,20 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"inviter_id\x18\x02 \x01(\tR\tinviterId\"6\n" +
 	"\x1aGroupInviteAllowedResponse\x12\x18\n" +
-	"\aallowed\x18\x01 \x01(\bR\aallowed\"3\n" +
+	"\aallowed\x18\x01 \x01(\bR\aallowed\"Y\n" +
 	"\x16PresenceVisibleRequest\x12\x19\n" +
-	"\buser_ids\x18\x01 \x03(\tR\auserIds\"\x9e\x01\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\x12$\n" +
+	"\x0ewith_last_seen\x18\x02 \x01(\bR\fwithLastSeen\"\xcd\x02\n" +
 	"\x17PresenceVisibleResponse\x12G\n" +
-	"\avisible\x18\x01 \x03(\v2-.user.v1.PresenceVisibleResponse.VisibleEntryR\avisible\x1a:\n" +
+	"\avisible\x18\x01 \x03(\v2-.user.v1.PresenceVisibleResponse.VisibleEntryR\avisible\x12R\n" +
+	"\flast_seen_at\x18\x02 \x03(\v20.user.v1.PresenceVisibleResponse.LastSeenAtEntryR\n" +
+	"lastSeenAt\x1a:\n" +
 	"\fVisibleEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x012\xb8\x06\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1aY\n" +
+	"\x0fLastSeenAtEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x012\xb8\x06\n" +
 	"\vUserService\x12N\n" +
 	"\rCreateProfile\x12\x1d.user.v1.CreateProfileRequest\x1a\x1e.user.v1.CreateProfileResponse\x126\n" +
 	"\x05GetMe\x12\x15.user.v1.GetMeRequest\x1a\x16.user.v1.GetMeResponse\x12?\n" +
@@ -1838,7 +1862,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                    // 0: user.v1.Profile
 	(*Settings)(nil),                   // 1: user.v1.Settings
@@ -1874,56 +1898,59 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*PresenceVisibleRequest)(nil),     // 31: user.v1.PresenceVisibleRequest
 	(*PresenceVisibleResponse)(nil),    // 32: user.v1.PresenceVisibleResponse
 	nil,                                // 33: user.v1.PresenceVisibleResponse.VisibleEntry
-	(*timestamppb.Timestamp)(nil),      // 34: google.protobuf.Timestamp
+	nil,                                // 34: user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	(*timestamppb.Timestamp)(nil),      // 35: google.protobuf.Timestamp
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	34, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
-	34, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	34, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 3: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
-	34, // 4: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 5: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
+	35, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
+	35, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	35, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 3: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
+	35, // 4: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 5: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
 	0,  // 6: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
 	0,  // 7: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 8: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
 	2,  // 9: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
 	1,  // 10: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
 	33, // 11: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
-	3,  // 12: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
-	5,  // 13: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
-	7,  // 14: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
-	9,  // 15: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	11, // 16: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
-	13, // 17: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
-	15, // 18: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
-	17, // 19: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
-	19, // 20: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
-	21, // 21: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
-	23, // 22: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
-	25, // 23: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
-	27, // 24: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
-	29, // 25: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
-	31, // 26: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
-	4,  // 27: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
-	6,  // 28: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
-	8,  // 29: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
-	10, // 30: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	12, // 31: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
-	14, // 32: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
-	16, // 33: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
-	18, // 34: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
-	20, // 35: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
-	22, // 36: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
-	24, // 37: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
-	26, // 38: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
-	28, // 39: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
-	30, // 40: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
-	32, // 41: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
-	27, // [27:42] is the sub-list for method output_type
-	12, // [12:27] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	34, // 12: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	35, // 13: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
+	3,  // 14: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
+	5,  // 15: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
+	7,  // 16: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
+	9,  // 17: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	11, // 18: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
+	13, // 19: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
+	15, // 20: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
+	17, // 21: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
+	19, // 22: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
+	21, // 23: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
+	23, // 24: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
+	25, // 25: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
+	27, // 26: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
+	29, // 27: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
+	31, // 28: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
+	4,  // 29: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
+	6,  // 30: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
+	8,  // 31: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
+	10, // 32: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	12, // 33: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
+	14, // 34: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
+	16, // 35: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
+	18, // 36: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
+	20, // 37: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
+	22, // 38: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
+	24, // 39: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
+	26, // 40: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
+	28, // 41: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
+	30, // 42: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
+	32, // 43: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
+	29, // [29:44] is the sub-list for method output_type
+	14, // [14:29] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -1942,7 +1969,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   34,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

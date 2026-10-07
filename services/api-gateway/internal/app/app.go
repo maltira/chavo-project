@@ -24,6 +24,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/events"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ws"
@@ -37,6 +38,7 @@ type App struct {
 	rdb      *redis.Client
 	conns    []*grpc.ClientConn
 	hub      *hub.Hub
+	presence *presence.Service
 	consumer *events.Consumer
 	server   *http.Server
 }
@@ -114,16 +116,19 @@ func New() (*App, error) {
 	a.hub = hub.New(registry, log)
 
 	authClient := authv1.NewAuthServiceClient(authConn)
-	profiles := profile.NewGate(profile.NewRedisCache(rdb), userv1.NewUserInternalServiceClient(userConn), log)
+	userInternal := userv1.NewUserInternalServiceClient(userConn)
+	profiles := profile.NewGate(profile.NewRedisCache(rdb), userInternal, log)
+	a.presence = presence.New(a.hub, userInternal, conversationv1.NewConversationInternalServiceClient(convConn),
+		presence.NewKafkaPublisher(cfg.KafkaBrokers, log), presence.DefaultOptions(), log)
 	wsHandler, err := ws.New(ws.Deps{
-		Auth: authClient, Profiles: profiles, Hub: a.hub,
+		Auth: authClient, Profiles: profiles, Hub: a.hub, Presence: a.presence,
 		Origin: cfg.FrontendOrigin, Options: ws.DefaultOptions(), Log: log,
 	})
 	if err != nil {
 		a.Close()
 		return nil, err
 	}
-	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, profiles, events.DefaultOptions(), log), log)
+	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log), log)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -203,6 +208,10 @@ func (a *App) Start() error {
 	// Shutdown не трогает hijacked-соединения: WebSocket закрывает Hub (код 1001), снимая их с учёта в Redis.
 	if err := a.hub.Shutdown(shutdownCtx); err != nil {
 		a.log.Error("WS connections not closed in time", zap.Error(err))
+	}
+	// Соединений больше нет: offline объявляется всем сразу, без задержки.
+	if err := a.presence.Shutdown(shutdownCtx); err != nil {
+		a.log.Error("Presence events not flushed", zap.Error(err))
 	}
 
 	a.log.Info("Server exited gracefully")

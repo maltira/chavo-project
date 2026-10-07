@@ -22,6 +22,7 @@ import (
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/middleware"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ws"
 )
@@ -87,11 +88,54 @@ func (r *fakeRegistry) len() int {
 	return len(r.conns)
 }
 
+type presenceCall struct {
+	kind string
+	flag bool
+	ids  []string
+}
+
+type fakePresence struct {
+	mu    sync.Mutex
+	calls []presenceCall
+	err   error
+}
+
+func (p *fakePresence) record(c presenceCall) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, c)
+}
+
+func (p *fakePresence) Connected(_ context.Context, _ *hub.Conn, first bool) {
+	p.record(presenceCall{kind: "connected", flag: first})
+}
+func (p *fakePresence) Disconnected(_ *hub.Conn, last bool) {
+	p.record(presenceCall{kind: "disconnected", flag: last})
+}
+func (p *fakePresence) Subscribe(_ context.Context, c *hub.Conn, ids []string) error {
+	p.record(presenceCall{kind: "subscribe", ids: ids})
+	if p.err == nil {
+		c.Enqueue([]byte(`{"type":"presence.snapshot"}`))
+	}
+	return p.err
+}
+func (p *fakePresence) Unsubscribe(_ *hub.Conn, ids []string) error {
+	p.record(presenceCall{kind: "unsubscribe", ids: ids})
+	return p.err
+}
+
+func (p *fakePresence) snapshot() []presenceCall {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]presenceCall(nil), p.calls...)
+}
+
 type env struct {
-	url  string
-	auth *fakeAuth
-	hub  *hub.Hub
-	reg  *fakeRegistry
+	url      string
+	auth     *fakeAuth
+	hub      *hub.Hub
+	reg      *fakeRegistry
+	presence *fakePresence
 }
 
 func newEnv(t *testing.T, opts ws.Options) *env {
@@ -104,13 +148,14 @@ func newEnv(t *testing.T, opts ws.Options) *env {
 			"noprof":  {"u2", "s3"},
 			"another": {"u3", "s4"},
 		}},
-		reg: &fakeRegistry{conns: map[string]string{}},
+		reg:      &fakeRegistry{conns: map[string]string{}},
+		presence: &fakePresence{},
 	}
 	log := zap.NewNop()
 	e.hub = hub.New(e.reg, log)
 	users := &fakeUsers{profiles: map[string]bool{"u1": true, "u3": true}}
 	h, err := ws.New(ws.Deps{
-		Auth: e.auth, Profiles: profile.NewGate(noCache{}, users, log), Hub: e.hub,
+		Auth: e.auth, Profiles: profile.NewGate(noCache{}, users, log), Hub: e.hub, Presence: e.presence,
 		Origin: origin + "/", Options: opts, Log: log,
 	})
 	if err != nil {
@@ -345,5 +390,62 @@ func TestShutdownClosesConnections(t *testing.T) {
 	}
 	if e.reg.len() != 0 {
 		t.Fatal("registry not cleaned")
+	}
+}
+
+func TestPresenceCommands(t *testing.T) {
+	e := newEnv(t, ws.DefaultOptions())
+	tab1, _ := connect(t, e, "tab")
+	tab2, _ := connect(t, e, "tab")
+
+	send := func(c *websocket.Conn, msg string) {
+		if err := c.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(tab1, `{"type":"presence.subscribe","user_ids":["a","b"]}`)
+	if m := read(t, tab1); m["type"] != "presence.snapshot" {
+		t.Fatalf("got %v", m)
+	}
+	send(tab1, `{"type":"presence.unsubscribe","user_ids":["a"]}`)
+	send(tab1, `{"type":"ping"}`)
+	if m := read(t, tab1); m["type"] != "pong" {
+		t.Fatalf("unsubscribe must not answer, got %v", m)
+	}
+
+	for err, reason := range map[error]string{
+		presence.ErrInvalidIDs: "INVALID_MESSAGE",
+		presence.ErrTooMany:    "PRESENCE_LIMIT",
+		hub.ErrWatchLimit:      "PRESENCE_LIMIT",
+		errors.New("down"):     "SERVICE_UNAVAILABLE",
+	} {
+		e.presence.mu.Lock()
+		e.presence.err = err
+		e.presence.mu.Unlock()
+		send(tab1, `{"type":"presence.subscribe","user_ids":["a"]}`)
+		if m := read(t, tab1); m["type"] != "error" || m["reason"] != reason {
+			t.Fatalf("%v: got %v", err, m)
+		}
+	}
+
+	_ = tab1.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	waitFor(t, "first tab closed", func() bool { return e.hub.Len() == 1 })
+	_ = tab2.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	waitFor(t, "second tab closed", func() bool { return e.hub.Len() == 0 })
+
+	var lifecycle []presenceCall
+	for _, c := range e.presence.snapshot() {
+		if c.kind == "connected" || c.kind == "disconnected" {
+			lifecycle = append(lifecycle, c)
+		}
+	}
+	want := []presenceCall{{"connected", true, nil}, {"connected", false, nil}, {"disconnected", false, nil}, {"disconnected", true, nil}}
+	if len(lifecycle) != len(want) {
+		t.Fatalf("lifecycle %+v", lifecycle)
+	}
+	for i := range want {
+		if lifecycle[i].kind != want[i].kind || lifecycle[i].flag != want[i].flag {
+			t.Fatalf("lifecycle %+v, want %+v", lifecycle, want)
+		}
 	}
 }

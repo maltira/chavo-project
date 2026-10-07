@@ -394,8 +394,23 @@ func (s *Server) PresenceVisible(ctx context.Context, req *userv1.PresenceVisibl
 		return nil, err
 	}
 	out := make(map[string]bool, len(visible))
+	shown := make([]uuid.UUID, 0, len(visible))
 	for id, v := range visible {
 		out[id.String()] = v
+		if v {
+			shown = append(shown, id)
+		}
 	}
-	return &userv1.PresenceVisibleResponse{Visible: out}, nil
+	resp := &userv1.PresenceVisibleResponse{Visible: out}
+	if req.GetWithLastSeen() && len(shown) > 0 {
+		seen, err := s.profiles.LastSeen(ctx, shown)
+		if err != nil {
+			return nil, err
+		}
+		resp.LastSeenAt = make(map[string]*timestamppb.Timestamp, len(seen))
+		for id, at := range seen {
+			resp.LastSeenAt[id.String()] = ts(at)
+		}
+	}
+	return resp, nil
 }

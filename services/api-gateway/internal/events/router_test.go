@@ -56,7 +56,7 @@ var now = time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 
 func newRouter() (*Router, *fakeSink, *fakeProfiles) {
 	sink, profiles := &fakeSink{}, &fakeProfiles{}
-	r := NewRouter(sink, profiles, DefaultOptions(), zap.NewNop())
+	r := NewRouter(sink, nil, profiles, DefaultOptions(), zap.NewNop())
 	r.now = func() time.Time { return now }
 	return r, sink, profiles
 }
@@ -238,5 +238,33 @@ func TestDedupEviction(t *testing.T) {
 	}
 	if d.has("b", now.Add(time.Minute)) {
 		t.Fatal("ttl not applied")
+	}
+}
+
+type fakePresence struct{ pairs [][2]string }
+
+func (p *fakePresence) DirectCreated(_ context.Context, a, b string) {
+	p.pairs = append(p.pairs, [2]string{a, b})
+}
+
+func TestDirectCreatedWatchesPeers(t *testing.T) {
+	sink, pres := &fakeSink{}, &fakePresence{}
+	r := NewRouter(sink, pres, &fakeProfiles{}, DefaultOptions(), zap.NewNop())
+	r.now = func() time.Time { return now }
+
+	// Даже устаревшее событие связывает собеседников: доставка пропускается, наблюдение — нет.
+	direct := map[string]any{"conversation_type": "direct", "member_ids": []string{"a", "b"}}
+	if err := r.Handle(context.Background(), event(TypeConversationCreated, direct, now.Add(-time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	group := map[string]any{"conversation_type": "group", "member_ids": []string{"a", "b"}}
+	if err := r.Handle(context.Background(), event(TypeConversationCreated, group, now)); err != nil {
+		t.Fatal(err)
+	}
+	if len(pres.pairs) != 1 || pres.pairs[0] != [2]string{"a", "b"} {
+		t.Fatalf("pairs %v", pres.pairs)
+	}
+	if len(sink.sent) != 1 {
+		t.Fatalf("sent %d, want only the fresh group event", len(sink.sent))
 	}
 }

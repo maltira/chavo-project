@@ -54,6 +54,11 @@ type Sink interface {
 	CloseUser(userID string, final []byte, code int, reason string)
 }
 
+// Presence — новый direct-чат: собеседники начинают видеть присутствие друг друга.
+type Presence interface {
+	DirectCreated(ctx context.Context, a, b string)
+}
+
 // ProfileCache — сброс кеша профиля при удалении аккаунта.
 type ProfileCache interface {
 	Deleted(ctx context.Context, userID string) error
@@ -69,13 +74,15 @@ type envelope struct {
 // recipients — поля payload, по которым выбираются получатели.
 type recipients struct {
 	MemberIDs []string `json:"member_ids"`
-	AdminIDs  []string `json:"admin_ids"`
-	AuthorIDs []string `json:"author_ids"`
-	ReaderID  string   `json:"reader_id"`
-	BlockerID string   `json:"blocker_id"`
-	BlockedID string   `json:"blocked_id"`
-	SessionID string   `json:"session_id"`
-	UserID    string   `json:"user_id"`
+	// ConversationType — у conversation.created ("direct" / "group").
+	ConversationType string   `json:"conversation_type"`
+	AdminIDs         []string `json:"admin_ids"`
+	AuthorIDs        []string `json:"author_ids"`
+	ReaderID         string   `json:"reader_id"`
+	BlockerID        string   `json:"blocker_id"`
+	BlockedID        string   `json:"blocked_id"`
+	SessionID        string   `json:"session_id"`
+	UserID           string   `json:"user_id"`
 }
 
 // delivery — формат кадра для клиента.
@@ -100,6 +107,7 @@ func DefaultOptions() Options {
 
 type Router struct {
 	sink     Sink
+	presence Presence
 	profiles ProfileCache
 	log      *zap.Logger
 	maxAge   time.Duration
@@ -107,9 +115,10 @@ type Router struct {
 	now      func() time.Time
 }
 
-func NewRouter(sink Sink, profiles ProfileCache, opts Options, log *zap.Logger) *Router {
+// presence может быть nil.
+func NewRouter(sink Sink, presence Presence, profiles ProfileCache, opts Options, log *zap.Logger) *Router {
 	return &Router{
-		sink: sink, profiles: profiles, log: log, maxAge: opts.MaxAge,
+		sink: sink, presence: presence, profiles: profiles, log: log, maxAge: opts.MaxAge,
 		seen: newDedup(opts.DedupTTL, opts.DedupSize), now: time.Now,
 	}
 }
@@ -167,6 +176,11 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 		r.sink.CloseUser(to.UserID, final, hub.CloseSessionRevoked, "account deleted")
 		log.Debug("ws user closed", zap.String("user_id", to.UserID))
 		return nil
+	}
+
+	// Наблюдение не зависит от возраста события: оно нужно, пока живы соединения.
+	if ev.EventType == TypeConversationCreated && to.ConversationType == "direct" && len(to.MemberIDs) == 2 && r.presence != nil {
+		r.presence.DirectCreated(ctx, to.MemberIDs[0], to.MemberIDs[1])
 	}
 
 	var users []string

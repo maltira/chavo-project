@@ -364,6 +364,7 @@ networks:
     ipam:
       config:
         - subnet: 172.28.10.0/24
+          ip_range: 172.28.10.128/25
 
 volumes:
   postgres_data:

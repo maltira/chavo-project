@@ -22,6 +22,9 @@ type Config struct {
 
 	// TrustedProxies — IP/CIDR прокси (nginx), чьим X-Forwarded-For/Proto можно верить.
 	TrustedProxies []string
+
+	// FrontendOrigin — единственный Origin, с которого принимаются WebSocket-подключения.
+	FrontendOrigin string
 }
 
 func Load() (*Config, error) {
@@ -34,6 +37,7 @@ func Load() (*Config, error) {
 		UserAddr:         os.Getenv("USER_SERVICE_ADDR"),
 		ConversationAddr: os.Getenv("CONVERSATION_SERVICE_ADDR"),
 		TrustedProxies:   parseList(os.Getenv("TRUSTED_PROXIES")),
+		FrontendOrigin:   os.Getenv("FRONTEND_ORIGIN"),
 	}
 
 	timeout, err := time.ParseDuration(getEnv("GRPC_TIMEOUT", "5s"))
@@ -48,6 +52,7 @@ func Load() (*Config, error) {
 		"AUTH_SERVICE_ADDR":         cfg.AuthAddr,
 		"USER_SERVICE_ADDR":         cfg.UserAddr,
 		"CONVERSATION_SERVICE_ADDR": cfg.ConversationAddr,
+		"FRONTEND_ORIGIN":           cfg.FrontendOrigin,
 	}
 	for name, v := range required {
 		if v == "" {

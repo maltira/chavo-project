@@ -35,6 +35,8 @@ type Deps struct {
 	Verifier      *auth.Verifier
 	Profiles      *profile.Gate
 	Health        []HealthCheck
+	// WS — обработчик GET /ws (nil — без WebSocket).
+	WS gin.HandlerFunc
 	// TrustedProxies — IP или CIDR; пусто = не доверять никому.
 	TrustedProxies []string
 	Log            *zap.Logger
@@ -93,6 +95,9 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	r.Use(middleware.Recovery(d.Log), middleware.Trace(), middleware.Logger(d.Log), middleware.BodyLimit(maxBodyBytes))
 
 	r.GET("/health", h.healthCheck)
+	if d.WS != nil {
+		r.GET("/ws", d.WS)
+	}
 
 	api := r.Group("/api")
 

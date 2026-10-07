@@ -22,8 +22,10 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/config"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/api"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ws"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/pkg/logger"
 	appredis "github.com/maltira/chavo-project-backend/services/api-gateway/pkg/redis"
 )
@@ -33,6 +35,7 @@ type App struct {
 	log    *zap.Logger
 	rdb    *redis.Client
 	conns  []*grpc.ClientConn
+	hub    *hub.Hub
 	server *http.Server
 }
 
@@ -96,16 +99,40 @@ func New() (*App, error) {
 		}})
 	}
 
+	// Gateway один: записи ws:user:* от прошлого запуска принадлежат соединениям, которых уже нет.
+	registry := hub.NewRedisRegistry(rdb)
+	resetCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	n, err := registry.Reset(resetCtx)
+	cancel()
+	if err != nil {
+		a.Close()
+		return nil, fmt.Errorf("failed to reset ws registry: %w", err)
+	}
+	log.Info("Stale WS connections cleared", zap.Int("keys", n))
+	a.hub = hub.New(registry, log)
+
+	authClient := authv1.NewAuthServiceClient(authConn)
+	profiles := profile.NewGate(profile.NewRedisCache(rdb), userv1.NewUserInternalServiceClient(userConn), log)
+	wsHandler, err := ws.New(ws.Deps{
+		Auth: authClient, Profiles: profiles, Hub: a.hub,
+		Origin: cfg.FrontendOrigin, Options: ws.DefaultOptions(), Log: log,
+	})
+	if err != nil {
+		a.Close()
+		return nil, err
+	}
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router, err := api.NewRouter(api.Deps{
-		Auth:           authv1.NewAuthServiceClient(authConn),
+		Auth:           authClient,
 		Users:          userv1.NewUserServiceClient(userConn),
 		Conversations:  conversationv1.NewConversationServiceClient(convConn),
 		Verifier:       auth.NewVerifier(cfg.JWTSecret, auth.NewRedisSessions(rdb)),
-		Profiles:       profile.NewGate(profile.NewRedisCache(rdb), userv1.NewUserInternalServiceClient(userConn), log),
+		Profiles:       profiles,
 		Health:         health,
+		WS:             wsHandler.Handle,
 		TrustedProxies: cfg.TrustedProxies,
 		Log:            log,
 	})
@@ -155,6 +182,10 @@ func (a *App) Start() error {
 	defer cancel()
 	if err := a.server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		a.log.Error("Server forced to shutdown", zap.Error(err))
+	}
+	// Shutdown не трогает hijacked-соединения: WebSocket закрывает Hub (код 1001), снимая их с учёта в Redis.
+	if err := a.hub.Shutdown(shutdownCtx); err != nil {
+		a.log.Error("WS connections not closed in time", zap.Error(err))
 	}
 
 	a.log.Info("Server exited gracefully")

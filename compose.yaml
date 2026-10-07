@@ -306,6 +306,7 @@ services:
       - CONVERSATION_SERVICE_ADDR=conversation-service:${CONVERSATION_PORT}
       - GRPC_TIMEOUT=${GRPC_TIMEOUT}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES}
+      - FRONTEND_ORIGIN=${FRONTEND_URL}
       - ENV=${ENV}
       - PORT=${GATEWAY_PORT:-8000}
     healthcheck:

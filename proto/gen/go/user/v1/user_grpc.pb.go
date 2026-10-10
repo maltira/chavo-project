@@ -509,6 +509,7 @@ const (
 	UserInternalService_UserExists_FullMethodName         = "/user.v1.UserInternalService/UserExists"
 	UserInternalService_GroupInviteAllowed_FullMethodName = "/user.v1.UserInternalService/GroupInviteAllowed"
 	UserInternalService_PresenceVisible_FullMethodName    = "/user.v1.UserInternalService/PresenceVisible"
+	UserInternalService_BlockedIDs_FullMethodName         = "/user.v1.UserInternalService/BlockedIDs"
 )
 
 // UserInternalServiceClient is the client API for UserInternalService service.
@@ -522,6 +523,8 @@ type UserInternalServiceClient interface {
 	GroupInviteAllowed(ctx context.Context, in *GroupInviteAllowedRequest, opts ...grpc.CallOption) (*GroupInviteAllowedResponse, error)
 	// PresenceVisible: можно ли показывать онлайн пользователя другим (show_online_status).
 	PresenceVisible(ctx context.Context, in *PresenceVisibleRequest, opts ...grpc.CallOption) (*PresenceVisibleResponse, error)
+	// BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
+	BlockedIDs(ctx context.Context, in *BlockedIDsRequest, opts ...grpc.CallOption) (*BlockedIDsResponse, error)
 }
 
 type userInternalServiceClient struct {
@@ -572,6 +575,16 @@ func (c *userInternalServiceClient) PresenceVisible(ctx context.Context, in *Pre
 	return out, nil
 }
 
+func (c *userInternalServiceClient) BlockedIDs(ctx context.Context, in *BlockedIDsRequest, opts ...grpc.CallOption) (*BlockedIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BlockedIDsResponse)
+	err := c.cc.Invoke(ctx, UserInternalService_BlockedIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserInternalServiceServer is the server API for UserInternalService service.
 // All implementations must embed UnimplementedUserInternalServiceServer
 // for forward compatibility.
@@ -583,6 +596,8 @@ type UserInternalServiceServer interface {
 	GroupInviteAllowed(context.Context, *GroupInviteAllowedRequest) (*GroupInviteAllowedResponse, error)
 	// PresenceVisible: можно ли показывать онлайн пользователя другим (show_online_status).
 	PresenceVisible(context.Context, *PresenceVisibleRequest) (*PresenceVisibleResponse, error)
+	// BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
+	BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error)
 	mustEmbedUnimplementedUserInternalServiceServer()
 }
 
@@ -604,6 +619,9 @@ func (UnimplementedUserInternalServiceServer) GroupInviteAllowed(context.Context
 }
 func (UnimplementedUserInternalServiceServer) PresenceVisible(context.Context, *PresenceVisibleRequest) (*PresenceVisibleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PresenceVisible not implemented")
+}
+func (UnimplementedUserInternalServiceServer) BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BlockedIDs not implemented")
 }
 func (UnimplementedUserInternalServiceServer) mustEmbedUnimplementedUserInternalServiceServer() {}
 func (UnimplementedUserInternalServiceServer) testEmbeddedByValue()                             {}
@@ -698,6 +716,24 @@ func _UserInternalService_PresenceVisible_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserInternalService_BlockedIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BlockedIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserInternalServiceServer).BlockedIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserInternalService_BlockedIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserInternalServiceServer).BlockedIDs(ctx, req.(*BlockedIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserInternalService_ServiceDesc is the grpc.ServiceDesc for UserInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -720,6 +756,10 @@ var UserInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PresenceVisible",
 			Handler:    _UserInternalService_PresenceVisible_Handler,
+		},
+		{
+			MethodName: "BlockedIDs",
+			Handler:    _UserInternalService_BlockedIDs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

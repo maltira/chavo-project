@@ -58,6 +58,7 @@ func clamp(v int32, def, max int) int {
 func ts(t time.Time) *timestamppb.Timestamp { return timestamppb.New(t) }
 
 // profilesToProto: онлайн и last_seen_at видны другим только при show_online_status; self видит всё своё.
+// Тому, кого владелец заблокировал, не отдаются аватар, онлайн и last_seen_at (имя, username и bio остаются).
 func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []models.Profile) ([]*userv1.Profile, error) {
 	ids := make([]uuid.UUID, len(items))
 	for i := range items {
@@ -71,19 +72,26 @@ func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []
 	if err != nil {
 		return nil, err
 	}
+	blockedBy, err := s.blocks.BlockedBy(ctx, viewer, ids)
+	if err != nil {
+		return nil, err
+	}
 
 	res := make([]*userv1.Profile, len(items))
 	for i := range items {
 		p := &items[i]
-		show := p.UserID == viewer || visible[p.UserID]
+		hidden := p.UserID != viewer && blockedBy[p.UserID]
+		show := p.UserID == viewer || (visible[p.UserID] && !hidden)
 		out := &userv1.Profile{
 			UserId:      p.UserID.String(),
 			Username:    p.Username,
 			DisplayName: p.DisplayName,
 			Bio:         p.Bio,
-			AvatarUrl:   p.AvatarURL,
 			CreatedAt:   ts(p.CreatedAt),
 			UpdatedAt:   ts(p.UpdatedAt),
+		}
+		if !hidden {
+			out.AvatarUrl = p.AvatarURL
 		}
 		if show {
 			out.Online = online[p.UserID]
@@ -393,6 +401,21 @@ func (s *Server) PresenceVisible(ctx context.Context, req *userv1.PresenceVisibl
 	if err != nil {
 		return nil, err
 	}
+	if req.ViewerId != nil {
+		viewer, err := parseID(req.GetViewerId())
+		if err != nil {
+			return nil, err
+		}
+		blockedBy, err := s.blocks.BlockedBy(ctx, viewer, ids)
+		if err != nil {
+			return nil, err
+		}
+		for id := range blockedBy {
+			if _, ok := visible[id]; ok {
+				visible[id] = false
+			}
+		}
+	}
 	out := make(map[string]bool, len(visible))
 	shown := make([]uuid.UUID, 0, len(visible))
 	for id, v := range visible {
@@ -413,4 +436,20 @@ func (s *Server) PresenceVisible(ctx context.Context, req *userv1.PresenceVisibl
 		}
 	}
 	return resp, nil
+}
+
+func (s *Server) BlockedIDs(ctx context.Context, req *userv1.BlockedIDsRequest) (*userv1.BlockedIDsResponse, error) {
+	id, err := parseID(req.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	ids, err := s.blocks.BlockedIDs(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(ids))
+	for i, b := range ids {
+		out[i] = b.String()
+	}
+	return &userv1.BlockedIDsResponse{UserIds: out}, nil
 }

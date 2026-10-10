@@ -67,6 +67,26 @@ func (f *fakeBlocks) GetBlockStatus(_ context.Context, my, target uuid.UUID) (bo
 	return f.blocked[[2]uuid.UUID{my, target}], f.blocked[[2]uuid.UUID{target, my}], nil
 }
 
+func (f *fakeBlocks) BlockedBy(_ context.Context, viewer uuid.UUID, owners []uuid.UUID) (map[uuid.UUID]bool, error) {
+	res := map[uuid.UUID]bool{}
+	for _, o := range owners {
+		if f.blocked[[2]uuid.UUID{o, viewer}] {
+			res[o] = true
+		}
+	}
+	return res, nil
+}
+
+func (f *fakeBlocks) BlockedIDs(_ context.Context, owner uuid.UUID) ([]uuid.UUID, error) {
+	res := []uuid.UUID{}
+	for pair := range f.blocked {
+		if pair[0] == owner {
+			res = append(res, pair[1])
+		}
+	}
+	return res, nil
+}
+
 type fakeSettings struct {
 	service.SettingsService
 	invites map[uuid.UUID]bool // наличие ключа = настройки есть
@@ -274,5 +294,59 @@ func TestMessagingAllowedUserExistsPresenceVisible(t *testing.T) {
 	v, err = internal.PresenceVisible(ctx, &userv1.PresenceVisibleRequest{UserIds: []string{a.String(), b.String()}, WithLastSeen: true})
 	if err != nil || len(v.GetLastSeenAt()) != 1 || !v.GetLastSeenAt()[a.String()].AsTime().Equal(seen) {
 		t.Fatalf("last seen: %v %v", v, err)
+	}
+}
+
+func TestBlockedViewerSeesNoAvatarOrPresence(t *testing.T) {
+	d := newDeps()
+	owner, blocked, other := uuid.New(), uuid.New(), uuid.New()
+	avatar := "https://example.com/a.png"
+	bio := "about me"
+	seen := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	for _, id := range []uuid.UUID{owner, blocked, other} {
+		d.profiles.byID[id] = models.Profile{UserID: id, Username: "u", DisplayName: "U", Bio: &bio, AvatarURL: &avatar, LastSeenAt: seen}
+		d.presence.online[id] = true
+		d.settings.show[id] = true
+	}
+	d.blocks.blocked[[2]uuid.UUID{owner, blocked}] = true // owner заблокировал blocked
+	users, internal := start(t, d)
+
+	p, err := users.GetProfile(as(blocked), &userv1.GetProfileRequest{UserId: owner.String()})
+	got := p.GetProfile()
+	if err != nil || got.AvatarUrl != nil || got.GetOnline() || got.GetLastSeenAt() != nil {
+		t.Fatalf("blocked viewer sees hidden fields: %v %v", got, err)
+	}
+	if got.GetUsername() != "u" || got.GetDisplayName() != "U" || got.GetBio() != bio {
+		t.Fatalf("name, username and bio must stay visible: %v", got)
+	}
+
+	// Блокировка односторонняя: owner видит blocked полностью, посторонний — owner полностью.
+	for _, tc := range []struct{ viewer, target uuid.UUID }{{owner, blocked}, {other, owner}} {
+		p, err := users.GetProfile(as(tc.viewer), &userv1.GetProfileRequest{UserId: tc.target.String()})
+		if err != nil || p.GetProfile().GetAvatarUrl() != avatar || !p.GetProfile().GetOnline() {
+			t.Fatalf("%s → %s: %v %v", tc.viewer, tc.target, p, err)
+		}
+	}
+
+	found, err := users.SearchProfiles(as(blocked), &userv1.SearchProfilesRequest{Query: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range found.GetProfiles() {
+		if p.GetUserId() == owner.String() && (p.AvatarUrl != nil || p.GetOnline()) {
+			t.Fatalf("search leaks owner to blocked viewer: %v", p)
+		}
+	}
+
+	viewer := blocked.String()
+	v, err := internal.PresenceVisible(context.Background(), &userv1.PresenceVisibleRequest{
+		UserIds: []string{owner.String(), other.String()}, WithLastSeen: true, ViewerId: &viewer,
+	})
+	if err != nil || v.GetVisible()[owner.String()] || !v.GetVisible()[other.String()] || v.GetLastSeenAt()[owner.String()] != nil {
+		t.Fatalf("presence for blocked viewer: %v %v", v, err)
+	}
+	ids, err := internal.BlockedIDs(context.Background(), &userv1.BlockedIDsRequest{UserId: owner.String()})
+	if err != nil || len(ids.GetUserIds()) != 1 || ids.GetUserIds()[0] != blocked.String() {
+		t.Fatalf("blocked ids: %v %v", ids, err)
 	}
 }

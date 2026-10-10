@@ -30,6 +30,8 @@ service UserInternalService {
   rpc GroupInviteAllowed(GroupInviteAllowedRequest) returns (GroupInviteAllowedResponse);
   // PresenceVisible: можно ли показывать онлайн пользователя другим (show_online_status).
   rpc PresenceVisible(PresenceVisibleRequest) returns (PresenceVisibleResponse);
+  // BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
+  rpc BlockedIDs(BlockedIDsRequest) returns (BlockedIDsResponse);
 }
 
 message Profile {
@@ -166,10 +168,19 @@ message PresenceVisibleRequest {
   repeated string user_ids = 1;
   // with_last_seen — вернуть и last_seen_at (снимок presence для клиента).
   bool with_last_seen = 2;
+  // viewer_id — для кого снимок: владельцы, заблокировавшие viewer, для него не видны.
+  optional string viewer_id = 3;
 }
 message PresenceVisibleResponse {
   // user_id → виден ли онлайн другим; отсутствующие пользователи не попадают в ответ.
   map<string, bool> visible = 1;
   // Только при with_last_seen и только для видимых пользователей.
   map<string, google.protobuf.Timestamp> last_seen_at = 2;
+}
+
+message BlockedIDsRequest {
+  string user_id = 1;
+}
+message BlockedIDsResponse {
+  repeated string user_ids = 1;
 }

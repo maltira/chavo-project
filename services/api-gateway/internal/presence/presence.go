@@ -189,7 +189,12 @@ func (s *Service) emit(u string, online bool, at time.Time) {
 		s.log.Error("presence publish failed", zap.String("user_id", u), zap.String("event_type", typ), zap.Error(err))
 	}
 	if visible {
-		s.hub.SendToWatchers(u, transitionFrame(ev))
+		// Тем, кого пользователь заблокировал, его онлайн не показывается. Без ответа user-service не рассылаем никому.
+		if blocked, err := s.Blocked(ctx, u); err != nil {
+			s.log.Warn("presence blocked list failed", zap.String("user_id", u), zap.Error(err))
+		} else {
+			s.hub.SendToWatchersExcept(u, transitionFrame(ev), blocked)
+		}
 	}
 	s.log.Debug("presence transition", zap.String("user_id", u), zap.String("event_type", typ), zap.Bool("visible", visible))
 }
@@ -207,7 +212,7 @@ func (s *Service) attachDirect(ctx context.Context, c *hub.Conn) {
 		return
 	}
 	s.hub.WatchDirect(c, ids)
-	if err := s.snapshot(ctx, ids, c.Enqueue); err != nil {
+	if err := s.snapshot(ctx, c.UserID, ids, c.Enqueue); err != nil {
 		s.log.Warn("direct presence snapshot failed", zap.String("connection_id", c.ID), zap.Error(err))
 	}
 }
@@ -219,7 +224,7 @@ func (s *Service) DirectCreated(ctx context.Context, a, b string) {
 	go func() {
 		for _, p := range [2][2]string{{a, b}, {b, a}} {
 			to := p[0]
-			if err := s.snapshot(ctx, []string{p[1]}, func(msg []byte) bool { s.hub.SendToUsers([]string{to}, msg); return true }); err != nil {
+			if err := s.snapshot(ctx, to, []string{p[1]}, func(msg []byte) bool { s.hub.SendToUsers([]string{to}, msg); return true }); err != nil {
 				s.log.Warn("direct presence snapshot failed", zap.String("user_id", to), zap.Error(err))
 			}
 		}
@@ -235,7 +240,20 @@ func (s *Service) Subscribe(ctx context.Context, c *hub.Conn, userIDs []string) 
 	if err := s.hub.Subscribe(c, ids, s.opts.MaxSubscriptions); err != nil {
 		return err
 	}
-	return s.snapshot(ctx, ids, c.Enqueue)
+	return s.snapshot(ctx, c.UserID, ids, c.Enqueue)
+}
+
+// Blocked — кого заблокировал owner: им не доставляются его онлайн и статус.
+func (s *Service) Blocked(ctx context.Context, owner string) (map[string]bool, error) {
+	resp, err := s.users.BlockedIDs(ctx, &userv1.BlockedIDsRequest{UserId: owner})
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[string]bool, len(resp.GetUserIds()))
+	for _, id := range resp.GetUserIds() {
+		res[id] = true
+	}
+	return res, nil
 }
 
 // Unsubscribe — presence.unsubscribe; собеседники по direct не снимаются.
@@ -273,12 +291,15 @@ func (s *Service) normalize(userIDs []string) ([]string, error) {
 
 // snapshot запрашивает видимость и last_seen_at, а состояние online читает уже в очереди рассылки:
 // переход, объявленный раньше, придёт клиенту раньше снимка, а более поздний — после него.
-func (s *Service) snapshot(ctx context.Context, ids []string, deliver func([]byte) bool) error {
+// snapshot для viewer: владельцы, заблокировавшие viewer, для него offline и без last_seen_at.
+func (s *Service) snapshot(ctx context.Context, viewer string, ids []string, deliver func([]byte) bool) error {
 	visible := make(map[string]bool, len(ids))
 	lastSeen := make(map[string]*timestamppb.Timestamp, len(ids))
 	for start := 0; start < len(ids); start += visibleBatch {
 		end := min(start+visibleBatch, len(ids))
-		resp, err := s.users.PresenceVisible(ctx, &userv1.PresenceVisibleRequest{UserIds: ids[start:end], WithLastSeen: true})
+		resp, err := s.users.PresenceVisible(ctx, &userv1.PresenceVisibleRequest{
+			UserIds: ids[start:end], WithLastSeen: true, ViewerId: &viewer,
+		})
 		if err != nil {
 			return err
 		}

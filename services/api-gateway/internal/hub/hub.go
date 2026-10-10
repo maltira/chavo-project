@@ -293,10 +293,18 @@ func (h *Hub) Unsubscribe(c *Conn, userIDs []string) {
 
 // SendToWatchers доставляет переход присутствия userID всем, кто за ним наблюдает.
 func (h *Hub) SendToWatchers(userID string, msg []byte) {
+	h.SendToWatchersExcept(userID, msg, nil)
+}
+
+// SendToWatchersExcept — то же, но соединения пользователей из exclude пропускаются
+// (например, тех, кого userID заблокировал).
+func (h *Hub) SendToWatchersExcept(userID string, msg []byte, exclude map[string]bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, c := range h.watchers[userID] {
-		c.Enqueue(msg)
+		if !exclude[c.UserID] {
+			c.Enqueue(msg)
+		}
 	}
 }
 

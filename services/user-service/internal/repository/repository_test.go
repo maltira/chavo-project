@@ -173,6 +173,18 @@ func TestBlocks(t *testing.T) {
 		t.Fatalf("blocked list: %+v %v", list, err)
 	}
 
+	by, err := repo.BlockedBy(ctx, b, []uuid.UUID{a, c})
+	if err != nil || len(by) != 1 || !by[a] {
+		t.Fatalf("blocked by: %v %v", by, err)
+	}
+	if by, _ := repo.BlockedBy(ctx, b, nil); len(by) != 0 {
+		t.Fatal("empty owners")
+	}
+	ids, err := repo.BlockedIDs(ctx, a)
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("blocked ids: %v %v", ids, err)
+	}
+
 	if err := repo.UnblockUser(ctx, a, b); err != nil {
 		t.Fatal(err)
 	}

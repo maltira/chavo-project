@@ -29,7 +29,28 @@ type fakeUsers struct {
 	mu       sync.Mutex
 	hidden   map[string]bool
 	lastSeen map[string]time.Time
+	blocks   map[[2]string]bool // {владелец, кого он заблокировал}
 	err      error
+	// blockedErr ломает только BlockedIDs: видимость при этом отвечает.
+	blockedErr error
+}
+
+func (f *fakeUsers) BlockedIDs(_ context.Context, req *userv1.BlockedIDsRequest, _ ...grpc.CallOption) (*userv1.BlockedIDsResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.blockedErr != nil {
+		return nil, f.blockedErr
+	}
+	resp := &userv1.BlockedIDsResponse{}
+	for pair := range f.blocks {
+		if pair[0] == req.GetUserId() {
+			resp.UserIds = append(resp.UserIds, pair[1])
+		}
+	}
+	return resp, nil
 }
 
 func (f *fakeUsers) PresenceVisible(_ context.Context, req *userv1.PresenceVisibleRequest, _ ...grpc.CallOption) (*userv1.PresenceVisibleResponse, error) {
@@ -40,8 +61,9 @@ func (f *fakeUsers) PresenceVisible(_ context.Context, req *userv1.PresenceVisib
 	}
 	resp := &userv1.PresenceVisibleResponse{Visible: map[string]bool{}, LastSeenAt: map[string]*timestamppb.Timestamp{}}
 	for _, id := range req.GetUserIds() {
-		resp.Visible[id] = !f.hidden[id]
-		if at, ok := f.lastSeen[id]; ok && req.GetWithLastSeen() && !f.hidden[id] {
+		visible := !f.hidden[id] && !(req.ViewerId != nil && f.blocks[[2]string{id, req.GetViewerId()}])
+		resp.Visible[id] = visible
+		if at, ok := f.lastSeen[id]; ok && req.GetWithLastSeen() && visible {
 			resp.LastSeenAt[id] = timestamppb.New(at)
 		}
 	}
@@ -116,7 +138,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{
 		t:     t,
 		hub:   hub.New(nopRegistry{}, zap.NewNop()),
-		users: &fakeUsers{hidden: map[string]bool{}, lastSeen: map[string]time.Time{}},
+		users: &fakeUsers{hidden: map[string]bool{}, lastSeen: map[string]time.Time{}, blocks: map[[2]string]bool{}},
 		peers: &fakePeers{peers: map[string][]string{}},
 		pub:   &fakePublisher{},
 	}
@@ -424,4 +446,43 @@ func TestShutdownFlushesOffline(t *testing.T) {
 	if len(e.pub.types()) != len(got) {
 		t.Fatal("event published after shutdown")
 	}
+}
+
+func TestBlockedWatcherGetsNothing(t *testing.T) {
+	e := newEnv(t)
+	owner := uuid.NewString()
+	e.users.lastSeen[owner] = time.Now()
+
+	blockedConn := e.connect(uuid.NewString())
+	e.users.mu.Lock()
+	e.users.blocks[[2]string{owner, blockedConn.UserID}] = true
+	e.users.mu.Unlock()
+	friend := e.watcher(owner)
+
+	// Снимок для заблокированного: владелец offline и без last_seen_at.
+	if err := e.svc.Subscribe(context.Background(), blockedConn, []string{owner}); err != nil {
+		t.Fatal(err)
+	}
+	f := e.next(blockedConn)
+	if f.Type != TypeSnapshot || len(f.Data.Users) != 1 || f.Data.Users[0].Online || f.Data.Users[0].LastSeenAt != nil {
+		t.Fatalf("snapshot for blocked viewer: %+v", f)
+	}
+
+	// Переход приходит другим наблюдателям, но не заблокированному.
+	e.connect(owner)
+	if f := e.next(friend); f.Type != TypeUserOnline || f.Data.UserID != owner {
+		t.Fatalf("friend got %+v", f)
+	}
+	e.none(blockedConn, delay)
+}
+
+func TestBlockedListErrorSendsToNobody(t *testing.T) {
+	e := newEnv(t)
+	owner := uuid.NewString()
+	w := e.watcher(owner)
+	e.users.mu.Lock()
+	e.users.blockedErr = errors.New("user-service down")
+	e.users.mu.Unlock()
+	e.connect(owner)
+	e.none(w, delay)
 }

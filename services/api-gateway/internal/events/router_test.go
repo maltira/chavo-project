@@ -25,21 +25,10 @@ type closed struct {
 	code  int
 }
 
-type watcherSend struct {
-	owner   string
-	msg     []byte
-	exclude map[string]bool
-}
-
 type fakeSink struct {
 	sent       []sent
-	watchers   []watcherSend
 	closedSIDs []closed
 	closedUser []closed
-}
-
-func (s *fakeSink) SendToWatchersExcept(owner string, msg []byte, exclude map[string]bool) {
-	s.watchers = append(s.watchers, watcherSend{owner, msg, exclude})
 }
 
 func (s *fakeSink) SendToUsers(ids []string, msg []byte) { s.sent = append(s.sent, sent{ids, msg}) }
@@ -252,21 +241,10 @@ func TestDedupEviction(t *testing.T) {
 	}
 }
 
-type fakePresence struct {
-	pairs   [][2]string
-	blocked map[string]map[string]bool
-	err     error
-}
+type fakePresence struct{ pairs [][2]string }
 
 func (p *fakePresence) DirectCreated(_ context.Context, a, b string) {
 	p.pairs = append(p.pairs, [2]string{a, b})
-}
-
-func (p *fakePresence) Blocked(_ context.Context, owner string) (map[string]bool, error) {
-	if p.err != nil {
-		return nil, p.err
-	}
-	return p.blocked[owner], nil
 }
 
 func TestDirectCreatedWatchesPeers(t *testing.T) {
@@ -288,82 +266,5 @@ func TestDirectCreatedWatchesPeers(t *testing.T) {
 	}
 	if len(sink.sent) != 1 {
 		t.Fatalf("sent %d, want only the fresh group event", len(sink.sent))
-	}
-}
-
-func TestStatusUpdatedRouting(t *testing.T) {
-	sink, pres := &fakeSink{}, &fakePresence{blocked: map[string]map[string]bool{"owner": {"enemy": true}}}
-	r := NewRouter(sink, pres, &fakeProfiles{}, DefaultOptions(), zap.NewNop())
-	r.now = func() time.Time { return now }
-
-	exp := now.Add(time.Hour)
-	ev := event(TypeUserStatusUpdated, map[string]any{
-		"user_id": "owner", "status": map[string]any{
-			"icon": "shine", "text": "Отдыхаю", "background": "#34D399", "foreground": "#064E3B", "expires_at": exp,
-		},
-	}, now)
-	if err := r.Handle(context.Background(), ev); err != nil {
-		t.Fatal(err)
-	}
-	// Владельцу — во все его вкладки, наблюдателям — кроме заблокированных.
-	if len(sink.sent) != 1 || !slices.Equal(sink.sent[0].users, []string{"owner"}) {
-		t.Fatalf("owner delivery: %+v", sink.sent)
-	}
-	if len(sink.watchers) != 1 || sink.watchers[0].owner != "owner" || !sink.watchers[0].exclude["enemy"] {
-		t.Fatalf("watchers delivery: %+v", sink.watchers)
-	}
-	m := decode(t, sink.watchers[0].msg)
-	st := m["data"].(map[string]any)["status"].(map[string]any)
-	if m["type"] != TypeUserStatusUpdated || st["icon"] != "shine" || st["background"] != "#34D399" || st["foreground"] != "#064E3B" || st["text"] != "Отдыхаю" {
-		t.Fatalf("frame: %v", m)
-	}
-
-	// Удаление статуса — status: null.
-	if err := r.Handle(context.Background(), event(TypeUserStatusUpdated, map[string]any{"user_id": "owner", "status": nil}, now)); err != nil {
-		t.Fatal(err)
-	}
-	if m := decode(t, sink.sent[1].msg); m["data"].(map[string]any)["status"] != nil {
-		t.Fatalf("cleared: %v", m)
-	}
-
-	// Иконка, убранная из набора, клиенту не показывается.
-	if err := r.Handle(context.Background(), event(TypeUserStatusUpdated, map[string]any{
-		"user_id": "owner", "status": map[string]any{"icon": "removed", "text": "x", "background": "#000000", "foreground": "#FFFFFF"},
-	}, now)); err != nil {
-		t.Fatal(err)
-	}
-	if m := decode(t, sink.sent[2].msg); m["data"].(map[string]any)["status"] != nil {
-		t.Fatalf("unknown icon: %v", m)
-	}
-
-	// Старое событие не доставляется.
-	before := len(sink.sent)
-	if err := r.Handle(context.Background(), event(TypeUserStatusUpdated, map[string]any{"user_id": "owner", "status": nil}, now.Add(-2*time.Minute))); err != nil {
-		t.Fatal(err)
-	}
-	if len(sink.sent) != before {
-		t.Fatal("stale status delivered")
-	}
-}
-
-func TestStatusUpdatedBlockedListError(t *testing.T) {
-	sink, pres := &fakeSink{}, &fakePresence{err: errors.New("user-service down")}
-	r := NewRouter(sink, pres, &fakeProfiles{}, DefaultOptions(), zap.NewNop())
-	r.now = func() time.Time { return now }
-	ev := event(TypeUserStatusUpdated, map[string]any{"user_id": "owner", "status": nil}, now)
-
-	// Ошибка — повтор; до получения списка не доставляется никому, в том числе владельцу (иначе дубли).
-	if err := r.Handle(context.Background(), ev); err == nil || errors.Is(err, ErrMalformed) {
-		t.Fatalf("expected retryable error, got %v", err)
-	}
-	if len(sink.sent)+len(sink.watchers) != 0 {
-		t.Fatal("delivered before blocked list was known")
-	}
-	pres.err = nil
-	if err := r.Handle(context.Background(), ev); err != nil {
-		t.Fatal(err)
-	}
-	if len(sink.sent) != 1 || len(sink.watchers) != 1 {
-		t.Fatalf("after retry: %d %d", len(sink.sent), len(sink.watchers))
 	}
 }

@@ -106,7 +106,7 @@ WHERE
     published_at IS NULL
     AND failed_at IS NULL;
 
-CREATE INDEX idx_outbox_message_id ON outbox_events ((payload - > 'payload' - > > 'message_id'))
+CREATE INDEX idx_outbox_message_id ON outbox_events ((payload->'payload'->>'message_id'))
 WHERE
     topic = 'message-events';
 

@@ -60,7 +60,8 @@ type GroupService interface {
 	RemoveMember(ctx context.Context, actorID, convID, targetID uuid.UUID, ban bool) error
 	ListBans(ctx context.Context, adminID, convID uuid.UUID, limit, offset int) ([]models.Ban, error)
 	Unban(ctx context.Context, adminID, convID, targetID uuid.UUID) error
-	// SetStatus ставит новый статус группы целиком (прежний заменяется); только admin, direct — ErrForbidden.
+	// SetStatus ставит новый статус группы целиком (прежний заменяется); только admin, direct - ErrForbidden
+	// событий нет: участники увидят статус при следующей загрузке группы
 	SetStatus(ctx context.Context, adminID, convID uuid.UUID, in status.Input) (*models.Status, error)
 	ClearStatus(ctx context.Context, adminID, convID uuid.UUID) error
 }
@@ -621,10 +622,7 @@ func (s *groupService) SetStatus(ctx context.Context, adminID, convID uuid.UUID,
 		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
 			return err
 		}
-		if err := s.convs.SetStatus(ctx, tx, convID, adminID, st); err != nil {
-			return err
-		}
-		return s.statusChanged(ctx, tx, convID, adminID)
+		return s.convs.SetStatus(ctx, tx, convID, adminID, st)
 	})
 	if err != nil {
 		return nil, err
@@ -640,21 +638,7 @@ func (s *groupService) ClearStatus(ctx context.Context, adminID, convID uuid.UUI
 		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
 			return err
 		}
-		removed, err := s.convs.ClearStatus(ctx, tx, convID)
-		if err != nil || !removed {
-			return err
-		}
-		return s.statusChanged(ctx, tx, convID, adminID)
-	})
-}
-
-// statusChanged — участники перезапрашивают группу по conversation.updated (fields: status), как при смене имени.
-func (s *groupService) statusChanged(ctx context.Context, tx repository.DBTX, convID, adminID uuid.UUID) error {
-	memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
-	if err != nil {
+		_, err := s.convs.ClearStatus(ctx, tx, convID)
 		return err
-	}
-	return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeConversationUpdated, events.ConversationUpdatedPayload{
-		ConversationID: convID, UpdatedBy: adminID, Fields: []string{"status"}, MemberIDs: memberIDs,
 	})
 }

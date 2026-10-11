@@ -12,8 +12,6 @@ const (
 	TypeUserBlocked   = "user.blocked"
 	TypeUserUnblocked = "user.unblocked"
 
-	TypeUserStatusUpdated = "user.status.updated"
-
 	// Публикует Gateway
 	TopicPresenceEvents = "presence-events"
 	TypeUserOnline      = "user.online"
@@ -34,19 +32,6 @@ func NewEvent[T any](eventType string, payload T) Event[T] {
 		OccurredAt: time.Now().UTC(),
 		Payload:    payload,
 	}
-}
-
-type StatusPayload struct {
-	UserID uuid.UUID     `json:"user_id"`
-	Status *StatusFields `json:"status"`
-}
-
-type StatusFields struct {
-	Icon       string     `json:"icon"`
-	Text       string     `json:"text"`
-	Background string     `json:"background"`
-	Foreground string     `json:"foreground"`
-	ExpiresAt  *time.Time `json:"expires_at"`
 }
 
 type BlockPayload struct {

@@ -71,7 +71,7 @@ func New() (*App, error) {
 	blockSvc := service.NewBlockService(repository.NewBlockRepository(pool), producer, log)
 	settingsSvc := service.NewSettingsService(repository.NewSettingsRepository(pool))
 
-	statusSvc := service.NewStatusService(repository.NewStatusRepository(pool), producer, log)
+	statusSvc := service.NewStatusService(repository.NewStatusRepository(pool))
 	srv := grpcserver.New(profileSvc, blockSvc, settingsSvc, statusSvc, presence.NewChecker(rdb))
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
 	userv1.RegisterUserServiceServer(server, srv)

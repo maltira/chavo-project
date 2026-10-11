@@ -5,18 +5,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/maltira/chavo-project-backend/proto/status"
-	"github.com/maltira/chavo-project-backend/services/user-service/internal/events"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
 )
 
-type Publisher interface {
-	Publish(ctx context.Context, topic, key string, event any) error
-}
-
+// StatusService - статус пользователя: только установить новый (целиком, прежний заменяется) или удалить
+// в реальном времени не рассылается: другие увидят изменение при следующей загрузке профиля
 type StatusService interface {
 	Set(ctx context.Context, userID uuid.UUID, in status.Input) (*models.Status, error)
 	Clear(ctx context.Context, userID uuid.UUID) error
@@ -24,13 +20,11 @@ type StatusService interface {
 
 type statusService struct {
 	repo repository.StatusRepository
-	pub  Publisher
-	log  *zap.Logger
 	now  func() time.Time
 }
 
-func NewStatusService(repo repository.StatusRepository, pub Publisher, log *zap.Logger) StatusService {
-	return &statusService{repo: repo, pub: pub, log: log, now: time.Now}
+func NewStatusService(repo repository.StatusRepository) StatusService {
+	return &statusService{repo: repo, now: time.Now}
 }
 
 func (s *statusService) Set(ctx context.Context, userID uuid.UUID, in status.Input) (*models.Status, error) {
@@ -42,29 +36,10 @@ func (s *statusService) Set(ctx context.Context, userID uuid.UUID, in status.Inp
 	if err := s.repo.Set(ctx, userID, st); err != nil {
 		return nil, err
 	}
-	s.publish(ctx, userID, &st)
 	return &st, nil
 }
 
 func (s *statusService) Clear(ctx context.Context, userID uuid.UUID) error {
-	removed, err := s.repo.Clear(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if removed {
-		s.publish(ctx, userID, nil)
-	}
-	return nil
-}
-
-func (s *statusService) publish(ctx context.Context, userID uuid.UUID, st *models.Status) {
-	payload := events.StatusPayload{UserID: userID}
-	if st != nil {
-		payload.Status = &events.StatusFields{
-			Icon: st.Icon, Text: st.Text, Background: st.Background, Foreground: st.Foreground, ExpiresAt: st.ExpiresAt,
-		}
-	}
-	if err := s.pub.Publish(ctx, events.TopicUserEvents, userID.String(), events.NewEvent(events.TypeUserStatusUpdated, payload)); err != nil {
-		s.log.Error("Failed to publish user.status.updated event", zap.String("user_id", userID.String()), zap.Error(err))
-	}
+	_, err := s.repo.Clear(ctx, userID)
+	return err
 }

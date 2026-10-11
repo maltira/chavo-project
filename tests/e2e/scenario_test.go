@@ -204,26 +204,33 @@ func TestScenario(t *testing.T) {
 			"message.deleted → B")
 	})
 
-	// Статус пользователя: приходит владельцу и тем, кто видит его presence; от заблокированного скрыт вместе с аватаром.
+	// статус пользователя - только через REST; от заблокированного скрыт вместе с аватаром и онлайном
 	step(t, "user status and block hiding", false, func(t *testing.T) {
-		statusOf := func(f frame, owner string) bool { return f.data()["user_id"] == owner }
 		body := func(icon, text, bg, fg, duration string) map[string]string {
 			return map[string]string{"icon": icon, "text": text, "background": bg, "foreground": fg, "duration": duration}
+		}
+		statusOf := func(u *user) map[string]any {
+			r := u.dev.do(t, "GET", "/api/users/"+a.id, nil)
+			st, _ := r.body["status"].(map[string]any)
+			return st
 		}
 		r := a.dev.do(t, "PATCH", "/api/users/me", map[string]string{"avatar_url": "https://example.com/e2e.png"})
 		check(t, r.status == 200, "set avatar: %d %s", r.status, r.raw)
 
+		for _, ws := range []*wsConn{bw, cw, tab2} {
+			ws.drain()
+		}
 		r = a.dev.do(t, "POST", "/api/users/me/status", body("shine", "Сегодня отдыхаю", "#34d399", "#064E3B", "4h"))
 		check(t, r.status == 201 && r.body["icon"] == "shine" && r.body["background"] == "#34D399" && r.body["expires_at"] != nil,
 			"set status: %d %s", r.status, r.raw)
+		st := statusOf(b)
+		check(t, st["icon"] == "shine" && st["text"] == "Сегодня отдыхаю" && st["foreground"] == "#064E3B", "profile status: %v", st)
+		me := a.dev.do(t, "GET", "/api/users/me", nil)
+		check(t, me.body["status"] != nil, "own status: %s", me.raw)
+		// по WebSocket статус не рассылается: клиенты увидят его при следующей загрузке профиля
 		for _, ws := range []*wsConn{bw, cw, tab2} {
-			f := ws.waitWhere("user.status.updated", 10*time.Second, func(f frame) bool { return statusOf(f, a.id) })
-			st, _ := f.data()["status"].(map[string]any)
-			check(t, f != nil && st["text"] == "Сегодня отдыхаю" && st["icon"] == "shine" && st["foreground"] == "#064E3B", "status → %s: %v", ws.name, f)
+			check(t, ws.wait("user.status.updated", time.Second) == nil, "%s got user.status.updated", ws.name)
 		}
-		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
-		st, _ := r.body["status"].(map[string]any)
-		check(t, st["icon"] == "shine" && st["background"] == "#34D399" && st["foreground"] == "#064E3B", "profile status: %s", r.raw)
 
 		r = a.dev.do(t, "POST", "/api/users/me/status", body("party", "x", "#000000", "#FFFFFF", "1h"))
 		check(t, r.status == 400 && r.body["reason"] == "STATUS_ICON_INVALID", "unknown icon: %d %s", r.status, r.raw)
@@ -232,7 +239,7 @@ func TestScenario(t *testing.T) {
 		r = a.dev.do(t, "POST", "/api/users/me/status", body("heart", strings.Repeat("я", 71), "#000000", "#FFFFFF", "1h"))
 		check(t, r.status == 400 && r.body["reason"] == "STATUS_TEXT_INVALID", "long text: %d %s", r.status, r.raw)
 
-		// A блокирует C: C больше не видит у A аватар, онлайн и статус и не получает его обновления.
+		// A блокирует C: C больше не видит у A аватар, онлайн и статус
 		r = a.dev.do(t, "POST", "/api/users/"+c.id+"/block", nil)
 		check(t, r.status == 200 || r.status == 201, "block: %d %s", r.status, r.raw)
 		r = c.dev.do(t, "GET", "/api/users/"+a.id, nil)
@@ -241,26 +248,22 @@ func TestScenario(t *testing.T) {
 		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
 		check(t, r.body["status"] != nil && r.body["avatar_url"] != nil && r.body["online"] == true, "other viewer lost fields: %s", r.raw)
 
-		cw.drain()
+		// новый статус заменяет прежний целиком
 		r = a.dev.do(t, "POST", "/api/users/me/status", body("moon", "Ночь", "#312E81", "#E0E7FF", "never"))
 		check(t, r.status == 201 && r.body["expires_at"] == nil, "replace status: %d %s", r.status, r.raw)
-		f := bw.waitWhere("user.status.updated", 10*time.Second, func(f frame) bool { return statusOf(f, a.id) })
-		st, _ = f.data()["status"].(map[string]any)
-		check(t, f != nil && st["icon"] == "moon" && st["background"] == "#312E81", "replaced status → B: %v", f)
-		check(t, cw.waitWhere("user.status.updated", 3*time.Second, func(f frame) bool { return statusOf(f, a.id) }) == nil,
-			"blocked C got status update")
+		st = statusOf(b)
+		check(t, st["icon"] == "moon" && st["background"] == "#312E81" && st["expires_at"] == nil, "replaced status: %v", st)
+		check(t, statusOf(c) == nil, "blocked C sees replaced status")
 
 		r = a.dev.do(t, "DELETE", "/api/users/"+c.id+"/block", nil)
 		check(t, r.status == 200, "unblock: %d %s", r.status, r.raw)
+		check(t, statusOf(c) != nil, "unblocked C must see status again")
 		r = a.dev.do(t, "DELETE", "/api/users/me/status", nil)
 		check(t, r.status == 200, "clear status: %d %s", r.status, r.raw)
-		f = bw.waitWhere("user.status.updated", 10*time.Second, func(f frame) bool { return statusOf(f, a.id) })
-		check(t, f != nil && f.data()["status"] == nil, "cleared status → B: %v", f)
-		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
-		check(t, r.body["status"] == nil, "status after clear: %s", r.raw)
+		check(t, statusOf(b) == nil, "status after clear")
 	})
 
-	// Статус группы ставит только админ; участники узнают через conversation.updated и видят его в карточке.
+	// статус группы ставит только админ; участники видят его в карточке, событий нет
 	step(t, "group status", false, func(t *testing.T) {
 		r := a.dev.do(t, "POST", "/api/conversations", map[string]any{
 			"name": "e2e-group-" + w.run, "visibility": "private", "member_ids": []string{b.id},
@@ -282,14 +285,11 @@ func TestScenario(t *testing.T) {
 		bw.drain()
 		r = a.dev.do(t, "POST", "/api/conversations/"+groupID+"/status", groupBody("ok", "Читаем правила", "24h"))
 		check(t, r.status == 201 && r.body["icon"] == "ok" && r.body["foreground"] == "#451A03", "set group status: %d %s", r.status, r.raw)
-		f := bw.waitWhere("conversation.updated", 10*time.Second, func(f frame) bool {
-			fields, _ := f.data()["fields"].([]any)
-			return f.data()["conversation_id"] == groupID && len(fields) == 1 && fields[0] == "status"
-		})
-		check(t, f != nil, "conversation.updated(status) → member")
 		r = b.dev.do(t, "GET", "/api/conversations/"+groupID, nil)
 		st, _ := r.body["status"].(map[string]any)
 		check(t, st["text"] == "Читаем правила" && st["background"] == "#F59E0B", "group card status: %s", r.raw)
+		check(t, bw.waitWhere("conversation.updated", time.Second, func(f frame) bool { return f.data()["conversation_id"] == groupID }) == nil,
+			"group status change must not be pushed over WS")
 
 		r = a.dev.do(t, "DELETE", "/api/conversations/"+groupID+"/status", nil)
 		check(t, r.status == 200, "clear group status: %d %s", r.status, r.raw)

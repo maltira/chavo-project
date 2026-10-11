@@ -2,9 +2,7 @@ package grpcserver_test
 
 import (
 	"context"
-	"encoding/json"
 	"net"
-	"sync"
 	"testing"
 	"time"
 
@@ -141,28 +139,11 @@ func (r *fakeStatusRepo) Clear(_ context.Context, id uuid.UUID) (bool, error) {
 	return had, nil
 }
 
-type fakePublisher struct {
-	mu     sync.Mutex
-	events []map[string]any
-}
-
-func (f *fakePublisher) Publish(_ context.Context, topic, key string, event any) error {
-	b, _ := json.Marshal(event)
-	var m map[string]any
-	_ = json.Unmarshal(b, &m)
-	m["_topic"], m["_key"] = topic, key
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.events = append(f.events, m)
-	return nil
-}
-
 type deps struct {
 	profiles *fakeProfiles
 	blocks   *fakeBlocks
 	settings *fakeSettings
 	presence *fakePresence
-	pub      *fakePublisher
 }
 
 func newDeps() *deps {
@@ -171,7 +152,6 @@ func newDeps() *deps {
 		blocks:   &fakeBlocks{blocked: map[[2]uuid.UUID]bool{}},
 		settings: &fakeSettings{invites: map[uuid.UUID]bool{}, show: map[uuid.UUID]bool{}},
 		presence: &fakePresence{online: map[uuid.UUID]bool{}},
-		pub:      &fakePublisher{},
 	}
 }
 
@@ -179,7 +159,7 @@ func start(t *testing.T, d *deps) (userv1.UserServiceClient, userv1.UserInternal
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(zap.NewNop())))
-	statuses := service.NewStatusService(&fakeStatusRepo{profiles: d.profiles}, d.pub, zap.NewNop())
+	statuses := service.NewStatusService(&fakeStatusRepo{profiles: d.profiles})
 	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, d.presence)
 	userv1.RegisterUserServiceServer(srv, impl)
 	userv1.RegisterUserInternalServiceServer(srv, impl)
@@ -451,22 +431,9 @@ func TestStatusSetClearAndBlockHiding(t *testing.T) {
 	if me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{}); me.GetProfile().GetStatus() != nil {
 		t.Fatal("status not cleared")
 	}
-	// Повторное удаление — не ошибка и без события.
+	// повторное удаление - не ошибка
 	if _, err := users.ClearStatus(as(owner), &userv1.ClearStatusRequest{}); err != nil {
 		t.Fatal(err)
 	}
 
-	d.pub.mu.Lock()
-	defer d.pub.mu.Unlock()
-	if len(d.pub.events) != 3 {
-		t.Fatalf("events: %d %v", len(d.pub.events), d.pub.events)
-	}
-	for i, ev := range d.pub.events {
-		if ev["event_type"] != "user.status.updated" || ev["_topic"] != "user-events" || ev["_key"] != owner.String() {
-			t.Fatalf("event %d: %v", i, ev)
-		}
-	}
-	if last := d.pub.events[2]["payload"].(map[string]any); last["status"] != nil {
-		t.Fatalf("clear event must carry status null: %v", last)
-	}
 }

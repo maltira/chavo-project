@@ -9,7 +9,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
 )
 
@@ -22,9 +21,8 @@ const (
 	TypeSessionRevoked = "session.revoked"
 	TypeAccountDeleted = "user.account_deleted"
 
-	TypeUserBlocked       = "user.blocked"
-	TypeUserUnblocked     = "user.unblocked"
-	TypeUserStatusUpdated = "user.status.updated"
+	TypeUserBlocked   = "user.blocked"
+	TypeUserUnblocked = "user.unblocked"
 
 	TypeConversationCreated = "conversation.created"
 	TypeConversationUpdated = "conversation.updated"
@@ -52,7 +50,6 @@ var ErrMalformed = errors.New("malformed event")
 // Sink — часть Hub, нужная маршрутизации.
 type Sink interface {
 	SendToUsers(userIDs []string, msg []byte)
-	SendToWatchersExcept(userID string, msg []byte, exclude map[string]bool)
 	CloseSID(sid string, final []byte, code int, reason string)
 	CloseUser(userID string, final []byte, code int, reason string)
 }
@@ -60,8 +57,6 @@ type Sink interface {
 // Presence — новый direct-чат: собеседники начинают видеть присутствие друг друга.
 type Presence interface {
 	DirectCreated(ctx context.Context, a, b string)
-	// Blocked — кого заблокировал owner: им не доставляются его онлайн и статус.
-	Blocked(ctx context.Context, owner string) (map[string]bool, error)
 }
 
 // ProfileCache — сброс кеша профиля при удалении аккаунта.
@@ -188,10 +183,6 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 		r.presence.DirectCreated(ctx, to.MemberIDs[0], to.MemberIDs[1])
 	}
 
-	if ev.EventType == TypeUserStatusUpdated {
-		return r.routeStatus(ctx, ev, to, now, log)
-	}
-
 	var users []string
 	switch ev.EventType {
 	case TypeMessageCreated, TypeMessageUpdated, TypeMessageDeleted,
@@ -227,51 +218,6 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 	}
 	r.sink.SendToUsers(users, msg)
 	log.Debug("event delivered", zap.Int("recipients", len(users)))
-	return nil
-}
-
-// routeStatus — статус пользователя: во вкладки владельца и тем, кто видит его presence (собеседники по direct,
-// подписчики), кроме заблокированных им. status: null — удалён (или иконку убрали из набора).
-func (r *Router) routeStatus(ctx context.Context, ev envelope, to recipients, now time.Time, log *zap.Logger) error {
-	type statusFields struct {
-		Icon       string     `json:"icon"`
-		Text       string     `json:"text"`
-		Background string     `json:"background"`
-		Foreground string     `json:"foreground"`
-		ExpiresAt  *time.Time `json:"expires_at"`
-	}
-	var p struct {
-		UserID string        `json:"user_id"`
-		Status *statusFields `json:"status"`
-	}
-	if err := json.Unmarshal(ev.Payload, &p); err != nil || p.UserID == "" || ev.OccurredAt.IsZero() {
-		return ErrMalformed
-	}
-	if age := now.Sub(ev.OccurredAt); age > r.maxAge {
-		log.Debug("stale event skipped", zap.Duration("age", age))
-		return nil
-	}
-	if p.Status != nil && !status.KnownIcon(p.Status.Icon) {
-		p.Status = nil
-	}
-	data, _ := json.Marshal(p)
-	msg, err := json.Marshal(delivery{Type: ev.EventType, EventID: ev.EventID, OccurredAt: ev.OccurredAt, Data: data})
-	if err != nil {
-		return ErrMalformed
-	}
-
-	// Список заблокированных — до рассылки: при сбое событие повторяется целиком, и владелец не получит дубль.
-	var blocked map[string]bool
-	if r.presence != nil {
-		if blocked, err = r.presence.Blocked(ctx, p.UserID); err != nil {
-			return err // без списка заблокированных статус не рассылается
-		}
-	}
-	r.sink.SendToUsers([]string{p.UserID}, msg)
-	if r.presence != nil {
-		r.sink.SendToWatchersExcept(p.UserID, msg, blocked)
-	}
-	log.Debug("status delivered", zap.Int("excluded", len(blocked)))
 	return nil
 }
 

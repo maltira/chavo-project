@@ -9,8 +9,10 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/presence"
@@ -24,11 +26,25 @@ type Server struct {
 	profiles service.ProfileService
 	blocks   service.BlockService
 	settings service.SettingsService
+	statuses service.StatusService
 	presence presence.Checker
 }
 
-func New(profiles service.ProfileService, blocks service.BlockService, settings service.SettingsService, presence presence.Checker) *Server {
-	return &Server{profiles: profiles, blocks: blocks, settings: settings, presence: presence}
+func New(profiles service.ProfileService, blocks service.BlockService, settings service.SettingsService,
+	statuses service.StatusService, presence presence.Checker) *Server {
+	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, presence: presence}
+}
+
+// statusToProto: иконка, убранная из каталога после установки, — отсутствие статуса.
+func statusToProto(st *models.Status) *statusv1.Status {
+	if st == nil || !status.KnownIcon(st.Icon) {
+		return nil
+	}
+	out := &statusv1.Status{Icon: st.Icon, Text: st.Text, Background: st.Background, Foreground: st.Foreground}
+	if st.ExpiresAt != nil {
+		out.ExpiresAt = ts(*st.ExpiresAt)
+	}
+	return out
 }
 
 // currentUser — пользователь из metadata x-user-id, проставленной Gateway.
@@ -58,7 +74,7 @@ func clamp(v int32, def, max int) int {
 func ts(t time.Time) *timestamppb.Timestamp { return timestamppb.New(t) }
 
 // profilesToProto: онлайн и last_seen_at видны другим только при show_online_status; self видит всё своё.
-// Тому, кого владелец заблокировал, не отдаются аватар, онлайн и last_seen_at (имя, username и bio остаются).
+// Тому, кого владелец заблокировал, не отдаются аватар, статус, онлайн и last_seen_at (имя, username и bio остаются).
 func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []models.Profile) ([]*userv1.Profile, error) {
 	ids := make([]uuid.UUID, len(items))
 	for i := range items {
@@ -92,6 +108,7 @@ func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []
 		}
 		if !hidden {
 			out.AvatarUrl = p.AvatarURL
+			out.Status = statusToProto(p.Status)
 		}
 		if show {
 			out.Online = online[p.UserID]
@@ -452,4 +469,30 @@ func (s *Server) BlockedIDs(ctx context.Context, req *userv1.BlockedIDsRequest) 
 		out[i] = b.String()
 	}
 	return &userv1.BlockedIDsResponse{UserIds: out}, nil
+}
+
+func (s *Server) SetStatus(ctx context.Context, req *userv1.SetStatusRequest) (*userv1.SetStatusResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.statuses.Set(ctx, userID, status.Input{
+		Icon: req.GetIcon(), Text: req.GetText(), Background: req.GetBackground(), Foreground: req.GetForeground(),
+		Duration: req.GetDuration(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.SetStatusResponse{Status: statusToProto(st)}, nil
+}
+
+func (s *Server) ClearStatus(ctx context.Context, _ *userv1.ClearStatusRequest) (*userv1.ClearStatusResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.statuses.Clear(ctx, userID); err != nil {
+		return nil, err
+	}
+	return &userv1.ClearStatusResponse{}, nil
 }

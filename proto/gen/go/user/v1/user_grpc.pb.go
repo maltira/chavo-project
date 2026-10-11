@@ -30,6 +30,8 @@ const (
 	UserService_UnblockUser_FullMethodName    = "/user.v1.UserService/UnblockUser"
 	UserService_GetSettings_FullMethodName    = "/user.v1.UserService/GetSettings"
 	UserService_UpdateSettings_FullMethodName = "/user.v1.UserService/UpdateSettings"
+	UserService_SetStatus_FullMethodName      = "/user.v1.UserService/SetStatus"
+	UserService_ClearStatus_FullMethodName    = "/user.v1.UserService/ClearStatus"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -49,6 +51,9 @@ type UserServiceClient interface {
 	UnblockUser(ctx context.Context, in *UnblockUserRequest, opts ...grpc.CallOption) (*UnblockUserResponse, error)
 	GetSettings(ctx context.Context, in *GetSettingsRequest, opts ...grpc.CallOption) (*GetSettingsResponse, error)
 	UpdateSettings(ctx context.Context, in *UpdateSettingsRequest, opts ...grpc.CallOption) (*UpdateSettingsResponse, error)
+	// SetStatus ставит новый статус целиком (прежний заменяется); редактировать установленный нельзя.
+	SetStatus(ctx context.Context, in *SetStatusRequest, opts ...grpc.CallOption) (*SetStatusResponse, error)
+	ClearStatus(ctx context.Context, in *ClearStatusRequest, opts ...grpc.CallOption) (*ClearStatusResponse, error)
 }
 
 type userServiceClient struct {
@@ -169,6 +174,26 @@ func (c *userServiceClient) UpdateSettings(ctx context.Context, in *UpdateSettin
 	return out, nil
 }
 
+func (c *userServiceClient) SetStatus(ctx context.Context, in *SetStatusRequest, opts ...grpc.CallOption) (*SetStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetStatusResponse)
+	err := c.cc.Invoke(ctx, UserService_SetStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ClearStatus(ctx context.Context, in *ClearStatusRequest, opts ...grpc.CallOption) (*ClearStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearStatusResponse)
+	err := c.cc.Invoke(ctx, UserService_ClearStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -186,6 +211,9 @@ type UserServiceServer interface {
 	UnblockUser(context.Context, *UnblockUserRequest) (*UnblockUserResponse, error)
 	GetSettings(context.Context, *GetSettingsRequest) (*GetSettingsResponse, error)
 	UpdateSettings(context.Context, *UpdateSettingsRequest) (*UpdateSettingsResponse, error)
+	// SetStatus ставит новый статус целиком (прежний заменяется); редактировать установленный нельзя.
+	SetStatus(context.Context, *SetStatusRequest) (*SetStatusResponse, error)
+	ClearStatus(context.Context, *ClearStatusRequest) (*ClearStatusResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -228,6 +256,12 @@ func (UnimplementedUserServiceServer) GetSettings(context.Context, *GetSettingsR
 }
 func (UnimplementedUserServiceServer) UpdateSettings(context.Context, *UpdateSettingsRequest) (*UpdateSettingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateSettings not implemented")
+}
+func (UnimplementedUserServiceServer) SetStatus(context.Context, *SetStatusRequest) (*SetStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetStatus not implemented")
+}
+func (UnimplementedUserServiceServer) ClearStatus(context.Context, *ClearStatusRequest) (*ClearStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearStatus not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -448,6 +482,42 @@ func _UserService_UpdateSettings_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SetStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetStatus(ctx, req.(*SetStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ClearStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ClearStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ClearStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ClearStatus(ctx, req.(*ClearStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -498,6 +568,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateSettings",
 			Handler:    _UserService_UpdateSettings_Handler,
+		},
+		{
+			MethodName: "SetStatus",
+			Handler:    _UserService_SetStatus_Handler,
+		},
+		{
+			MethodName: "ClearStatus",
+			Handler:    _UserService_ClearStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/status"
 )
 
 var (
@@ -54,7 +55,11 @@ func HTTPCode(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidUUID),
 		errors.Is(err, ErrIncorrectData),
-		errors.Is(err, ErrInvalidReply):
+		errors.Is(err, ErrInvalidReply),
+		errors.Is(err, status.ErrUnknownIcon),
+		errors.Is(err, status.ErrUnknownDuration),
+		errors.Is(err, status.ErrInvalidText),
+		errors.Is(err, status.ErrInvalidColor):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrUserServiceError):
 		return http.StatusServiceUnavailable
@@ -65,6 +70,14 @@ func HTTPCode(err error) int {
 
 func Reason(err error) string {
 	switch {
+	case errors.Is(err, status.ErrUnknownIcon):
+		return "STATUS_ICON_INVALID"
+	case errors.Is(err, status.ErrInvalidColor):
+		return "STATUS_COLOR_INVALID"
+	case errors.Is(err, status.ErrUnknownDuration):
+		return "STATUS_DURATION_INVALID"
+	case errors.Is(err, status.ErrInvalidText):
+		return "STATUS_TEXT_INVALID"
 	case errors.Is(err, ErrBlockedByMe):
 		return "BLOCKED_BY_ME"
 	case errors.Is(err, ErrBlockedByThem):
@@ -92,6 +105,14 @@ func Reason(err error) string {
 
 func UserMessage(err error) string {
 	switch {
+	case errors.Is(err, status.ErrUnknownIcon):
+		return "Неизвестная иконка статуса"
+	case errors.Is(err, status.ErrInvalidColor):
+		return "Цвета статуса задаются в формате #RRGGBB"
+	case errors.Is(err, status.ErrUnknownDuration):
+		return "Неизвестный срок статуса"
+	case errors.Is(err, status.ErrInvalidText):
+		return "Текст статуса — от 1 до 70 символов в одну строку"
 	case errors.Is(err, ErrNotFound):
 		return "Запись не найдена"
 	case errors.Is(err, ErrUserNotFound):

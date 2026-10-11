@@ -16,6 +16,15 @@ type Profile struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"-"`
+	Status      *Status    `json:"status,omitempty"`
+}
+
+type Status struct {
+	Icon       string
+	Text       string
+	Background string
+	Foreground string
+	ExpiresAt  *time.Time
 }
 
 // PresenceBatchRow — строка для батч-запроса presence (DB часть).

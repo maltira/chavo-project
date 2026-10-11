@@ -31,6 +31,15 @@ type Conversation struct {
 	LastMessageAt    time.Time `json:"last_message_at"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	Status           *Status   `json:"status,omitempty"`
+}
+
+type Status struct {
+	Icon       string
+	Text       string
+	Background string
+	Foreground string
+	ExpiresAt  *time.Time
 }
 
 type Member struct {
@@ -86,6 +95,7 @@ type InviteInfo struct {
 	MembersCount   int       `json:"members_count"`
 	IsMember       bool      `json:"is_member"`
 	RequestStatus  *string   `json:"request_status"`
+	Status         *Status   `json:"status,omitempty"`
 }
 
 // PublicGroup — краткая карточка публичной группы для поиска.
@@ -96,4 +106,5 @@ type PublicGroup struct {
 	AvatarURL    *string   `json:"avatar_url"`
 	MembersCount int       `json:"members_count"`
 	IsMember     bool      `json:"is_member"`
+	Status       *Status   `json:"status,omitempty"`
 }

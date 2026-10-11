@@ -7,6 +7,7 @@
 package userv1
 
 import (
+	v1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -30,10 +31,12 @@ type Profile struct {
 	Bio         *string                `protobuf:"bytes,4,opt,name=bio,proto3,oneof" json:"bio,omitempty"`
 	AvatarUrl   *string                `protobuf:"bytes,5,opt,name=avatar_url,json=avatarUrl,proto3,oneof" json:"avatar_url,omitempty"`
 	// Не заполнено, если пользователь скрыл онлайн-статус (кроме собственного профиля).
-	LastSeenAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
-	Online        bool                   `protobuf:"varint,7,opt,name=online,proto3" json:"online,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	LastSeenAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	Online     bool                   `protobuf:"varint,7,opt,name=online,proto3" json:"online,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt  *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Не задан — статуса нет, он истёк или скрыт от заблокированного.
+	Status        *v1.Status `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -127,6 +130,13 @@ func (x *Profile) GetCreatedAt() *timestamppb.Timestamp {
 func (x *Profile) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *Profile) GetStatus() *v1.Status {
+	if x != nil {
+		return x.Status
 	}
 	return nil
 }
@@ -1799,11 +1809,205 @@ func (x *BlockedIDsResponse) GetUserIds() []string {
 	return nil
 }
 
+// icon — ключ иконки из каталога; background и foreground — #RRGGBB (обязательны);
+// duration — ключ срока: 1h, 4h, 24h, 7d, never.
+type SetStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Icon          string                 `protobuf:"bytes,1,opt,name=icon,proto3" json:"icon,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Background    string                 `protobuf:"bytes,3,opt,name=background,proto3" json:"background,omitempty"`
+	Foreground    string                 `protobuf:"bytes,4,opt,name=foreground,proto3" json:"foreground,omitempty"`
+	Duration      string                 `protobuf:"bytes,5,opt,name=duration,proto3" json:"duration,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetStatusRequest) Reset() {
+	*x = SetStatusRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetStatusRequest) ProtoMessage() {}
+
+func (x *SetStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetStatusRequest.ProtoReflect.Descriptor instead.
+func (*SetStatusRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SetStatusRequest) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *SetStatusRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *SetStatusRequest) GetBackground() string {
+	if x != nil {
+		return x.Background
+	}
+	return ""
+}
+
+func (x *SetStatusRequest) GetForeground() string {
+	if x != nil {
+		return x.Foreground
+	}
+	return ""
+}
+
+func (x *SetStatusRequest) GetDuration() string {
+	if x != nil {
+		return x.Duration
+	}
+	return ""
+}
+
+type SetStatusResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *v1.Status             `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetStatusResponse) Reset() {
+	*x = SetStatusResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetStatusResponse) ProtoMessage() {}
+
+func (x *SetStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetStatusResponse.ProtoReflect.Descriptor instead.
+func (*SetStatusResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *SetStatusResponse) GetStatus() *v1.Status {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+type ClearStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearStatusRequest) Reset() {
+	*x = ClearStatusRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearStatusRequest) ProtoMessage() {}
+
+func (x *ClearStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearStatusRequest.ProtoReflect.Descriptor instead.
+func (*ClearStatusRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{37}
+}
+
+type ClearStatusResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearStatusResponse) Reset() {
+	*x = ClearStatusResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearStatusResponse) ProtoMessage() {}
+
+func (x *ClearStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearStatusResponse.ProtoReflect.Descriptor instead.
+func (*ClearStatusResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{38}
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xff\x02\n" +
+	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16status/v1/status.proto\"\xaa\x03\n" +
 	"\aProfile\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
@@ -1817,7 +2021,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x06\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12)\n" +
+	"\x06status\x18\n" +
+	" \x01(\v2\x11.status.v1.StatusR\x06statusB\x06\n" +
 	"\x04_bioB\r\n" +
 	"\v_avatar_url\"\xf7\x01\n" +
 	"\bSettings\x12\x17\n" +
@@ -1933,7 +2139,21 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x11BlockedIDsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"/\n" +
 	"\x12BlockedIDsResponse\x12\x19\n" +
-	"\buser_ids\x18\x01 \x03(\tR\auserIds2\xb8\x06\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\"\x96\x01\n" +
+	"\x10SetStatusRequest\x12\x12\n" +
+	"\x04icon\x18\x01 \x01(\tR\x04icon\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1e\n" +
+	"\n" +
+	"background\x18\x03 \x01(\tR\n" +
+	"background\x12\x1e\n" +
+	"\n" +
+	"foreground\x18\x04 \x01(\tR\n" +
+	"foreground\x12\x1a\n" +
+	"\bduration\x18\x05 \x01(\tR\bduration\">\n" +
+	"\x11SetStatusResponse\x12)\n" +
+	"\x06status\x18\x01 \x01(\v2\x11.status.v1.StatusR\x06status\"\x14\n" +
+	"\x12ClearStatusRequest\"\x15\n" +
+	"\x13ClearStatusResponse2\xc6\a\n" +
 	"\vUserService\x12N\n" +
 	"\rCreateProfile\x12\x1d.user.v1.CreateProfileRequest\x1a\x1e.user.v1.CreateProfileResponse\x126\n" +
 	"\x05GetMe\x12\x15.user.v1.GetMeRequest\x1a\x16.user.v1.GetMeResponse\x12?\n" +
@@ -1946,7 +2166,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\tBlockUser\x12\x19.user.v1.BlockUserRequest\x1a\x1a.user.v1.BlockUserResponse\x12H\n" +
 	"\vUnblockUser\x12\x1b.user.v1.UnblockUserRequest\x1a\x1c.user.v1.UnblockUserResponse\x12H\n" +
 	"\vGetSettings\x12\x1b.user.v1.GetSettingsRequest\x1a\x1c.user.v1.GetSettingsResponse\x12Q\n" +
-	"\x0eUpdateSettings\x12\x1e.user.v1.UpdateSettingsRequest\x1a\x1f.user.v1.UpdateSettingsResponse2\xb1\x03\n" +
+	"\x0eUpdateSettings\x12\x1e.user.v1.UpdateSettingsRequest\x1a\x1f.user.v1.UpdateSettingsResponse\x12B\n" +
+	"\tSetStatus\x12\x19.user.v1.SetStatusRequest\x1a\x1a.user.v1.SetStatusResponse\x12H\n" +
+	"\vClearStatus\x12\x1b.user.v1.ClearStatusRequest\x1a\x1c.user.v1.ClearStatusResponse2\xb1\x03\n" +
 	"\x13UserInternalService\x12W\n" +
 	"\x10MessagingAllowed\x12 .user.v1.MessagingAllowedRequest\x1a!.user.v1.MessagingAllowedResponse\x12E\n" +
 	"\n" +
@@ -1968,7 +2190,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                    // 0: user.v1.Profile
 	(*Settings)(nil),                   // 1: user.v1.Settings
@@ -2005,62 +2227,73 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*PresenceVisibleResponse)(nil),    // 32: user.v1.PresenceVisibleResponse
 	(*BlockedIDsRequest)(nil),          // 33: user.v1.BlockedIDsRequest
 	(*BlockedIDsResponse)(nil),         // 34: user.v1.BlockedIDsResponse
-	nil,                                // 35: user.v1.PresenceVisibleResponse.VisibleEntry
-	nil,                                // 36: user.v1.PresenceVisibleResponse.LastSeenAtEntry
-	(*timestamppb.Timestamp)(nil),      // 37: google.protobuf.Timestamp
+	(*SetStatusRequest)(nil),           // 35: user.v1.SetStatusRequest
+	(*SetStatusResponse)(nil),          // 36: user.v1.SetStatusResponse
+	(*ClearStatusRequest)(nil),         // 37: user.v1.ClearStatusRequest
+	(*ClearStatusResponse)(nil),        // 38: user.v1.ClearStatusResponse
+	nil,                                // 39: user.v1.PresenceVisibleResponse.VisibleEntry
+	nil,                                // 40: user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	(*timestamppb.Timestamp)(nil),      // 41: google.protobuf.Timestamp
+	(*v1.Status)(nil),                  // 42: status.v1.Status
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	37, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
-	37, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	37, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 3: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
-	37, // 4: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 5: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
-	0,  // 7: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
-	0,  // 8: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
-	2,  // 9: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
-	1,  // 10: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
-	35, // 11: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
-	36, // 12: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
-	37, // 13: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
-	3,  // 14: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
-	5,  // 15: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
-	7,  // 16: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
-	9,  // 17: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	11, // 18: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
-	13, // 19: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
-	15, // 20: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
-	17, // 21: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
-	19, // 22: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
-	21, // 23: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
-	23, // 24: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
-	25, // 25: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
-	27, // 26: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
-	29, // 27: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
-	31, // 28: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
-	33, // 29: user.v1.UserInternalService.BlockedIDs:input_type -> user.v1.BlockedIDsRequest
-	4,  // 30: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
-	6,  // 31: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
-	8,  // 32: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
-	10, // 33: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	12, // 34: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
-	14, // 35: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
-	16, // 36: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
-	18, // 37: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
-	20, // 38: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
-	22, // 39: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
-	24, // 40: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
-	26, // 41: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
-	28, // 42: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
-	30, // 43: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
-	32, // 44: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
-	34, // 45: user.v1.UserInternalService.BlockedIDs:output_type -> user.v1.BlockedIDsResponse
-	30, // [30:46] is the sub-list for method output_type
-	14, // [14:30] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	41, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
+	41, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	41, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	42, // 3: user.v1.Profile.status:type_name -> status.v1.Status
+	41, // 4: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
+	41, // 5: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
+	41, // 6: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
+	0,  // 7: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
+	0,  // 8: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
+	0,  // 9: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
+	2,  // 10: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
+	1,  // 11: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
+	39, // 12: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
+	40, // 13: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	42, // 14: user.v1.SetStatusResponse.status:type_name -> status.v1.Status
+	41, // 15: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
+	3,  // 16: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
+	5,  // 17: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
+	7,  // 18: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
+	9,  // 19: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	11, // 20: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
+	13, // 21: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
+	15, // 22: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
+	17, // 23: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
+	19, // 24: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
+	21, // 25: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
+	23, // 26: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
+	35, // 27: user.v1.UserService.SetStatus:input_type -> user.v1.SetStatusRequest
+	37, // 28: user.v1.UserService.ClearStatus:input_type -> user.v1.ClearStatusRequest
+	25, // 29: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
+	27, // 30: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
+	29, // 31: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
+	31, // 32: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
+	33, // 33: user.v1.UserInternalService.BlockedIDs:input_type -> user.v1.BlockedIDsRequest
+	4,  // 34: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
+	6,  // 35: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
+	8,  // 36: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
+	10, // 37: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	12, // 38: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
+	14, // 39: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
+	16, // 40: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
+	18, // 41: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
+	20, // 42: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
+	22, // 43: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
+	24, // 44: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
+	36, // 45: user.v1.UserService.SetStatus:output_type -> user.v1.SetStatusResponse
+	38, // 46: user.v1.UserService.ClearStatus:output_type -> user.v1.ClearStatusResponse
+	26, // 47: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
+	28, // 48: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
+	30, // 49: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
+	32, // 50: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
+	34, // 51: user.v1.UserInternalService.BlockedIDs:output_type -> user.v1.BlockedIDsResponse
+	34, // [34:52] is the sub-list for method output_type
+	16, // [16:34] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -2080,7 +2313,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   37,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

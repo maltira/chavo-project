@@ -195,3 +195,66 @@ func TestBlocks(t *testing.T) {
 		t.Fatalf("after unblock: %+v", list)
 	}
 }
+
+func TestStatuses(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	profiles := repository.NewProfileRepository(pool)
+	statuses := repository.NewStatusRepository(pool)
+	ctx := context.Background()
+	id := createProfile(t, pool, "st_a")
+	other := createProfile(t, pool, "st_b")
+
+	if p, _ := profiles.FindByID(ctx, id); p.Status != nil {
+		t.Fatal("new profile has a status")
+	}
+	exp := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
+	if err := statuses.Set(ctx, id, models.Status{Icon: "shine", Text: "Отдыхаю", Background: "#34D399", Foreground: "#064E3B", ExpiresAt: &exp}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := profiles.FindByID(ctx, id)
+	if err != nil || p.Status == nil || p.Status.Icon != "shine" || p.Status.Text != "Отдыхаю" || p.Status.Background != "#34D399" || p.Status.Foreground != "#064E3B" || !p.Status.ExpiresAt.Equal(exp) {
+		t.Fatalf("status: %+v %v", p, err)
+	}
+
+	// Установка заменяет статус целиком.
+	if err := statuses.Set(ctx, id, models.Status{Icon: "moon", Text: "Ночь", Background: "#312E81", Foreground: "#E0E7FF"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.Status.Icon != "moon" || p.Status.Background != "#312E81" || p.Status.ExpiresAt != nil {
+		t.Fatalf("replace: %+v", p.Status)
+	}
+
+	// Истёкший статус не читается ни в профиле, ни в поиске.
+	past := time.Now().Add(-time.Minute)
+	if err := statuses.Set(ctx, other, models.Status{Icon: "heart", Text: "был", Background: "#F43F5E", Foreground: "#FFFFFF", ExpiresAt: &past}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, other); p.Status != nil {
+		t.Fatalf("expired status read: %+v", p.Status)
+	}
+	found, err := profiles.GetAllBySearch(ctx, "st_", 10, 0)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("search: %v %v", found, err)
+	}
+	for _, f := range found {
+		if (f.UserID == id) != (f.Status != nil) {
+			t.Fatalf("search status for %s: %+v", f.Username, f.Status)
+		}
+	}
+
+	if removed, err := statuses.Clear(ctx, id); err != nil || !removed {
+		t.Fatalf("clear: %v %v", removed, err)
+	}
+	if removed, _ := statuses.Clear(ctx, id); removed {
+		t.Fatal("second clear reported a removal")
+	}
+
+	// Статус удаляется вместе с профилем.
+	if _, err := pool.Exec(ctx, `DELETE FROM profiles WHERE user_id = $1`, other); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_statuses WHERE user_id = $1`, other).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("cascade: %d %v", n, err)
+	}
+}

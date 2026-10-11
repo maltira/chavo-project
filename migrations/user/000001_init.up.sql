@@ -36,3 +36,13 @@ CREATE TABLE IF NOT EXISTS user_blocks (
     PRIMARY KEY (user_id, blocked_user_id)
 );
 CREATE INDEX idx_user_blocks_blocked ON user_blocks(blocked_user_id);
+
+CREATE TABLE IF NOT EXISTS user_statuses (
+    user_id    UUID PRIMARY KEY REFERENCES profiles(user_id) ON DELETE CASCADE,
+    icon       VARCHAR(32) NOT NULL,
+    text       VARCHAR(70) NOT NULL,
+    background CHAR(7)     NOT NULL,
+    foreground CHAR(7)     NOT NULL,
+    expires_at TIMESTAMPTZ,
+    set_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

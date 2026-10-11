@@ -2,7 +2,9 @@ package grpcserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -121,11 +123,46 @@ func (f *fakePresence) Online(_ context.Context, ids []uuid.UUID) (map[uuid.UUID
 	return res, nil
 }
 
+// fakeStatusRepo пишет статус прямо в профиль fakeProfiles — так его видят GetProfile и поиск.
+type fakeStatusRepo struct{ profiles *fakeProfiles }
+
+func (r *fakeStatusRepo) Set(_ context.Context, id uuid.UUID, st models.Status) error {
+	p := r.profiles.byID[id]
+	p.Status = &st
+	r.profiles.byID[id] = p
+	return nil
+}
+
+func (r *fakeStatusRepo) Clear(_ context.Context, id uuid.UUID) (bool, error) {
+	p := r.profiles.byID[id]
+	had := p.Status != nil
+	p.Status = nil
+	r.profiles.byID[id] = p
+	return had, nil
+}
+
+type fakePublisher struct {
+	mu     sync.Mutex
+	events []map[string]any
+}
+
+func (f *fakePublisher) Publish(_ context.Context, topic, key string, event any) error {
+	b, _ := json.Marshal(event)
+	var m map[string]any
+	_ = json.Unmarshal(b, &m)
+	m["_topic"], m["_key"] = topic, key
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, m)
+	return nil
+}
+
 type deps struct {
 	profiles *fakeProfiles
 	blocks   *fakeBlocks
 	settings *fakeSettings
 	presence *fakePresence
+	pub      *fakePublisher
 }
 
 func newDeps() *deps {
@@ -134,6 +171,7 @@ func newDeps() *deps {
 		blocks:   &fakeBlocks{blocked: map[[2]uuid.UUID]bool{}},
 		settings: &fakeSettings{invites: map[uuid.UUID]bool{}, show: map[uuid.UUID]bool{}},
 		presence: &fakePresence{online: map[uuid.UUID]bool{}},
+		pub:      &fakePublisher{},
 	}
 }
 
@@ -141,7 +179,8 @@ func start(t *testing.T, d *deps) (userv1.UserServiceClient, userv1.UserInternal
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(zap.NewNop())))
-	impl := grpcserver.New(d.profiles, d.blocks, d.settings, d.presence)
+	statuses := service.NewStatusService(&fakeStatusRepo{profiles: d.profiles}, d.pub, zap.NewNop())
+	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, d.presence)
 	userv1.RegisterUserServiceServer(srv, impl)
 	userv1.RegisterUserInternalServiceServer(srv, impl)
 	go func() { _ = srv.Serve(lis) }()
@@ -348,5 +387,86 @@ func TestBlockedViewerSeesNoAvatarOrPresence(t *testing.T) {
 	ids, err := internal.BlockedIDs(context.Background(), &userv1.BlockedIDsRequest{UserId: owner.String()})
 	if err != nil || len(ids.GetUserIds()) != 1 || ids.GetUserIds()[0] != blocked.String() {
 		t.Fatalf("blocked ids: %v %v", ids, err)
+	}
+}
+
+func TestStatusSetClearAndBlockHiding(t *testing.T) {
+	d := newDeps()
+	owner, blocked, other := uuid.New(), uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{owner, blocked, other} {
+		d.profiles.byID[id] = models.Profile{UserID: id, Username: "u", DisplayName: "U"}
+	}
+	d.blocks.blocked[[2]uuid.UUID{owner, blocked}] = true
+	users, _ := start(t, d)
+
+	set, err := users.SetStatus(as(owner), &userv1.SetStatusRequest{
+		Icon: "shine", Text: "  Сегодня отдыхаю ", Background: "#34d399", Foreground: "#064E3B", Duration: "4h",
+	})
+	if err != nil || set.GetStatus().GetIcon() != "shine" || set.GetStatus().GetText() != "Сегодня отдыхаю" ||
+		set.GetStatus().GetBackground() != "#34D399" || set.GetStatus().GetForeground() != "#064E3B" || set.GetStatus().GetExpiresAt() == nil {
+		t.Fatalf("set: %v %v", set, err)
+	}
+
+	p, _ := users.GetProfile(as(other), &userv1.GetProfileRequest{UserId: owner.String()})
+	if p.GetProfile().GetStatus().GetText() != "Сегодня отдыхаю" {
+		t.Fatalf("other must see status: %v", p)
+	}
+	p, _ = users.GetProfile(as(blocked), &userv1.GetProfileRequest{UserId: owner.String()})
+	if p.GetProfile().GetStatus() != nil {
+		t.Fatalf("blocked viewer sees status: %v", p)
+	}
+	me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{})
+	if me.GetProfile().GetStatus().GetIcon() != "shine" {
+		t.Fatalf("own status: %v", me)
+	}
+
+	// Новый статус заменяет прежний целиком; без срока — expires_at не задан.
+	set, err = users.SetStatus(as(owner), &userv1.SetStatusRequest{
+		Icon: "moon", Text: "Ночь", Background: "#312E81", Foreground: "#E0E7FF", Duration: "never",
+	})
+	if err != nil || set.GetStatus().GetIcon() != "moon" || set.GetStatus().GetBackground() != "#312E81" || set.GetStatus().GetExpiresAt() != nil {
+		t.Fatalf("replace: %v %v", set, err)
+	}
+
+	for _, req := range []*userv1.SetStatusRequest{
+		{Icon: "harmony", Text: "x", Background: "#000000", Foreground: "#FFFFFF", Duration: "1h"},
+		{Icon: "heart", Text: "x", Background: "#000000", Foreground: "#FFFFFF", Duration: "2h"},
+		{Icon: "heart", Text: "", Background: "#000000", Foreground: "#FFFFFF", Duration: "1h"},
+		{Icon: "heart", Text: "a\nb", Background: "#000000", Foreground: "#FFFFFF", Duration: "1h"},
+		{Icon: "heart", Text: "x", Foreground: "#FFFFFF", Duration: "1h"},
+		{Icon: "heart", Text: "x", Background: "#000000", Foreground: "white", Duration: "1h"},
+	} {
+		_, err := users.SetStatus(as(owner), req)
+		if grpcxCode(err) != codes.InvalidArgument {
+			t.Fatalf("%v: %v", req, err)
+		}
+	}
+	if _, err := users.SetStatus(context.Background(), &userv1.SetStatusRequest{Icon: "heart", Text: "x", Background: "#000000", Foreground: "#FFFFFF", Duration: "1h"}); grpcxCode(err) != codes.Unauthenticated {
+		t.Fatalf("anonymous set: %v", err)
+	}
+
+	if _, err := users.ClearStatus(as(owner), &userv1.ClearStatusRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{}); me.GetProfile().GetStatus() != nil {
+		t.Fatal("status not cleared")
+	}
+	// Повторное удаление — не ошибка и без события.
+	if _, err := users.ClearStatus(as(owner), &userv1.ClearStatusRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	d.pub.mu.Lock()
+	defer d.pub.mu.Unlock()
+	if len(d.pub.events) != 3 {
+		t.Fatalf("events: %d %v", len(d.pub.events), d.pub.events)
+	}
+	for i, ev := range d.pub.events {
+		if ev["event_type"] != "user.status.updated" || ev["_topic"] != "user-events" || ev["_key"] != owner.String() {
+			t.Fatalf("event %d: %v", i, ev)
+		}
+	}
+	if last := d.pub.events[2]["payload"].(map[string]any); last["status"] != nil {
+		t.Fatalf("clear event must carry status null: %v", last)
 	}
 }

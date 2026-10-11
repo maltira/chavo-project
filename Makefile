@@ -13,7 +13,7 @@ DB_AUTH_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:54
 DB_USER_URL      := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(USER_DB_NAME)?sslmode=disable
 DB_CONVERSATION_URL   := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(CONVERSATION_DB_NAME)?sslmode=disable
 
-# Тесты: SERVICE=auth-service — только один сервис
+# Тесты: SERVICE=auth-service — только один сервис (без него ещё и модуль proto: каталог статусов, grpcx)
 SERVICES         := auth-service user-service conversation-service api-gateway
 SERVICE          ?= $(SERVICES)
 TEST_PG          := chavo-test-pg
@@ -169,6 +169,9 @@ proto: proto-tools
 # Модульные: без БД и стека. Тесты с БД пропускаются (SKIP). Гоняет все сервисы, даже если какой-то упал.
 test:
 	@failed=""; \
+	if [ "$(SERVICE)" = "$(SERVICES)" ]; then \
+		echo "== proto"; (cd proto && go test -race -count=1 ./...) || failed="$$failed proto"; \
+	fi; \
 	for s in $(SERVICE); do \
 		echo "== $$s"; \
 		(cd services/$$s && go test -race -count=1 ./...) || failed="$$failed $$s"; \
@@ -185,6 +188,9 @@ test-integration:
 	echo "Ожидание PostgreSQL..."; \
 	until docker exec $(TEST_PG) pg_isready -h 127.0.0.1 -U postgres -q; do sleep 0.5; done; \
 	failed=""; \
+	if [ "$(SERVICE)" = "$(SERVICES)" ]; then \
+		echo "== proto"; (cd proto && go test -race -count=1 ./...) || failed="$$failed proto"; \
+	fi; \
 	for s in $(SERVICE); do \
 		echo "== $$s"; \
 		(cd services/$$s && TEST_DATABASE_URL="postgres://postgres:test@localhost:$(TEST_PG_PORT)/postgres?sslmode=disable" \

@@ -24,6 +24,8 @@ const (
 	ConversationService_SearchPublicGroups_FullMethodName = "/conversation.v1.ConversationService/SearchPublicGroups"
 	ConversationService_CreateGroup_FullMethodName        = "/conversation.v1.ConversationService/CreateGroup"
 	ConversationService_UpdateGroup_FullMethodName        = "/conversation.v1.ConversationService/UpdateGroup"
+	ConversationService_SetGroupStatus_FullMethodName     = "/conversation.v1.ConversationService/SetGroupStatus"
+	ConversationService_ClearGroupStatus_FullMethodName   = "/conversation.v1.ConversationService/ClearGroupStatus"
 	ConversationService_DeleteConversation_FullMethodName = "/conversation.v1.ConversationService/DeleteConversation"
 	ConversationService_JoinGroup_FullMethodName          = "/conversation.v1.ConversationService/JoinGroup"
 	ConversationService_ListMembers_FullMethodName        = "/conversation.v1.ConversationService/ListMembers"
@@ -58,6 +60,9 @@ type ConversationServiceClient interface {
 	SearchPublicGroups(ctx context.Context, in *SearchPublicGroupsRequest, opts ...grpc.CallOption) (*SearchPublicGroupsResponse, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*CreateGroupResponse, error)
 	UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*UpdateGroupResponse, error)
+	// SetGroupStatus — только админ группы; ставит новый статус целиком, прежний заменяется.
+	SetGroupStatus(ctx context.Context, in *SetGroupStatusRequest, opts ...grpc.CallOption) (*SetGroupStatusResponse, error)
+	ClearGroupStatus(ctx context.Context, in *ClearGroupStatusRequest, opts ...grpc.CallOption) (*ClearGroupStatusResponse, error)
 	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
 	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
@@ -135,6 +140,26 @@ func (c *conversationServiceClient) UpdateGroup(ctx context.Context, in *UpdateG
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateGroupResponse)
 	err := c.cc.Invoke(ctx, ConversationService_UpdateGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetGroupStatus(ctx context.Context, in *SetGroupStatusRequest, opts ...grpc.CallOption) (*SetGroupStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetGroupStatusResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetGroupStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) ClearGroupStatus(ctx context.Context, in *ClearGroupStatusRequest, opts ...grpc.CallOption) (*ClearGroupStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearGroupStatusResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ClearGroupStatus_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +387,9 @@ type ConversationServiceServer interface {
 	SearchPublicGroups(context.Context, *SearchPublicGroupsRequest) (*SearchPublicGroupsResponse, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*CreateGroupResponse, error)
 	UpdateGroup(context.Context, *UpdateGroupRequest) (*UpdateGroupResponse, error)
+	// SetGroupStatus — только админ группы; ставит новый статус целиком, прежний заменяется.
+	SetGroupStatus(context.Context, *SetGroupStatusRequest) (*SetGroupStatusResponse, error)
+	ClearGroupStatus(context.Context, *ClearGroupStatusRequest) (*ClearGroupStatusResponse, error)
 	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
 	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
@@ -409,6 +437,12 @@ func (UnimplementedConversationServiceServer) CreateGroup(context.Context, *Crea
 }
 func (UnimplementedConversationServiceServer) UpdateGroup(context.Context, *UpdateGroupRequest) (*UpdateGroupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateGroup not implemented")
+}
+func (UnimplementedConversationServiceServer) SetGroupStatus(context.Context, *SetGroupStatusRequest) (*SetGroupStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetGroupStatus not implemented")
+}
+func (UnimplementedConversationServiceServer) ClearGroupStatus(context.Context, *ClearGroupStatusRequest) (*ClearGroupStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearGroupStatus not implemented")
 }
 func (UnimplementedConversationServiceServer) DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteConversation not implemented")
@@ -580,6 +614,42 @@ func _ConversationService_UpdateGroup_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).UpdateGroup(ctx, req.(*UpdateGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetGroupStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetGroupStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetGroupStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetGroupStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetGroupStatus(ctx, req.(*SetGroupStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_ClearGroupStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearGroupStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ClearGroupStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ClearGroupStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ClearGroupStatus(ctx, req.(*ClearGroupStatusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -988,6 +1058,14 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateGroup",
 			Handler:    _ConversationService_UpdateGroup_Handler,
+		},
+		{
+			MethodName: "SetGroupStatus",
+			Handler:    _ConversationService_SetGroupStatus_Handler,
+		},
+		{
+			MethodName: "ClearGroupStatus",
+			Handler:    _ConversationService_ClearGroupStatus_Handler,
 		},
 		{
 			MethodName: "DeleteConversation",

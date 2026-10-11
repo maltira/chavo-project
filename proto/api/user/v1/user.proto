@@ -3,6 +3,7 @@ syntax = "proto3";
 package user.v1;
 
 import "google/protobuf/timestamp.proto";
+import "status/v1/status.proto";
 
 option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1;userv1";
 
@@ -21,6 +22,10 @@ service UserService {
 
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+
+  // SetStatus ставит новый статус целиком (прежний заменяется); редактировать установленный нельзя.
+  rpc SetStatus(SetStatusRequest) returns (SetStatusResponse);
+  rpc ClearStatus(ClearStatusRequest) returns (ClearStatusResponse);
 }
 
 // Вызовы между сервисами; Gateway их наружу не открывает.
@@ -45,6 +50,8 @@ message Profile {
   bool online = 7;
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
+  // Не задан — статуса нет, он истёк или скрыт от заблокированного.
+  status.v1.Status status = 10;
 }
 
 message Settings {
@@ -184,3 +191,18 @@ message BlockedIDsRequest {
 message BlockedIDsResponse {
   repeated string user_ids = 1;
 }
+
+// icon — ключ иконки из каталога; background и foreground — #RRGGBB (обязательны);
+// duration — ключ срока: 1h, 4h, 24h, 7d, never.
+message SetStatusRequest {
+  string icon = 1;
+  string text = 2;
+  string background = 3;
+  string foreground = 4;
+  string duration = 5;
+}
+message SetStatusResponse {
+  status.v1.Status status = 1;
+}
+message ClearStatusRequest {}
+message ClearStatusResponse {}

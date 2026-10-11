@@ -27,6 +27,7 @@ import (
 
 	authv1 "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1"
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
+	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/api"
@@ -158,6 +159,20 @@ func (u *fakeUsers) GetMe(ctx context.Context, _ *userv1.GetMeRequest) (*userv1.
 		return nil, grpcx.Error(codes.NotFound, "PROFILE_NOT_FOUND", "Профиль не найден")
 	}
 	return &userv1.GetMeResponse{Profile: &userv1.Profile{UserId: id, Username: "me"}}, nil
+}
+
+// SetStatus проверяет только иконку (полная проверка — в user-service) и возвращает статус как есть.
+func (u *fakeUsers) SetStatus(_ context.Context, req *userv1.SetStatusRequest) (*userv1.SetStatusResponse, error) {
+	if req.GetIcon() != "shine" {
+		return nil, grpcx.Error(codes.InvalidArgument, "STATUS_ICON_INVALID", "Неизвестная иконка статуса")
+	}
+	return &userv1.SetStatusResponse{Status: &statusv1.Status{
+		Icon: req.GetIcon(), Text: req.GetText(), Background: req.GetBackground(), Foreground: req.GetForeground(),
+	}}, nil
+}
+
+func (u *fakeUsers) ClearStatus(context.Context, *userv1.ClearStatusRequest) (*userv1.ClearStatusResponse, error) {
+	return &userv1.ClearStatusResponse{}, nil
 }
 
 func (u *fakeUsers) SearchProfiles(context.Context, *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
@@ -655,5 +670,48 @@ func TestRateLimitPerUser(t *testing.T) {
 		if w := e.do(http.MethodPost, "/api/auth/logout", "", ""); w.Code == http.StatusTooManyRequests {
 			t.Fatal("public route limited")
 		}
+	}
+}
+
+func TestStatusEndpoints(t *testing.T) {
+	e := newEnv(t)
+
+	// Каталог публичный и кешируемый: типы с визуалом и сроки.
+	w := e.do(http.MethodGet, "/api/statuses", "", "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Header().Get("Cache-Control"), "max-age") {
+		t.Fatalf("catalog: %d %v", w.Code, w.Header())
+	}
+	cat := decode(t, w)
+	icons, _ := cat["icons"].([]any)
+	durations, _ := cat["durations"].([]any)
+	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 {
+		t.Fatalf("catalog content: %v", cat)
+	}
+
+	// Без профиля поставить статус нельзя.
+	_, noProfile := e.login(t, false)
+	expect(t, e.do(http.MethodPost, "/api/users/me/status", noProfile, `{"icon":"shine","text":"x","background":"#000000","foreground":"#FFFFFF","duration":"1h"}`),
+		http.StatusForbidden, "PROFILE_REQUIRED")
+
+	_, tok := e.login(t, true)
+	w = e.do(http.MethodPost, "/api/users/me/status", tok, `{"icon":"shine","text":"Отдыхаю","background":"#34D399","foreground":"#064E3B","duration":"4h"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("set: %d %s", w.Code, w.Body.String())
+	}
+	st := decode(t, w)
+	if st["icon"] != "shine" || st["text"] != "Отдыхаю" || st["background"] != "#34D399" || st["foreground"] != "#064E3B" {
+		t.Fatalf("status: %v", st)
+	}
+	if _, ok := st["type"]; ok {
+		t.Fatalf("status must not have a type: %v", st)
+	}
+	expect(t, e.do(http.MethodPost, "/api/users/me/status", tok, `{"icon":"party","text":"x","background":"#000000","foreground":"#FFFFFF","duration":"1h"}`),
+		http.StatusBadRequest, "STATUS_ICON_INVALID")
+	if w := e.do(http.MethodDelete, "/api/users/me/status", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+	// PUT не поддерживается: статус только ставится заново или удаляется.
+	if w := e.do(http.MethodPut, "/api/users/me/status", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT: %d", w.Code)
 	}
 }

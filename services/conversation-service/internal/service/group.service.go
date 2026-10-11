@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 
+	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/client/userclient"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/events"
@@ -58,6 +60,9 @@ type GroupService interface {
 	RemoveMember(ctx context.Context, actorID, convID, targetID uuid.UUID, ban bool) error
 	ListBans(ctx context.Context, adminID, convID uuid.UUID, limit, offset int) ([]models.Ban, error)
 	Unban(ctx context.Context, adminID, convID, targetID uuid.UUID) error
+	// SetStatus ставит новый статус группы целиком (прежний заменяется); только admin, direct — ErrForbidden.
+	SetStatus(ctx context.Context, adminID, convID uuid.UUID, in status.Input) (*models.Status, error)
+	ClearStatus(ctx context.Context, adminID, convID uuid.UUID) error
 }
 
 type groupService struct {
@@ -66,6 +71,7 @@ type groupService struct {
 	outbox repository.OutboxRepository
 	users  userclient.Client
 	bans   repository.BanRepository
+	now    func() time.Time
 }
 
 func NewGroupService(
@@ -75,7 +81,7 @@ func NewGroupService(
 	users userclient.Client,
 	bans repository.BanRepository,
 ) GroupService {
-	return &groupService{db: db, convs: convs, outbox: outbox, users: users, bans: bans}
+	return &groupService{db: db, convs: convs, outbox: outbox, users: users, bans: bans, now: time.Now}
 }
 
 func (s *groupService) publish(ctx context.Context, q repository.DBTX, topic string, convID uuid.UUID, eventType string, payload any) error {
@@ -599,5 +605,56 @@ func (s *groupService) removeLocked(ctx context.Context, tx repository.DBTX, con
 	}
 	return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeMemberRemoved, events.MemberRemovedPayload{
 		ConversationID: convID, UserID: targetID, RemovedBy: actorID, Banned: ban, MemberIDs: append(remaining, targetID),
+	})
+}
+
+func (s *groupService) SetStatus(ctx context.Context, adminID, convID uuid.UUID, in status.Input) (*models.Status, error) {
+	v, err := status.Validate(in, s.now())
+	if err != nil {
+		return nil, err
+	}
+	st := models.Status{Icon: v.Icon, Text: v.Text, Background: v.Background, Foreground: v.Foreground, ExpiresAt: v.ExpiresAt}
+	err = s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		if err := s.convs.SetStatus(ctx, tx, convID, adminID, st); err != nil {
+			return err
+		}
+		return s.statusChanged(ctx, tx, convID, adminID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
+func (s *groupService) ClearStatus(ctx context.Context, adminID, convID uuid.UUID) error {
+	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		removed, err := s.convs.ClearStatus(ctx, tx, convID)
+		if err != nil || !removed {
+			return err
+		}
+		return s.statusChanged(ctx, tx, convID, adminID)
+	})
+}
+
+// statusChanged — участники перезапрашивают группу по conversation.updated (fields: status), как при смене имени.
+func (s *groupService) statusChanged(ctx context.Context, tx repository.DBTX, convID, adminID uuid.UUID) error {
+	memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
+	if err != nil {
+		return err
+	}
+	return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeConversationUpdated, events.ConversationUpdatedPayload{
+		ConversationID: convID, UpdatedBy: adminID, Fields: []string{"status"}, MemberIDs: memberIDs,
 	})
 }

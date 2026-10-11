@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    // сборка и проверка без выхода файлов - Vite собирает сам
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    // язык и стандартная библиотека
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    // модули и React
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    // алиас @/* -> src/*, совпадает с resolve.alias в vite.config.ts
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    // глобальные типы: node для конфигов, vite для import.meta.env и ассетов, тесты без импорта
+    "types": [
+      "node",
+      "vite/client",
+      "vite-plugin-svgr/client",
+      "vitest/globals",
+      "@testing-library/jest-dom"
+    ],
+    // строгая проверка
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  // src - приложение, конфиги Vite и steiger выполняются в Node
+  "include": [
+    "src",
+    "vite.config.ts",
+    "steiger.config.ts"
+  ]
+}

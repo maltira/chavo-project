@@ -27,7 +27,8 @@ TEST_PG_PORT     ?= 15432
         psql db-tables clean-db clean-redis clean-kafka clean-data \
         kafka-topics kafka-ui \
         proto proto-tools \
-        test test-integration e2e
+        test test-integration e2e \
+        frontend-install frontend-dev frontend-build frontend-test frontend-lint
 
 
 # ──────────────────────────────────────────────
@@ -203,3 +204,19 @@ test-integration:
 # иначе тест не запустится. Перезапускает Gateway; после теста /api/auth/ с этого IP минуту под лимитом nginx.
 e2e:
 	@cd tests/e2e && go test -tags e2e -count=1 -timeout 10m -v ./...
+
+# ──────────────────────────────────────────────
+# Фронтенд
+# ──────────────────────────────────────────────
+
+frontend-install:
+	@cd services/frontend && npm ci
+
+frontend-build:
+	@cd services/frontend && npm run build
+
+frontend-test:
+	@cd services/frontend && npm run typecheck && npm run lint && npm run fsd && npm test
+
+frontend-lint:
+	@cd services/frontend && npm run lint && npm run fsd

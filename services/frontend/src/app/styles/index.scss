@@ -1,0 +1,36 @@
+@use 'variables';
+@use 'fonts';
+@use 'typography';
+@use 'reset';
+
+// базовые стили приложения: тема и типографика из токенов
+html,
+body {
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @include typography.type(main-regular);
+  background: var(--color-bg-primary);
+  color: var(--color-text);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1 {
+  @include typography.type(h1-lora-regular);
+}
+
+h4 {
+  @include typography.type(h4-lora-medium);
+}
+
+h5 {
+  @include typography.type(h5-lora-medium);
+}

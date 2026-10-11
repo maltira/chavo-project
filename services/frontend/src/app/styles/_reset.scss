@@ -1,0 +1,28 @@
+// нормализация браузерных умолчаний
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+// элементы форм и кнопки берут шрифт и цвет у родителя
+input,
+textarea,
+select,
+button {
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+a {
+    color: inherit;
+}

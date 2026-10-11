@@ -258,3 +258,63 @@ func TestStatuses(t *testing.T) {
 		t.Fatalf("cascade: %d %v", n, err)
 	}
 }
+
+func TestAvatarShapes(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	profiles := repository.NewProfileRepository(pool)
+	shapes := repository.NewAvatarShapeRepository(pool)
+	ctx := context.Background()
+	id := createProfile(t, pool, "sh_a")
+	other := createProfile(t, pool, "sh_b")
+
+	if p, _ := profiles.FindByID(ctx, id); p.AvatarShape != nil {
+		t.Fatal("new profile has a shape")
+	}
+	if err := shapes.Set(ctx, id, models.AvatarShape{Shape: "4-leaf-clover", Color: "#34D399"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := profiles.FindByID(ctx, id)
+	if err != nil || p.AvatarShape == nil || p.AvatarShape.Shape != "4-leaf-clover" || p.AvatarShape.Color != "#34D399" {
+		t.Fatalf("shape: %+v %v", p, err)
+	}
+
+	// установка заменяет фигуру целиком
+	if err := shapes.Set(ctx, id, models.AvatarShape{Shape: "bun", Color: "#000000"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.AvatarShape.Shape != "bun" || p.AvatarShape.Color != "#000000" {
+		t.Fatalf("replace: %+v", p.AvatarShape)
+	}
+
+	found, err := profiles.GetAllBySearch(ctx, "sh_", 10, 0)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("search: %v %v", found, err)
+	}
+	for _, f := range found {
+		if (f.UserID == id) != (f.AvatarShape != nil) {
+			t.Fatalf("search shape for %s: %+v", f.Username, f.AvatarShape)
+		}
+	}
+
+	if err := shapes.Clear(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.AvatarShape != nil {
+		t.Fatalf("not cleared: %+v", p.AvatarShape)
+	}
+	if err := shapes.Clear(ctx, id); err != nil {
+		t.Fatalf("second clear: %v", err)
+	}
+
+	// фигура удаляется вместе с профилем
+	if err := shapes.Set(ctx, other, models.AvatarShape{Shape: "circle", Color: "#FFFFFF"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM profiles WHERE user_id = $1`, other); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_avatar_shapes WHERE user_id = $1`, other).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("cascade: %d %v", n, err)
+	}
+}

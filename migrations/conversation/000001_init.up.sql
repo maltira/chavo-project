@@ -120,3 +120,11 @@ CREATE TABLE conversation_statuses (
     set_by UUID NOT NULL,
     set_at TIMESTAMPTZ NOT NULL DEFAULT NOW ()
 );
+
+CREATE TABLE conversation_avatar_shapes (
+    conversation_id UUID PRIMARY KEY REFERENCES conversations (id) ON DELETE CASCADE,
+    shape VARCHAR(32) NOT NULL,
+    color CHAR(7) NOT NULL,
+    set_by UUID NOT NULL,
+    set_at TIMESTAMPTZ NOT NULL DEFAULT NOW ()
+);

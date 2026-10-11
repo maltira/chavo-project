@@ -22,16 +22,22 @@ const (
 )
 
 type Conversation struct {
-	ID               uuid.UUID `json:"id"`
-	ConversationType string    `json:"conversation_type"`
-	Visibility       string    `json:"visibility"`
-	Name             *string   `json:"name"`
-	Description      *string   `json:"description"`
-	AvatarURL        *string   `json:"avatar_url"`
-	LastMessageAt    time.Time `json:"last_message_at"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	Status           *Status   `json:"status,omitempty"`
+	ID               uuid.UUID    `json:"id"`
+	ConversationType string       `json:"conversation_type"`
+	Visibility       string       `json:"visibility"`
+	Name             *string      `json:"name"`
+	Description      *string      `json:"description"`
+	AvatarURL        *string      `json:"avatar_url"`
+	LastMessageAt    time.Time    `json:"last_message_at"`
+	CreatedAt        time.Time    `json:"created_at"`
+	UpdatedAt        time.Time    `json:"updated_at"`
+	Status           *Status      `json:"status,omitempty"`
+	AvatarShape      *AvatarShape `json:"avatar_shape,omitempty"`
+}
+
+type AvatarShape struct {
+	Shape string
+	Color string
 }
 
 type Status struct {
@@ -88,23 +94,25 @@ type ConversationSummary struct {
 
 // InviteInfo — краткая информация о приватной группе по invite-ссылке.
 type InviteInfo struct {
-	ConversationID uuid.UUID `json:"conversation_id"`
-	Name           *string   `json:"name"`
-	Description    *string   `json:"description"`
-	AvatarURL      *string   `json:"avatar_url"`
-	MembersCount   int       `json:"members_count"`
-	IsMember       bool      `json:"is_member"`
-	RequestStatus  *string   `json:"request_status"`
-	Status         *Status   `json:"status,omitempty"`
+	ConversationID uuid.UUID    `json:"conversation_id"`
+	Name           *string      `json:"name"`
+	Description    *string      `json:"description"`
+	AvatarURL      *string      `json:"avatar_url"`
+	MembersCount   int          `json:"members_count"`
+	IsMember       bool         `json:"is_member"`
+	RequestStatus  *string      `json:"request_status"`
+	Status         *Status      `json:"status,omitempty"`
+	AvatarShape    *AvatarShape `json:"avatar_shape,omitempty"`
 }
 
 // PublicGroup — краткая карточка публичной группы для поиска.
 type PublicGroup struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Description  *string   `json:"description"`
-	AvatarURL    *string   `json:"avatar_url"`
-	MembersCount int       `json:"members_count"`
-	IsMember     bool      `json:"is_member"`
-	Status       *Status   `json:"status,omitempty"`
+	ID           uuid.UUID    `json:"id"`
+	Name         string       `json:"name"`
+	Description  *string      `json:"description"`
+	AvatarURL    *string      `json:"avatar_url"`
+	MembersCount int          `json:"members_count"`
+	IsMember     bool         `json:"is_member"`
+	Status       *Status      `json:"status,omitempty"`
+	AvatarShape  *AvatarShape `json:"avatar_shape,omitempty"`
 }

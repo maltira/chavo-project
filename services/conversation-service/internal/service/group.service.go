@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/client/userclient"
@@ -64,6 +65,9 @@ type GroupService interface {
 	// событий нет: участники увидят статус при следующей загрузке группы
 	SetStatus(ctx context.Context, adminID, convID uuid.UUID, in status.Input) (*models.Status, error)
 	ClearStatus(ctx context.Context, adminID, convID uuid.UUID) error
+	// SetAvatarShape ставит новую фигуру за аватаром группы целиком; только admin, direct - ErrForbidden
+	SetAvatarShape(ctx context.Context, adminID, convID uuid.UUID, shape, color string) (*models.AvatarShape, error)
+	ClearAvatarShape(ctx context.Context, adminID, convID uuid.UUID) error
 }
 
 type groupService struct {
@@ -640,5 +644,38 @@ func (s *groupService) ClearStatus(ctx context.Context, adminID, convID uuid.UUI
 		}
 		_, err := s.convs.ClearStatus(ctx, tx, convID)
 		return err
+	})
+}
+
+func (s *groupService) SetAvatarShape(ctx context.Context, adminID, convID uuid.UUID, shape, color string) (*models.AvatarShape, error) {
+	v, err := avatarshape.Validate(shape, color)
+	if err != nil {
+		return nil, err
+	}
+	sh := models.AvatarShape{Shape: v.Shape, Color: v.Color}
+	err = s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		return s.convs.SetAvatarShape(ctx, tx, convID, adminID, sh)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &sh, nil
+}
+
+func (s *groupService) ClearAvatarShape(ctx context.Context, adminID, convID uuid.UUID) error {
+	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		return s.convs.ClearAvatarShape(ctx, tx, convID)
 	})
 }

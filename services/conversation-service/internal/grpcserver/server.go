@@ -76,6 +76,7 @@ func (s *Server) SearchPublicGroups(ctx context.Context, req *conversationv1.Sea
 			MembersCount: int32(g.MembersCount),
 			IsMember:     g.IsMember,
 			Status:       toStatus(g.Status),
+			AvatarShape:  toAvatarShape(g.AvatarShape),
 		}
 	}
 	return &conversationv1.SearchPublicGroupsResponse{Items: out, Limit: int32(limit), Offset: int32(offset)}, nil
@@ -290,6 +291,7 @@ func (s *Server) GetInviteInfo(ctx context.Context, req *conversationv1.GetInvit
 		IsMember:       info.IsMember,
 		RequestStatus:  info.RequestStatus,
 		Status:         toStatus(info.Status),
+		AvatarShape:    toAvatarShape(info.AvatarShape),
 	}}, nil
 }
 
@@ -569,4 +571,35 @@ func (s *Server) ClearGroupStatus(ctx context.Context, req *conversationv1.Clear
 		return nil, err
 	}
 	return &conversationv1.ClearGroupStatusResponse{}, nil
+}
+
+func (s *Server) SetGroupAvatarShape(ctx context.Context, req *conversationv1.SetGroupAvatarShapeRequest) (*conversationv1.SetGroupAvatarShapeResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	sh, err := s.groups.SetAvatarShape(ctx, user, convID, req.GetShape(), req.GetColor())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetGroupAvatarShapeResponse{AvatarShape: toAvatarShape(sh)}, nil
+}
+
+func (s *Server) ClearGroupAvatarShape(ctx context.Context, req *conversationv1.ClearGroupAvatarShapeRequest) (*conversationv1.ClearGroupAvatarShapeResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.groups.ClearAvatarShape(ctx, user, convID); err != nil {
+		return nil, err
+	}
+	return &conversationv1.ClearGroupAvatarShapeResponse{}, nil
 }

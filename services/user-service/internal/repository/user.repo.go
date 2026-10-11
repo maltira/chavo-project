@@ -115,11 +115,12 @@ func (r *profileRepository) Update(ctx context.Context, userID uuid.UUID, update
 	return nil
 }
 
-// profileColumns и statusJoin — общие для чтения профиля со статусом; истёкший статус не читается.
+// profileColumns и profileJoins - общие для чтения профиля со статусом и фигурой; истёкший статус не читается
 const (
 	profileColumns = `p.user_id, p.username, p.display_name, p.bio, p.avatar_url, p.last_seen_at, p.created_at, p.updated_at,
-		s.icon, s.text, s.background, s.foreground, s.expires_at`
-	statusJoin = `LEFT JOIN user_statuses s ON s.user_id = p.user_id AND (s.expires_at IS NULL OR s.expires_at > NOW())`
+		s.icon, s.text, s.background, s.foreground, s.expires_at, sh.shape, sh.color`
+	profileJoins = `LEFT JOIN user_statuses s ON s.user_id = p.user_id AND (s.expires_at IS NULL OR s.expires_at > NOW())
+		LEFT JOIN user_avatar_shapes sh ON sh.user_id = p.user_id`
 )
 
 func scanProfile(row pgx.Row) (*models.Profile, error) {
@@ -127,16 +128,20 @@ func scanProfile(row pgx.Row) (*models.Profile, error) {
 		p                          models.Profile
 		stIcon, stText, stBg, stFg *string
 		stExpires                  *time.Time
+		shShape, shColor           *string
 	)
 	if err := row.Scan(
 		&p.UserID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL,
 		&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt,
-		&stIcon, &stText, &stBg, &stFg, &stExpires,
+		&stIcon, &stText, &stBg, &stFg, &stExpires, &shShape, &shColor,
 	); err != nil {
 		return nil, err
 	}
 	if stIcon != nil && stText != nil && stBg != nil && stFg != nil {
 		p.Status = &models.Status{Icon: *stIcon, Text: *stText, Background: *stBg, Foreground: *stFg, ExpiresAt: stExpires}
+	}
+	if shShape != nil && shColor != nil {
+		p.AvatarShape = &models.AvatarShape{Shape: *shShape, Color: *shColor}
 	}
 	return &p, nil
 }
@@ -144,7 +149,7 @@ func scanProfile(row pgx.Row) (*models.Profile, error) {
 func (r *profileRepository) GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+profileColumns+`
-		 FROM profiles p `+statusJoin+`
+		 FROM profiles p `+profileJoins+`
 		 WHERE p.username ILIKE $1 AND p.deleted_at IS NULL
 		 ORDER BY p.username ASC
 		 LIMIT $2 OFFSET $3`,
@@ -169,7 +174,7 @@ func (r *profileRepository) GetAllBySearch(ctx context.Context, query string, li
 func (r *profileRepository) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {
 	p, err := scanProfile(r.pool.QueryRow(ctx,
 		`SELECT `+profileColumns+`
-		 FROM profiles p `+statusJoin+`
+		 FROM profiles p `+profileJoins+`
 		 WHERE p.user_id = $1 AND p.deleted_at IS NULL`,
 		userID,
 	))

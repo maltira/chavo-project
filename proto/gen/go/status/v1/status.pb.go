@@ -22,13 +22,12 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Status — статус пользователя или группы. icon — ключ из фиксированного набора (каталог proto/status, Go);
+// Status — статус пользователя или группы. icon — ключ из фиксированного набора (каталог proto/status);
 // background и foreground (общий цвет текста и иконки) выбирает пользователь, формат #RRGGBB.
 type Status struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Icon  string                 `protobuf:"bytes,1,opt,name=icon,proto3" json:"icon,omitempty"`
-	Text  string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
-	// Не задан — статус без срока.
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Icon          string                 `protobuf:"bytes,1,opt,name=icon,proto3" json:"icon,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	Background    string                 `protobuf:"bytes,4,opt,name=background,proto3" json:"background,omitempty"`
 	Foreground    string                 `protobuf:"bytes,5,opt,name=foreground,proto3" json:"foreground,omitempty"`

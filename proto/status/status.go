@@ -8,11 +8,12 @@ package status
 
 import (
 	"errors"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/maltira/chavo-project-backend/proto/color"
 )
 
 // MaxTextLength — лимит текста статуса в символах (рунах).
@@ -41,8 +42,6 @@ var durations = []Duration{
 	{Key: "7d", Value: 7 * 24 * time.Hour},
 	{Key: "never", Value: 0},
 }
-
-var colorRe = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 // Icons — все иконки в порядке показа
 func Icons() []string { return append([]string(nil), icons...) }
@@ -88,7 +87,9 @@ func Validate(in Input, now time.Time) (Valid, error) {
 	if d == nil {
 		return Valid{}, ErrUnknownDuration
 	}
-	if !colorRe.MatchString(in.Background) || !colorRe.MatchString(in.Foreground) {
+	bg, okBg := color.Normalize(in.Background)
+	fg, okFg := color.Normalize(in.Foreground)
+	if !okBg || !okFg {
 		return Valid{}, ErrInvalidColor
 	}
 
@@ -105,7 +106,7 @@ func Validate(in Input, now time.Time) (Valid, error) {
 		}
 	}
 
-	v := Valid{Icon: in.Icon, Text: text, Background: strings.ToUpper(in.Background), Foreground: strings.ToUpper(in.Foreground)}
+	v := Valid{Icon: in.Icon, Text: text, Background: bg, Foreground: fg}
 	if d.Value != 0 {
 		exp := now.Add(d.Value).UTC()
 		v.ExpiresAt = &exp

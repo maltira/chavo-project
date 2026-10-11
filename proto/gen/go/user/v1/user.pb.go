@@ -7,6 +7,7 @@
 package userv1
 
 import (
+	v11 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
 	v1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -36,7 +37,9 @@ type Profile struct {
 	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt  *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Не задан — статуса нет, он истёк или скрыт от заблокированного.
-	Status        *v1.Status `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
+	Status *v1.Status `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
+	// не задана - фигуры нет или она скрыта от заблокированного
+	AvatarShape   *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,6 +140,13 @@ func (x *Profile) GetUpdatedAt() *timestamppb.Timestamp {
 func (x *Profile) GetStatus() *v1.Status {
 	if x != nil {
 		return x.Status
+	}
+	return nil
+}
+
+func (x *Profile) GetAvatarShape() *v11.AvatarShape {
+	if x != nil {
+		return x.AvatarShape
 	}
 	return nil
 }
@@ -2003,11 +2013,180 @@ func (*ClearStatusResponse) Descriptor() ([]byte, []int) {
 	return file_user_v1_user_proto_rawDescGZIP(), []int{38}
 }
 
+// shape - ключ фигуры из каталога; color - #RRGGBB (обязателен)
+type SetAvatarShapeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Shape         string                 `protobuf:"bytes,1,opt,name=shape,proto3" json:"shape,omitempty"`
+	Color         string                 `protobuf:"bytes,2,opt,name=color,proto3" json:"color,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAvatarShapeRequest) Reset() {
+	*x = SetAvatarShapeRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAvatarShapeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAvatarShapeRequest) ProtoMessage() {}
+
+func (x *SetAvatarShapeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAvatarShapeRequest.ProtoReflect.Descriptor instead.
+func (*SetAvatarShapeRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *SetAvatarShapeRequest) GetShape() string {
+	if x != nil {
+		return x.Shape
+	}
+	return ""
+}
+
+func (x *SetAvatarShapeRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+type SetAvatarShapeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AvatarShape   *v11.AvatarShape       `protobuf:"bytes,1,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAvatarShapeResponse) Reset() {
+	*x = SetAvatarShapeResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAvatarShapeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAvatarShapeResponse) ProtoMessage() {}
+
+func (x *SetAvatarShapeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAvatarShapeResponse.ProtoReflect.Descriptor instead.
+func (*SetAvatarShapeResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *SetAvatarShapeResponse) GetAvatarShape() *v11.AvatarShape {
+	if x != nil {
+		return x.AvatarShape
+	}
+	return nil
+}
+
+type ClearAvatarShapeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearAvatarShapeRequest) Reset() {
+	*x = ClearAvatarShapeRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearAvatarShapeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearAvatarShapeRequest) ProtoMessage() {}
+
+func (x *ClearAvatarShapeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearAvatarShapeRequest.ProtoReflect.Descriptor instead.
+func (*ClearAvatarShapeRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{41}
+}
+
+type ClearAvatarShapeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearAvatarShapeResponse) Reset() {
+	*x = ClearAvatarShapeResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearAvatarShapeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearAvatarShapeResponse) ProtoMessage() {}
+
+func (x *ClearAvatarShapeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearAvatarShapeResponse.ProtoReflect.Descriptor instead.
+func (*ClearAvatarShapeResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{42}
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16status/v1/status.proto\"\xaa\x03\n" +
+	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\xea\x03\n" +
 	"\aProfile\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
@@ -2023,7 +2202,8 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12)\n" +
 	"\x06status\x18\n" +
-	" \x01(\v2\x11.status.v1.StatusR\x06statusB\x06\n" +
+	" \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
+	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShapeB\x06\n" +
 	"\x04_bioB\r\n" +
 	"\v_avatar_url\"\xf7\x01\n" +
 	"\bSettings\x12\x17\n" +
@@ -2153,7 +2333,14 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x11SetStatusResponse\x12)\n" +
 	"\x06status\x18\x01 \x01(\v2\x11.status.v1.StatusR\x06status\"\x14\n" +
 	"\x12ClearStatusRequest\"\x15\n" +
-	"\x13ClearStatusResponse2\xc6\a\n" +
+	"\x13ClearStatusResponse\"C\n" +
+	"\x15SetAvatarShapeRequest\x12\x14\n" +
+	"\x05shape\x18\x01 \x01(\tR\x05shape\x12\x14\n" +
+	"\x05color\x18\x02 \x01(\tR\x05color\"X\n" +
+	"\x16SetAvatarShapeResponse\x12>\n" +
+	"\favatar_shape\x18\x01 \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\"\x19\n" +
+	"\x17ClearAvatarShapeRequest\"\x1a\n" +
+	"\x18ClearAvatarShapeResponse2\xf2\b\n" +
 	"\vUserService\x12N\n" +
 	"\rCreateProfile\x12\x1d.user.v1.CreateProfileRequest\x1a\x1e.user.v1.CreateProfileResponse\x126\n" +
 	"\x05GetMe\x12\x15.user.v1.GetMeRequest\x1a\x16.user.v1.GetMeResponse\x12?\n" +
@@ -2168,7 +2355,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\vGetSettings\x12\x1b.user.v1.GetSettingsRequest\x1a\x1c.user.v1.GetSettingsResponse\x12Q\n" +
 	"\x0eUpdateSettings\x12\x1e.user.v1.UpdateSettingsRequest\x1a\x1f.user.v1.UpdateSettingsResponse\x12B\n" +
 	"\tSetStatus\x12\x19.user.v1.SetStatusRequest\x1a\x1a.user.v1.SetStatusResponse\x12H\n" +
-	"\vClearStatus\x12\x1b.user.v1.ClearStatusRequest\x1a\x1c.user.v1.ClearStatusResponse2\xb1\x03\n" +
+	"\vClearStatus\x12\x1b.user.v1.ClearStatusRequest\x1a\x1c.user.v1.ClearStatusResponse\x12Q\n" +
+	"\x0eSetAvatarShape\x12\x1e.user.v1.SetAvatarShapeRequest\x1a\x1f.user.v1.SetAvatarShapeResponse\x12W\n" +
+	"\x10ClearAvatarShape\x12 .user.v1.ClearAvatarShapeRequest\x1a!.user.v1.ClearAvatarShapeResponse2\xb1\x03\n" +
 	"\x13UserInternalService\x12W\n" +
 	"\x10MessagingAllowed\x12 .user.v1.MessagingAllowedRequest\x1a!.user.v1.MessagingAllowedResponse\x12E\n" +
 	"\n" +
@@ -2190,7 +2379,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                    // 0: user.v1.Profile
 	(*Settings)(nil),                   // 1: user.v1.Settings
@@ -2231,69 +2420,80 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*SetStatusResponse)(nil),          // 36: user.v1.SetStatusResponse
 	(*ClearStatusRequest)(nil),         // 37: user.v1.ClearStatusRequest
 	(*ClearStatusResponse)(nil),        // 38: user.v1.ClearStatusResponse
-	nil,                                // 39: user.v1.PresenceVisibleResponse.VisibleEntry
-	nil,                                // 40: user.v1.PresenceVisibleResponse.LastSeenAtEntry
-	(*timestamppb.Timestamp)(nil),      // 41: google.protobuf.Timestamp
-	(*v1.Status)(nil),                  // 42: status.v1.Status
+	(*SetAvatarShapeRequest)(nil),      // 39: user.v1.SetAvatarShapeRequest
+	(*SetAvatarShapeResponse)(nil),     // 40: user.v1.SetAvatarShapeResponse
+	(*ClearAvatarShapeRequest)(nil),    // 41: user.v1.ClearAvatarShapeRequest
+	(*ClearAvatarShapeResponse)(nil),   // 42: user.v1.ClearAvatarShapeResponse
+	nil,                                // 43: user.v1.PresenceVisibleResponse.VisibleEntry
+	nil,                                // 44: user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	(*timestamppb.Timestamp)(nil),      // 45: google.protobuf.Timestamp
+	(*v1.Status)(nil),                  // 46: status.v1.Status
+	(*v11.AvatarShape)(nil),            // 47: avatarshape.v1.AvatarShape
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	41, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
-	41, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	41, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	42, // 3: user.v1.Profile.status:type_name -> status.v1.Status
-	41, // 4: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
-	41, // 5: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
-	41, // 6: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
-	0,  // 7: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
-	0,  // 8: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
-	0,  // 9: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
-	2,  // 10: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
-	1,  // 11: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
-	39, // 12: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
-	40, // 13: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
-	42, // 14: user.v1.SetStatusResponse.status:type_name -> status.v1.Status
-	41, // 15: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
-	3,  // 16: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
-	5,  // 17: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
-	7,  // 18: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
-	9,  // 19: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	11, // 20: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
-	13, // 21: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
-	15, // 22: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
-	17, // 23: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
-	19, // 24: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
-	21, // 25: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
-	23, // 26: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
-	35, // 27: user.v1.UserService.SetStatus:input_type -> user.v1.SetStatusRequest
-	37, // 28: user.v1.UserService.ClearStatus:input_type -> user.v1.ClearStatusRequest
-	25, // 29: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
-	27, // 30: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
-	29, // 31: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
-	31, // 32: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
-	33, // 33: user.v1.UserInternalService.BlockedIDs:input_type -> user.v1.BlockedIDsRequest
-	4,  // 34: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
-	6,  // 35: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
-	8,  // 36: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
-	10, // 37: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	12, // 38: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
-	14, // 39: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
-	16, // 40: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
-	18, // 41: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
-	20, // 42: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
-	22, // 43: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
-	24, // 44: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
-	36, // 45: user.v1.UserService.SetStatus:output_type -> user.v1.SetStatusResponse
-	38, // 46: user.v1.UserService.ClearStatus:output_type -> user.v1.ClearStatusResponse
-	26, // 47: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
-	28, // 48: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
-	30, // 49: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
-	32, // 50: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
-	34, // 51: user.v1.UserInternalService.BlockedIDs:output_type -> user.v1.BlockedIDsResponse
-	34, // [34:52] is the sub-list for method output_type
-	16, // [16:34] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	45, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
+	45, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	45, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	46, // 3: user.v1.Profile.status:type_name -> status.v1.Status
+	47, // 4: user.v1.Profile.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	45, // 5: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
+	45, // 6: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 7: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
+	0,  // 8: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
+	0,  // 9: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
+	0,  // 10: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
+	2,  // 11: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
+	1,  // 12: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
+	43, // 13: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
+	44, // 14: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	46, // 15: user.v1.SetStatusResponse.status:type_name -> status.v1.Status
+	47, // 16: user.v1.SetAvatarShapeResponse.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	45, // 17: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
+	3,  // 18: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
+	5,  // 19: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
+	7,  // 20: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
+	9,  // 21: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	11, // 22: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
+	13, // 23: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
+	15, // 24: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
+	17, // 25: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
+	19, // 26: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
+	21, // 27: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
+	23, // 28: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
+	35, // 29: user.v1.UserService.SetStatus:input_type -> user.v1.SetStatusRequest
+	37, // 30: user.v1.UserService.ClearStatus:input_type -> user.v1.ClearStatusRequest
+	39, // 31: user.v1.UserService.SetAvatarShape:input_type -> user.v1.SetAvatarShapeRequest
+	41, // 32: user.v1.UserService.ClearAvatarShape:input_type -> user.v1.ClearAvatarShapeRequest
+	25, // 33: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
+	27, // 34: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
+	29, // 35: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
+	31, // 36: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
+	33, // 37: user.v1.UserInternalService.BlockedIDs:input_type -> user.v1.BlockedIDsRequest
+	4,  // 38: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
+	6,  // 39: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
+	8,  // 40: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
+	10, // 41: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	12, // 42: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
+	14, // 43: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
+	16, // 44: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
+	18, // 45: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
+	20, // 46: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
+	22, // 47: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
+	24, // 48: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
+	36, // 49: user.v1.UserService.SetStatus:output_type -> user.v1.SetStatusResponse
+	38, // 50: user.v1.UserService.ClearStatus:output_type -> user.v1.ClearStatusResponse
+	40, // 51: user.v1.UserService.SetAvatarShape:output_type -> user.v1.SetAvatarShapeResponse
+	42, // 52: user.v1.UserService.ClearAvatarShape:output_type -> user.v1.ClearAvatarShapeResponse
+	26, // 53: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
+	28, // 54: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
+	30, // 55: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
+	32, // 56: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
+	34, // 57: user.v1.UserInternalService.BlockedIDs:output_type -> user.v1.BlockedIDsResponse
+	38, // [38:58] is the sub-list for method output_type
+	18, // [18:38] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -2313,7 +2513,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   41,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

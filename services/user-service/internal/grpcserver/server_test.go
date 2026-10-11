@@ -139,6 +139,23 @@ func (r *fakeStatusRepo) Clear(_ context.Context, id uuid.UUID) (bool, error) {
 	return had, nil
 }
 
+// fakeShapeRepo пишет фигуру прямо в профиль fakeProfiles, как fakeStatusRepo
+type fakeShapeRepo struct{ profiles *fakeProfiles }
+
+func (r *fakeShapeRepo) Set(_ context.Context, id uuid.UUID, sh models.AvatarShape) error {
+	p := r.profiles.byID[id]
+	p.AvatarShape = &sh
+	r.profiles.byID[id] = p
+	return nil
+}
+
+func (r *fakeShapeRepo) Clear(_ context.Context, id uuid.UUID) error {
+	p := r.profiles.byID[id]
+	p.AvatarShape = nil
+	r.profiles.byID[id] = p
+	return nil
+}
+
 type deps struct {
 	profiles *fakeProfiles
 	blocks   *fakeBlocks
@@ -160,7 +177,8 @@ func start(t *testing.T, d *deps) (userv1.UserServiceClient, userv1.UserInternal
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(zap.NewNop())))
 	statuses := service.NewStatusService(&fakeStatusRepo{profiles: d.profiles})
-	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, d.presence)
+	shapes := service.NewAvatarShapeService(&fakeShapeRepo{profiles: d.profiles})
+	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, shapes, d.presence)
 	userv1.RegisterUserServiceServer(srv, impl)
 	userv1.RegisterUserInternalServiceServer(srv, impl)
 	go func() { _ = srv.Serve(lis) }()
@@ -436,4 +454,75 @@ func TestStatusSetClearAndBlockHiding(t *testing.T) {
 		t.Fatal(err)
 	}
 
+}
+
+func TestAvatarShapeSetClearAndBlockHiding(t *testing.T) {
+	d := newDeps()
+	owner, blocked, other := uuid.New(), uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{owner, blocked, other} {
+		d.profiles.byID[id] = models.Profile{UserID: id, Username: "u", DisplayName: "U"}
+	}
+	d.blocks.blocked[[2]uuid.UUID{owner, blocked}] = true
+	users, _ := start(t, d)
+
+	set, err := users.SetAvatarShape(as(owner), &userv1.SetAvatarShapeRequest{Shape: "4-leaf-clover", Color: "#34d399"})
+	if err != nil || set.GetAvatarShape().GetShape() != "4-leaf-clover" || set.GetAvatarShape().GetColor() != "#34D399" {
+		t.Fatalf("set: %v %v", set, err)
+	}
+
+	p, _ := users.GetProfile(as(other), &userv1.GetProfileRequest{UserId: owner.String()})
+	if p.GetProfile().GetAvatarShape().GetShape() != "4-leaf-clover" {
+		t.Fatalf("other must see shape: %v", p)
+	}
+	p, _ = users.GetProfile(as(blocked), &userv1.GetProfileRequest{UserId: owner.String()})
+	if p.GetProfile().GetAvatarShape() != nil {
+		t.Fatalf("blocked viewer sees shape: %v", p)
+	}
+	found, _ := users.SearchProfiles(as(blocked), &userv1.SearchProfilesRequest{Query: "u"})
+	for _, f := range found.GetProfiles() {
+		if f.GetUserId() == owner.String() && f.GetAvatarShape() != nil {
+			t.Fatalf("blocked viewer sees shape in search: %v", f)
+		}
+	}
+
+	// новая фигура заменяет прежнюю целиком
+	if set, err = users.SetAvatarShape(as(owner), &userv1.SetAvatarShapeRequest{Shape: "bun", Color: "#000000"}); err != nil || set.GetAvatarShape().GetShape() != "bun" {
+		t.Fatalf("replace: %v %v", set, err)
+	}
+	if me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{}); me.GetProfile().GetAvatarShape().GetColor() != "#000000" {
+		t.Fatalf("own shape: %v", me)
+	}
+
+	for _, req := range []*userv1.SetAvatarShapeRequest{
+		{Shape: "Circle", Color: "#000000"},
+		{Shape: "hexagon", Color: "#000000"},
+		{Shape: "circle"},
+		{Shape: "circle", Color: "black"},
+	} {
+		if _, err := users.SetAvatarShape(as(owner), req); grpcxCode(err) != codes.InvalidArgument {
+			t.Fatalf("%v: %v", req, err)
+		}
+	}
+	if _, err := users.SetAvatarShape(context.Background(), &userv1.SetAvatarShapeRequest{Shape: "circle", Color: "#000000"}); grpcxCode(err) != codes.Unauthenticated {
+		t.Fatalf("anonymous set: %v", err)
+	}
+
+	// фигура, убранная из каталога после установки, читается как отсутствующая
+	p0 := d.profiles.byID[other]
+	p0.AvatarShape = &models.AvatarShape{Shape: "hexagon", Color: "#000000"}
+	d.profiles.byID[other] = p0
+	if p, _ := users.GetProfile(as(owner), &userv1.GetProfileRequest{UserId: other.String()}); p.GetProfile().GetAvatarShape() != nil {
+		t.Fatalf("unknown shape read: %v", p)
+	}
+
+	if _, err := users.ClearAvatarShape(as(owner), &userv1.ClearAvatarShapeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{}); me.GetProfile().GetAvatarShape() != nil {
+		t.Fatal("shape not cleared")
+	}
+	// повторное удаление - не ошибка
+	if _, err := users.ClearAvatarShape(as(owner), &userv1.ClearAvatarShapeRequest{}); err != nil {
+		t.Fatal(err)
+	}
 }

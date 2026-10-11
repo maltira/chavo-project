@@ -30,38 +30,52 @@ type SummaryRecord struct {
 	UnreadCount  int
 }
 
-// conversationColumns и statusJoin — чтение разговора со статусом; истёкший статус не читается.
+// conversationColumns и customJoins - чтение разговора со статусом и фигурой за аватаром; истёкший статус не читается
 const (
+	customColumns       = `cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at, sh.shape, sh.color`
 	conversationColumns = `c.id, c.conversation_type, c.visibility, c.name, c.description, c.avatar_url,
-		c.last_message_at, c.created_at, c.updated_at, cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at`
-	statusJoin = `LEFT JOIN conversation_statuses cs ON cs.conversation_id = c.id AND (cs.expires_at IS NULL OR cs.expires_at > NOW())`
+		c.last_message_at, c.created_at, c.updated_at, ` + customColumns
+	customJoins = `LEFT JOIN conversation_statuses cs ON cs.conversation_id = c.id AND (cs.expires_at IS NULL OR cs.expires_at > NOW())
+		 LEFT JOIN conversation_avatar_shapes sh ON sh.conversation_id = c.id`
 )
 
-type statusCols struct {
+// customCols - nullable-поля статуса и фигуры из customJoins
+type customCols struct {
 	icon, text, bg, fg *string
 	expires            *time.Time
+	shape, color       *string
 }
 
-// dest — поля для Scan в порядке cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at.
-func (s *statusCols) dest() []any { return []any{&s.icon, &s.text, &s.bg, &s.fg, &s.expires} }
+// dest - поля для Scan в порядке customColumns
+func (s *customCols) dest() []any {
+	return []any{&s.icon, &s.text, &s.bg, &s.fg, &s.expires, &s.shape, &s.color}
+}
 
-func (s statusCols) status() *models.Status {
+func (s customCols) status() *models.Status {
 	if s.icon == nil || s.text == nil || s.bg == nil || s.fg == nil {
 		return nil
 	}
 	return &models.Status{Icon: *s.icon, Text: *s.text, Background: *s.bg, Foreground: *s.fg, ExpiresAt: s.expires}
 }
 
+func (s customCols) avatarShape() *models.AvatarShape {
+	if s.shape == nil || s.color == nil {
+		return nil
+	}
+	return &models.AvatarShape{Shape: *s.shape, Color: *s.color}
+}
+
 func scanConversation(row pgx.Row) (*models.Conversation, error) {
 	var (
 		c  models.Conversation
-		st statusCols
+		cu customCols
 	)
 	if err := row.Scan(append([]any{&c.ID, &c.ConversationType, &c.Visibility, &c.Name, &c.Description, &c.AvatarURL,
-		&c.LastMessageAt, &c.CreatedAt, &c.UpdatedAt}, st.dest()...)...); err != nil {
+		&c.LastMessageAt, &c.CreatedAt, &c.UpdatedAt}, cu.dest()...)...); err != nil {
 		return nil, err
 	}
-	c.Status = st.status()
+	c.Status = cu.status()
+	c.AvatarShape = cu.avatarShape()
 	return &c, nil
 }
 
@@ -69,6 +83,9 @@ type ConversationRepository interface {
 	// SetStatus ставит статус группы целиком (прежний заменяется); ClearStatus — false, если статуса не было.
 	SetStatus(ctx context.Context, q DBTX, convID, setBy uuid.UUID, st models.Status) error
 	ClearStatus(ctx context.Context, q DBTX, convID uuid.UUID) (bool, error)
+	// SetAvatarShape ставит фигуру за аватаром группы целиком (прежняя заменяется)
+	SetAvatarShape(ctx context.Context, q DBTX, convID, setBy uuid.UUID, sh models.AvatarShape) error
+	ClearAvatarShape(ctx context.Context, q DBTX, convID uuid.UUID) error
 	CreateDirectIfAbsent(ctx context.Context, q DBTX, directKey string) (id uuid.UUID, created bool, err error)
 	AddMember(ctx context.Context, q DBTX, convID, userID uuid.UUID, role string) error
 	Access(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*Access, error)
@@ -207,7 +224,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 	rows, err := q.Query(ctx,
 		`SELECT c.id, c.conversation_type, c.visibility, c.name, c.description, c.avatar_url,
 		        c.last_message_at, c.created_at, c.updated_at,
-		        cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at,
+		        `+customColumns+`,
 		        cm.member_role, peer.user_id,
 		        lm.id, lm.sender_id, lm.content_enc, lm.reply_to_message_id, lm.is_edited,
 		        lm.created_at, lm.updated_at, lm.deleted_at,
@@ -217,7 +234,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id)))
 		 FROM conversation_members cm
 		 JOIN conversations c ON c.id = cm.conversation_id
-		 `+statusJoin+`
+		 `+customJoins+`
 		 LEFT JOIN messages rm ON rm.id = cm.last_read_message_id
 		 LEFT JOIN conversation_members peer
 		        ON c.conversation_type = 'direct' AND peer.conversation_id = c.id AND peer.user_id <> $1
@@ -243,21 +260,22 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			lmEnc                           []byte
 			lmEdited                        *bool
 			lmCreated, lmUpdated, lmDeleted *time.Time
-			st                              statusCols
+			cu                              customCols
 		)
 		dest := []any{
 			&s.Conversation.ID, &s.Conversation.ConversationType, &s.Conversation.Visibility,
 			&s.Conversation.Name, &s.Conversation.Description, &s.Conversation.AvatarURL,
 			&s.Conversation.LastMessageAt, &s.Conversation.CreatedAt, &s.Conversation.UpdatedAt,
 		}
-		dest = append(dest, st.dest()...)
+		dest = append(dest, cu.dest()...)
 		dest = append(dest, &s.MyRole, &s.PeerID,
 			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmCreated, &lmUpdated, &lmDeleted,
 			&s.UnreadCount)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
-		s.Conversation.Status = st.status()
+		s.Conversation.Status = cu.status()
+		s.Conversation.AvatarShape = cu.avatarShape()
 		if lmID != nil {
 			s.LastMessage = &MessageRecord{
 				ID: *lmID, ConversationID: s.Conversation.ID, SenderID: *lmSender,
@@ -271,10 +289,10 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 }
 
 func (r *conversationRepository) Lock(ctx context.Context, q DBTX, convID uuid.UUID) (*models.Conversation, error) {
-	// OF c: строка статуса — nullable-сторона LEFT JOIN, блокируется только разговор.
+	// OF c: строки статуса и фигуры - nullable-сторона LEFT JOIN, блокируется только разговор
 	c, err := scanConversation(q.QueryRow(ctx,
 		`SELECT `+conversationColumns+`
-		 FROM conversations c `+statusJoin+`
+		 FROM conversations c `+customJoins+`
 		 WHERE c.id = $1 FOR UPDATE OF c`, convID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -431,7 +449,7 @@ func (r *conversationRepository) AdminIDs(ctx context.Context, q DBTX, convID uu
 func (r *conversationRepository) FindByInviteHash(ctx context.Context, q DBTX, hash string) (*models.Conversation, error) {
 	c, err := scanConversation(q.QueryRow(ctx,
 		`SELECT `+conversationColumns+`
-		 FROM conversations c `+statusJoin+`
+		 FROM conversations c `+customJoins+`
 		 WHERE c.invite_token_hash = $1 AND c.conversation_type = 'group' AND c.visibility = 'private'`, hash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -450,8 +468,8 @@ func (r *conversationRepository) SearchPublicGroups(ctx context.Context, q DBTX,
 		`SELECT c.id, c.name, c.description, c.avatar_url,
 		        (SELECT COUNT(*) FROM conversation_members m WHERE m.conversation_id = c.id),
 		        EXISTS (SELECT 1 FROM conversation_members m WHERE m.conversation_id = c.id AND m.user_id = $1),
-		        cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at
-		 FROM conversations c `+statusJoin+`
+		        `+customColumns+`
+		 FROM conversations c `+customJoins+`
 		 WHERE c.conversation_type = 'group' AND c.visibility = 'public' AND c.name ILIKE $2
 		 ORDER BY c.name, c.id
 		 LIMIT $3 OFFSET $4`,
@@ -466,13 +484,14 @@ func (r *conversationRepository) SearchPublicGroups(ctx context.Context, q DBTX,
 	for rows.Next() {
 		var (
 			g  models.PublicGroup
-			st statusCols
+			cu customCols
 		)
 		if err := rows.Scan(append([]any{&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.MembersCount, &g.IsMember},
-			st.dest()...)...); err != nil {
+			cu.dest()...)...); err != nil {
 			return nil, fmt.Errorf("scan group: %w", err)
 		}
-		g.Status = st.status()
+		g.Status = cu.status()
+		g.AvatarShape = cu.avatarShape()
 		res = append(res, g)
 	}
 	return res, rows.Err()
@@ -523,4 +542,24 @@ func (r *conversationRepository) ClearStatus(ctx context.Context, q DBTX, convID
 		return false, fmt.Errorf("clear group status: %w", err)
 	}
 	return ct.RowsAffected() > 0, nil
+}
+
+func (r *conversationRepository) SetAvatarShape(ctx context.Context, q DBTX, convID, setBy uuid.UUID, sh models.AvatarShape) error {
+	if _, err := q.Exec(ctx,
+		`INSERT INTO conversation_avatar_shapes (conversation_id, shape, color, set_by, set_at)
+		 VALUES ($1, $2, $3, $4, NOW())
+		 ON CONFLICT (conversation_id) DO UPDATE
+		   SET shape = EXCLUDED.shape, color = EXCLUDED.color, set_by = EXCLUDED.set_by, set_at = NOW()`,
+		convID, sh.Shape, sh.Color, setBy,
+	); err != nil {
+		return fmt.Errorf("set group avatar shape: %w", err)
+	}
+	return nil
+}
+
+func (r *conversationRepository) ClearAvatarShape(ctx context.Context, q DBTX, convID uuid.UUID) error {
+	if _, err := q.Exec(ctx, `DELETE FROM conversation_avatar_shapes WHERE conversation_id = $1`, convID); err != nil {
+		return fmt.Errorf("clear group avatar shape: %w", err)
+	}
+	return nil
 }

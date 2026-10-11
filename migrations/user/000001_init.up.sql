@@ -46,3 +46,10 @@ CREATE TABLE IF NOT EXISTS user_statuses (
     expires_at TIMESTAMPTZ,
     set_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS user_avatar_shapes (
+    user_id UUID PRIMARY KEY REFERENCES profiles(user_id) ON DELETE CASCADE,
+    shape   VARCHAR(32) NOT NULL,
+    color   CHAR(7)     NOT NULL,
+    set_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

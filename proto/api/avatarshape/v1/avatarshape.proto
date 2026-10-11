@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package avatarshape.v1;
+
+option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1;avatarshapev1";
+
+// AvatarShape - фигура позади аватара: shape - ключ из фиксированного набора (каталог proto/avatarshape),
+// color - цвет фигуры, выбранный пользователем (#RRGGBB)
+message AvatarShape {
+  string shape = 1;
+  string color = 2;
+}

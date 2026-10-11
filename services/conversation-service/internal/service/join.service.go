@@ -74,6 +74,7 @@ func (s *joinService) InviteInfo(ctx context.Context, userID uuid.UUID, token st
 		IsMember:       isMember,
 		RequestStatus:  pending,
 		Status:         conv.Status,
+		AvatarShape:    conv.AvatarShape,
 	}, nil
 }
 

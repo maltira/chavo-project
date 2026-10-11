@@ -17,6 +17,8 @@ type Profile struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"-"`
 	Status      *Status    `json:"status,omitempty"`
+	// AvatarShape - фигура позади аватара; nil - фигуры нет
+	AvatarShape *AvatarShape `json:"avatar_shape,omitempty"`
 }
 
 type Status struct {
@@ -32,4 +34,9 @@ type PresenceBatchRow struct {
 	UserID           uuid.UUID
 	LastSeenAt       time.Time
 	ShowOnlineStatus bool
+}
+
+type AvatarShape struct {
+	Shape string
+	Color string
 }

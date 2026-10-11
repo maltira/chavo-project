@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/maltira/chavo-project-backend/proto/avatarshape"
+	avatarshapev1 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
 	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
@@ -105,7 +107,16 @@ func toConversation(c *models.Conversation) *conversationv1.Conversation {
 		CreatedAt:        ts(c.CreatedAt),
 		UpdatedAt:        ts(c.UpdatedAt),
 		Status:           toStatus(c.Status),
+		AvatarShape:      toAvatarShape(c.AvatarShape),
 	}
+}
+
+// toAvatarShape - фигура, убранная из каталога после установки, считается отсутствующей
+func toAvatarShape(sh *models.AvatarShape) *avatarshapev1.AvatarShape {
+	if sh == nil || !avatarshape.Known(sh.Shape) {
+		return nil
+	}
+	return &avatarshapev1.AvatarShape{Shape: sh.Shape, Color: sh.Color}
 }
 
 // toStatus: иконка, убранная из каталога после установки, — отсутствие статуса.

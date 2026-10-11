@@ -3,6 +3,7 @@ syntax = "proto3";
 package conversation.v1;
 
 import "google/protobuf/timestamp.proto";
+import "avatarshape/v1/avatarshape.proto";
 import "status/v1/status.proto";
 
 option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1;conversationv1";
@@ -18,6 +19,9 @@ service ConversationService {
   // SetGroupStatus — только админ группы; ставит новый статус целиком, прежний заменяется.
   rpc SetGroupStatus(SetGroupStatusRequest) returns (SetGroupStatusResponse);
   rpc ClearGroupStatus(ClearGroupStatusRequest) returns (ClearGroupStatusResponse);
+  // SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
+  rpc SetGroupAvatarShape(SetGroupAvatarShapeRequest) returns (SetGroupAvatarShapeResponse);
+  rpc ClearGroupAvatarShape(ClearGroupAvatarShapeRequest) returns (ClearGroupAvatarShapeResponse);
   // DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
@@ -64,6 +68,8 @@ message Conversation {
   google.protobuf.Timestamp updated_at = 9;
   // Только у групп; не задан — статуса нет или он истёк.
   status.v1.Status status = 10;
+  // только у групп; не задана - фигуры нет
+  avatarshape.v1.AvatarShape avatar_shape = 11;
 }
 
 // Message — расшифрованное сообщение; content отсутствует у удалённых.
@@ -119,6 +125,7 @@ message InviteInfo {
   bool is_member = 6;
   optional string request_status = 7;
   status.v1.Status status = 8;
+  avatarshape.v1.AvatarShape avatar_shape = 9;
 }
 
 message PublicGroup {
@@ -129,6 +136,7 @@ message PublicGroup {
   int32 members_count = 5;
   bool is_member = 6;
   status.v1.Status status = 7; 
+  avatarshape.v1.AvatarShape avatar_shape = 8;
 }
 
 message ListConversationsRequest {
@@ -368,3 +376,17 @@ message ClearGroupStatusRequest {
   string conversation_id = 1;
 }
 message ClearGroupStatusResponse {}
+
+message SetGroupAvatarShapeRequest {
+  string conversation_id = 1;
+  string shape = 2;
+  // #RRGGBB
+  string color = 3;
+}
+message SetGroupAvatarShapeResponse {
+  avatarshape.v1.AvatarShape avatar_shape = 1;
+}
+message ClearGroupAvatarShapeRequest {
+  string conversation_id = 1;
+}
+message ClearGroupAvatarShapeResponse {}

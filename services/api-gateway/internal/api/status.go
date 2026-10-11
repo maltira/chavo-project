@@ -33,22 +33,6 @@ func toStatus(s *statusv1.Status) *statusJSON {
 	}
 }
 
-type statusCatalogJSON struct {
-	Icons     []string `json:"icons"`
-	Durations []string `json:"durations"`
-}
-
-// listStatuses — GET /api/statuses: набор иконок и сроков отдаётся как есть, без вызова сервисов.
-func (h *Handler) listStatuses(c *gin.Context) {
-	durations := status.Durations()
-	keys := make([]string, len(durations))
-	for i, d := range durations {
-		keys[i] = d.Key
-	}
-	c.Header("Cache-Control", "public, max-age=3600")
-	c.JSON(http.StatusOK, statusCatalogJSON{Icons: status.Icons(), Durations: keys})
-}
-
 // setStatusBody: все поля обязательны; цвета — #RRGGBB.
 type setStatusBody struct {
 	Icon       string `json:"icon"`

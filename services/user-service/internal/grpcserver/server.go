@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/maltira/chavo-project-backend/proto/avatarshape"
+	avatarshapev1 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
 	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
@@ -27,12 +29,21 @@ type Server struct {
 	blocks   service.BlockService
 	settings service.SettingsService
 	statuses service.StatusService
+	shapes   service.AvatarShapeService
 	presence presence.Checker
 }
 
 func New(profiles service.ProfileService, blocks service.BlockService, settings service.SettingsService,
-	statuses service.StatusService, presence presence.Checker) *Server {
-	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, presence: presence}
+	statuses service.StatusService, shapes service.AvatarShapeService, presence presence.Checker) *Server {
+	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, shapes: shapes, presence: presence}
+}
+
+// avatarShapeToProto - фигура, убранная из каталога после установки, считается отсутствующей
+func avatarShapeToProto(sh *models.AvatarShape) *avatarshapev1.AvatarShape {
+	if sh == nil || !avatarshape.Known(sh.Shape) {
+		return nil
+	}
+	return &avatarshapev1.AvatarShape{Shape: sh.Shape, Color: sh.Color}
 }
 
 // statusToProto: иконка, убранная из каталога после установки, — отсутствие статуса.
@@ -74,7 +85,7 @@ func clamp(v int32, def, max int) int {
 func ts(t time.Time) *timestamppb.Timestamp { return timestamppb.New(t) }
 
 // profilesToProto: онлайн и last_seen_at видны другим только при show_online_status; self видит всё своё.
-// Тому, кого владелец заблокировал, не отдаются аватар, статус, онлайн и last_seen_at (имя, username и bio остаются).
+// Тому, кого владелец заблокировал, не отдаются аватар, фигура за аватаром, статус, онлайн и last_seen_at (имя, username и bio остаются).
 func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []models.Profile) ([]*userv1.Profile, error) {
 	ids := make([]uuid.UUID, len(items))
 	for i := range items {
@@ -109,6 +120,7 @@ func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []
 		if !hidden {
 			out.AvatarUrl = p.AvatarURL
 			out.Status = statusToProto(p.Status)
+			out.AvatarShape = avatarShapeToProto(p.AvatarShape)
 		}
 		if show {
 			out.Online = online[p.UserID]
@@ -495,4 +507,27 @@ func (s *Server) ClearStatus(ctx context.Context, _ *userv1.ClearStatusRequest) 
 		return nil, err
 	}
 	return &userv1.ClearStatusResponse{}, nil
+}
+
+func (s *Server) SetAvatarShape(ctx context.Context, req *userv1.SetAvatarShapeRequest) (*userv1.SetAvatarShapeResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sh, err := s.shapes.Set(ctx, userID, req.GetShape(), req.GetColor())
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.SetAvatarShapeResponse{AvatarShape: avatarShapeToProto(sh)}, nil
+}
+
+func (s *Server) ClearAvatarShape(ctx context.Context, _ *userv1.ClearAvatarShapeRequest) (*userv1.ClearAvatarShapeResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.shapes.Clear(ctx, userID); err != nil {
+		return nil, err
+	}
+	return &userv1.ClearAvatarShapeResponse{}, nil
 }

@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	authv1 "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1"
+	avatarshapev1 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
 	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
@@ -173,6 +174,18 @@ func (u *fakeUsers) SetStatus(_ context.Context, req *userv1.SetStatusRequest) (
 
 func (u *fakeUsers) ClearStatus(context.Context, *userv1.ClearStatusRequest) (*userv1.ClearStatusResponse, error) {
 	return &userv1.ClearStatusResponse{}, nil
+}
+
+// SetAvatarShape проверяет только ключ (полная проверка - в user-service) и возвращает фигуру как есть
+func (u *fakeUsers) SetAvatarShape(_ context.Context, req *userv1.SetAvatarShapeRequest) (*userv1.SetAvatarShapeResponse, error) {
+	if req.GetShape() != "bun" {
+		return nil, grpcx.Error(codes.InvalidArgument, "AVATAR_SHAPE_INVALID", "Неизвестная фигура")
+	}
+	return &userv1.SetAvatarShapeResponse{AvatarShape: &avatarshapev1.AvatarShape{Shape: req.GetShape(), Color: req.GetColor()}}, nil
+}
+
+func (u *fakeUsers) ClearAvatarShape(context.Context, *userv1.ClearAvatarShapeRequest) (*userv1.ClearAvatarShapeResponse, error) {
+	return &userv1.ClearAvatarShapeResponse{}, nil
 }
 
 func (u *fakeUsers) SearchProfiles(context.Context, *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
@@ -676,16 +689,21 @@ func TestRateLimitPerUser(t *testing.T) {
 func TestStatusEndpoints(t *testing.T) {
 	e := newEnv(t)
 
-	// Каталог публичный и кешируемый: типы с визуалом и сроки.
-	w := e.do(http.MethodGet, "/api/statuses", "", "")
+	// каталог публичный и кешируемый: иконки и сроки статусов, фигуры
+	w := e.do(http.MethodGet, "/api/customization", "", "")
 	if w.Code != http.StatusOK || !strings.Contains(w.Header().Get("Cache-Control"), "max-age") {
 		t.Fatalf("catalog: %d %v", w.Code, w.Header())
 	}
 	cat := decode(t, w)
-	icons, _ := cat["icons"].([]any)
-	durations, _ := cat["durations"].([]any)
-	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 {
+	st, _ := cat["status"].(map[string]any)
+	icons, _ := st["icons"].([]any)
+	durations, _ := st["durations"].([]any)
+	shapes, _ := cat["avatar_shapes"].([]any)
+	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" {
 		t.Fatalf("catalog content: %v", cat)
+	}
+	if w := e.do(http.MethodGet, "/api/statuses", "", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("old catalog route: %d", w.Code)
 	}
 
 	// Без профиля поставить статус нельзя.
@@ -698,7 +716,7 @@ func TestStatusEndpoints(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("set: %d %s", w.Code, w.Body.String())
 	}
-	st := decode(t, w)
+	st = decode(t, w)
 	if st["icon"] != "shine" || st["text"] != "Отдыхаю" || st["background"] != "#34D399" || st["foreground"] != "#064E3B" {
 		t.Fatalf("status: %v", st)
 	}
@@ -712,6 +730,32 @@ func TestStatusEndpoints(t *testing.T) {
 	}
 	// PUT не поддерживается: статус только ставится заново или удаляется.
 	if w := e.do(http.MethodPut, "/api/users/me/status", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT: %d", w.Code)
+	}
+}
+
+func TestAvatarShapeEndpoints(t *testing.T) {
+	e := newEnv(t)
+
+	_, noProfile := e.login(t, false)
+	expect(t, e.do(http.MethodPost, "/api/users/me/avatar-shape", noProfile, `{"shape":"bun","color":"#000000"}`),
+		http.StatusForbidden, "PROFILE_REQUIRED")
+
+	_, tok := e.login(t, true)
+	w := e.do(http.MethodPost, "/api/users/me/avatar-shape", tok, `{"shape":"bun","color":"#34D399"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("set: %d %s", w.Code, w.Body.String())
+	}
+	if sh := decode(t, w); sh["shape"] != "bun" || sh["color"] != "#34D399" {
+		t.Fatalf("shape: %v", sh)
+	}
+	expect(t, e.do(http.MethodPost, "/api/users/me/avatar-shape", tok, `{"shape":"hexagon","color":"#000000"}`),
+		http.StatusBadRequest, "AVATAR_SHAPE_INVALID")
+	if w := e.do(http.MethodDelete, "/api/users/me/avatar-shape", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+	// PUT не поддерживается: фигура только ставится заново или удаляется
+	if w := e.do(http.MethodPut, "/api/users/me/avatar-shape", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT: %d", w.Code)
 	}
 }

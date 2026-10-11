@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/status"
 )
 
 var (
@@ -41,7 +43,13 @@ func HTTPCode(err error) int {
 		errors.Is(err, ErrNoColumnsToUpdate),
 		errors.Is(err, ErrInvalidUsername),
 		errors.Is(err, ErrInvalidDisplayName),
-		errors.Is(err, ErrInvalidBio):
+		errors.Is(err, ErrInvalidBio),
+		errors.Is(err, status.ErrUnknownIcon),
+		errors.Is(err, status.ErrUnknownDuration),
+		errors.Is(err, status.ErrInvalidText),
+		errors.Is(err, status.ErrInvalidColor),
+		errors.Is(err, avatarshape.ErrUnknownShape),
+		errors.Is(err, avatarshape.ErrInvalidColor):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -76,6 +84,18 @@ func UserMessage(err error) string {
 		return "Отображаемое имя должно содержать от 1 до 100 символов"
 	case errors.Is(err, ErrInvalidBio):
 		return "Описание должно содержать не более 255 символов"
+	case errors.Is(err, avatarshape.ErrUnknownShape):
+		return "Неизвестная фигура"
+	case errors.Is(err, avatarshape.ErrInvalidColor):
+		return "Цвет фигуры задаётся в формате #RRGGBB"
+	case errors.Is(err, status.ErrUnknownIcon):
+		return "Неизвестная иконка статуса"
+	case errors.Is(err, status.ErrInvalidColor):
+		return "Цвета статуса задаются в формате #RRGGBB"
+	case errors.Is(err, status.ErrUnknownDuration):
+		return "Неизвестный срок статуса"
+	case errors.Is(err, status.ErrInvalidText):
+		return "Текст статуса — от 1 до 70 символов в одну строку"
 	default:
 		return "Внутренняя ошибка сервера"
 	}
@@ -90,6 +110,18 @@ func Reason(err error) string {
 		return "USERNAME_TAKEN"
 	case errors.Is(err, ErrNotFound):
 		return "NOT_FOUND"
+	case errors.Is(err, avatarshape.ErrUnknownShape):
+		return "AVATAR_SHAPE_INVALID"
+	case errors.Is(err, avatarshape.ErrInvalidColor):
+		return "AVATAR_SHAPE_COLOR_INVALID"
+	case errors.Is(err, status.ErrUnknownIcon):
+		return "STATUS_ICON_INVALID"
+	case errors.Is(err, status.ErrInvalidColor):
+		return "STATUS_COLOR_INVALID"
+	case errors.Is(err, status.ErrUnknownDuration):
+		return "STATUS_DURATION_INVALID"
+	case errors.Is(err, status.ErrInvalidText):
+		return "STATUS_TEXT_INVALID"
 	default:
 		return ""
 	}

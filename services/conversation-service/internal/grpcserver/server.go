@@ -5,6 +5,7 @@ import (
 	"context"
 
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
+	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
 )
 
@@ -74,6 +75,8 @@ func (s *Server) SearchPublicGroups(ctx context.Context, req *conversationv1.Sea
 			AvatarUrl:    g.AvatarURL,
 			MembersCount: int32(g.MembersCount),
 			IsMember:     g.IsMember,
+			Status:       toStatus(g.Status),
+			AvatarShape:  toAvatarShape(g.AvatarShape),
 		}
 	}
 	return &conversationv1.SearchPublicGroupsResponse{Items: out, Limit: int32(limit), Offset: int32(offset)}, nil
@@ -287,6 +290,8 @@ func (s *Server) GetInviteInfo(ctx context.Context, req *conversationv1.GetInvit
 		MembersCount:   int32(info.MembersCount),
 		IsMember:       info.IsMember,
 		RequestStatus:  info.RequestStatus,
+		Status:         toStatus(info.Status),
+		AvatarShape:    toAvatarShape(info.AvatarShape),
 	}}, nil
 }
 
@@ -532,4 +537,69 @@ func (s *Server) ListDirectPeers(ctx context.Context, req *conversationv1.ListDi
 		return nil, err
 	}
 	return &conversationv1.ListDirectPeersResponse{UserIds: strs(ids)}, nil
+}
+
+func (s *Server) SetGroupStatus(ctx context.Context, req *conversationv1.SetGroupStatusRequest) (*conversationv1.SetGroupStatusResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.groups.SetStatus(ctx, user, convID, status.Input{
+		Icon: req.GetIcon(), Text: req.GetText(), Background: req.GetBackground(), Foreground: req.GetForeground(),
+		Duration: req.GetDuration(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetGroupStatusResponse{Status: toStatus(st)}, nil
+}
+
+func (s *Server) ClearGroupStatus(ctx context.Context, req *conversationv1.ClearGroupStatusRequest) (*conversationv1.ClearGroupStatusResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.groups.ClearStatus(ctx, user, convID); err != nil {
+		return nil, err
+	}
+	return &conversationv1.ClearGroupStatusResponse{}, nil
+}
+
+func (s *Server) SetGroupAvatarShape(ctx context.Context, req *conversationv1.SetGroupAvatarShapeRequest) (*conversationv1.SetGroupAvatarShapeResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	sh, err := s.groups.SetAvatarShape(ctx, user, convID, req.GetShape(), req.GetColor())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetGroupAvatarShapeResponse{AvatarShape: toAvatarShape(sh)}, nil
+}
+
+func (s *Server) ClearGroupAvatarShape(ctx context.Context, req *conversationv1.ClearGroupAvatarShapeRequest) (*conversationv1.ClearGroupAvatarShapeResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.groups.ClearAvatarShape(ctx, user, convID); err != nil {
+		return nil, err
+	}
+	return &conversationv1.ClearGroupAvatarShapeResponse{}, nil
 }

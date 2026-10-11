@@ -3,6 +3,8 @@ syntax = "proto3";
 package user.v1;
 
 import "google/protobuf/timestamp.proto";
+import "avatarshape/v1/avatarshape.proto";
+import "status/v1/status.proto";
 
 option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1;userv1";
 
@@ -21,6 +23,14 @@ service UserService {
 
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+
+  // SetStatus ставит новый статус целиком (прежний заменяется); редактировать установленный нельзя.
+  rpc SetStatus(SetStatusRequest) returns (SetStatusResponse);
+  rpc ClearStatus(ClearStatusRequest) returns (ClearStatusResponse);
+
+  // SetAvatarShape ставит фигуру позади аватара целиком (прежняя заменяется); редактировать нельзя
+  rpc SetAvatarShape(SetAvatarShapeRequest) returns (SetAvatarShapeResponse);
+  rpc ClearAvatarShape(ClearAvatarShapeRequest) returns (ClearAvatarShapeResponse);
 }
 
 // Вызовы между сервисами; Gateway их наружу не открывает.
@@ -30,6 +40,8 @@ service UserInternalService {
   rpc GroupInviteAllowed(GroupInviteAllowedRequest) returns (GroupInviteAllowedResponse);
   // PresenceVisible: можно ли показывать онлайн пользователя другим (show_online_status).
   rpc PresenceVisible(PresenceVisibleRequest) returns (PresenceVisibleResponse);
+  // BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
+  rpc BlockedIDs(BlockedIDsRequest) returns (BlockedIDsResponse);
 }
 
 message Profile {
@@ -43,6 +55,10 @@ message Profile {
   bool online = 7;
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
+  // Не задан — статуса нет, он истёк или скрыт от заблокированного.
+  status.v1.Status status = 10;
+  // не задана - фигуры нет или она скрыта от заблокированного
+  avatarshape.v1.AvatarShape avatar_shape = 11;
 }
 
 message Settings {
@@ -166,6 +182,8 @@ message PresenceVisibleRequest {
   repeated string user_ids = 1;
   // with_last_seen — вернуть и last_seen_at (снимок presence для клиента).
   bool with_last_seen = 2;
+  // viewer_id — для кого снимок: владельцы, заблокировавшие viewer, для него не видны.
+  optional string viewer_id = 3;
 }
 message PresenceVisibleResponse {
   // user_id → виден ли онлайн другим; отсутствующие пользователи не попадают в ответ.
@@ -173,3 +191,36 @@ message PresenceVisibleResponse {
   // Только при with_last_seen и только для видимых пользователей.
   map<string, google.protobuf.Timestamp> last_seen_at = 2;
 }
+
+message BlockedIDsRequest {
+  string user_id = 1;
+}
+message BlockedIDsResponse {
+  repeated string user_ids = 1;
+}
+
+// icon — ключ иконки из каталога; background и foreground — #RRGGBB (обязательны);
+// duration — ключ срока: 1h, 4h, 24h, 7d, never.
+message SetStatusRequest {
+  string icon = 1;
+  string text = 2;
+  string background = 3;
+  string foreground = 4;
+  string duration = 5;
+}
+message SetStatusResponse {
+  status.v1.Status status = 1;
+}
+message ClearStatusRequest {}
+message ClearStatusResponse {}
+
+// shape - ключ фигуры из каталога; color - #RRGGBB (обязателен)
+message SetAvatarShapeRequest {
+  string shape = 1;
+  string color = 2;
+}
+message SetAvatarShapeResponse {
+  avatarshape.v1.AvatarShape avatar_shape = 1;
+}
+message ClearAvatarShapeRequest {}
+message ClearAvatarShapeResponse {}

@@ -230,3 +230,18 @@ func TestWatchers(t *testing.T) {
 		t.Fatal("closed connection subscribed")
 	}
 }
+
+func TestSendToWatchersExcept(t *testing.T) {
+	h := New(newRegistry(), zap.NewNop())
+	friend := register(t, h, "s1:a", "friend", "s1")
+	blocked := register(t, h, "s2:a", "blocked", "s2")
+	for _, c := range []*Conn{friend, blocked} {
+		if err := h.Subscribe(c, []string{"owner"}, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.SendToWatchersExcept("owner", []byte("m"), map[string]bool{"blocked": true})
+	if len(friend.Send()) != 1 || len(blocked.Send()) != 0 {
+		t.Fatalf("friend %d, blocked %d", len(friend.Send()), len(blocked.Send()))
+	}
+}

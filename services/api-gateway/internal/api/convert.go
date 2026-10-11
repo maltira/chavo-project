@@ -56,6 +56,9 @@ type profileJSON struct {
 	Online     bool       `json:"online"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
+	// Status = null, если статуса нет, он истёк или скрыт от заблокированного.
+	Status      *statusJSON      `json:"status"`
+	AvatarShape *avatarShapeJSON `json:"avatar_shape"`
 }
 
 func toProfile(p *userv1.Profile) profileJSON {
@@ -69,6 +72,8 @@ func toProfile(p *userv1.Profile) profileJSON {
 		Online:      p.GetOnline(),
 		CreatedAt:   p.GetCreatedAt().AsTime(),
 		UpdatedAt:   p.GetUpdatedAt().AsTime(),
+		Status:      toStatus(p.GetStatus()),
+		AvatarShape: toAvatarShape(p.GetAvatarShape()),
 	}
 }
 
@@ -118,6 +123,10 @@ type conversationJSON struct {
 	LastMessageAt    time.Time `json:"last_message_at"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	// Status — только у групп; null, если статуса нет или он истёк.
+	Status *statusJSON `json:"status"`
+	// AvatarShape - только у групп; null, если фигуры нет
+	AvatarShape *avatarShapeJSON `json:"avatar_shape"`
 }
 
 func toConversation(c *conversationv1.Conversation) conversationJSON {
@@ -131,6 +140,8 @@ func toConversation(c *conversationv1.Conversation) conversationJSON {
 		LastMessageAt:    c.GetLastMessageAt().AsTime(),
 		CreatedAt:        c.GetCreatedAt().AsTime(),
 		UpdatedAt:        c.GetUpdatedAt().AsTime(),
+		Status:           toStatus(c.GetStatus()),
+		AvatarShape:      toAvatarShape(c.GetAvatarShape()),
 	}
 }
 
@@ -236,13 +247,15 @@ func toJoinRequest(r *conversationv1.JoinRequest) joinRequestJSON {
 }
 
 type inviteInfoJSON struct {
-	ConversationID string  `json:"conversation_id"`
-	Name           *string `json:"name"`
-	Description    *string `json:"description"`
-	AvatarURL      *string `json:"avatar_url"`
-	MembersCount   int32   `json:"members_count"`
-	IsMember       bool    `json:"is_member"`
-	RequestStatus  *string `json:"request_status"`
+	ConversationID string           `json:"conversation_id"`
+	Name           *string          `json:"name"`
+	Description    *string          `json:"description"`
+	AvatarURL      *string          `json:"avatar_url"`
+	MembersCount   int32            `json:"members_count"`
+	IsMember       bool             `json:"is_member"`
+	RequestStatus  *string          `json:"request_status"`
+	Status         *statusJSON      `json:"status"`
+	AvatarShape    *avatarShapeJSON `json:"avatar_shape"`
 }
 
 func toInviteInfo(i *conversationv1.InviteInfo) inviteInfoJSON {
@@ -254,16 +267,20 @@ func toInviteInfo(i *conversationv1.InviteInfo) inviteInfoJSON {
 		MembersCount:   i.GetMembersCount(),
 		IsMember:       i.GetIsMember(),
 		RequestStatus:  i.RequestStatus,
+		Status:         toStatus(i.GetStatus()),
+		AvatarShape:    toAvatarShape(i.GetAvatarShape()),
 	}
 }
 
 type publicGroupJSON struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Description  *string `json:"description"`
-	AvatarURL    *string `json:"avatar_url"`
-	MembersCount int32   `json:"members_count"`
-	IsMember     bool    `json:"is_member"`
+	ID           string           `json:"id"`
+	Name         string           `json:"name"`
+	Description  *string          `json:"description"`
+	AvatarURL    *string          `json:"avatar_url"`
+	MembersCount int32            `json:"members_count"`
+	IsMember     bool             `json:"is_member"`
+	Status       *statusJSON      `json:"status"`
+	AvatarShape  *avatarShapeJSON `json:"avatar_shape"`
 }
 
 func toPublicGroup(g *conversationv1.PublicGroup) publicGroupJSON {
@@ -274,6 +291,8 @@ func toPublicGroup(g *conversationv1.PublicGroup) publicGroupJSON {
 		AvatarURL:    g.AvatarUrl,
 		MembersCount: g.GetMembersCount(),
 		IsMember:     g.GetIsMember(),
+		Status:       toStatus(g.GetStatus()),
+		AvatarShape:  toAvatarShape(g.GetAvatarShape()),
 	}
 }
 

@@ -204,6 +204,135 @@ func TestScenario(t *testing.T) {
 			"message.deleted → B")
 	})
 
+	// статус и фигура пользователя - только через REST; от заблокированного скрыты вместе с аватаром и онлайном
+	step(t, "user status, avatar shape and block hiding", false, func(t *testing.T) {
+		body := func(icon, text, bg, fg, duration string) map[string]string {
+			return map[string]string{"icon": icon, "text": text, "background": bg, "foreground": fg, "duration": duration}
+		}
+		statusOf := func(u *user) map[string]any {
+			r := u.dev.do(t, "GET", "/api/users/"+a.id, nil)
+			st, _ := r.body["status"].(map[string]any)
+			return st
+		}
+		r := a.dev.do(t, "GET", "/api/customization", nil)
+		cat, _ := r.body["status"].(map[string]any)
+		icons, _ := cat["icons"].([]any)
+		shapes, _ := r.body["avatar_shapes"].([]any)
+		check(t, r.status == 200 && len(icons) == 6 && len(shapes) == 27, "customization catalog: %d %s", r.status, r.raw)
+
+		r = a.dev.do(t, "PATCH", "/api/users/me", map[string]string{"avatar_url": "https://example.com/e2e.png"})
+		check(t, r.status == 200, "set avatar: %d %s", r.status, r.raw)
+
+		for _, ws := range []*wsConn{bw, cw, tab2} {
+			ws.drain()
+		}
+		r = a.dev.do(t, "POST", "/api/users/me/status", body("shine", "Сегодня отдыхаю", "#34d399", "#064E3B", "4h"))
+		check(t, r.status == 201 && r.body["icon"] == "shine" && r.body["background"] == "#34D399" && r.body["expires_at"] != nil,
+			"set status: %d %s", r.status, r.raw)
+		st := statusOf(b)
+		check(t, st["icon"] == "shine" && st["text"] == "Сегодня отдыхаю" && st["foreground"] == "#064E3B", "profile status: %v", st)
+		me := a.dev.do(t, "GET", "/api/users/me", nil)
+		check(t, me.body["status"] != nil, "own status: %s", me.raw)
+		// по WebSocket статус не рассылается: клиенты увидят его при следующей загрузке профиля
+		for _, ws := range []*wsConn{bw, cw, tab2} {
+			check(t, ws.wait("user.status.updated", time.Second) == nil, "%s got user.status.updated", ws.name)
+		}
+
+		r = a.dev.do(t, "POST", "/api/users/me/status", body("party", "x", "#000000", "#FFFFFF", "1h"))
+		check(t, r.status == 400 && r.body["reason"] == "STATUS_ICON_INVALID", "unknown icon: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/users/me/status", body("heart", "x", "red", "#FFFFFF", "1h"))
+		check(t, r.status == 400 && r.body["reason"] == "STATUS_COLOR_INVALID", "bad color: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/users/me/status", body("heart", strings.Repeat("я", 71), "#000000", "#FFFFFF", "1h"))
+		check(t, r.status == 400 && r.body["reason"] == "STATUS_TEXT_INVALID", "long text: %d %s", r.status, r.raw)
+
+		r = a.dev.do(t, "POST", "/api/users/me/avatar-shape", map[string]string{"shape": "4-leaf-clover", "color": "#34d399"})
+		check(t, r.status == 201 && r.body["shape"] == "4-leaf-clover" && r.body["color"] == "#34D399", "set shape: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/users/me/avatar-shape", map[string]string{"shape": "hexagon", "color": "#000000"})
+		check(t, r.status == 400 && r.body["reason"] == "AVATAR_SHAPE_INVALID", "unknown shape: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/users/me/avatar-shape", map[string]string{"shape": "circle", "color": "red"})
+		check(t, r.status == 400 && r.body["reason"] == "AVATAR_SHAPE_COLOR_INVALID", "bad shape color: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
+		sh, _ := r.body["avatar_shape"].(map[string]any)
+		check(t, sh["shape"] == "4-leaf-clover" && sh["color"] == "#34D399", "profile shape: %s", r.raw)
+
+		// A блокирует C: C больше не видит у A аватар, онлайн и статус
+		r = a.dev.do(t, "POST", "/api/users/"+c.id+"/block", nil)
+		check(t, r.status == 200 || r.status == 201, "block: %d %s", r.status, r.raw)
+		r = c.dev.do(t, "GET", "/api/users/"+a.id, nil)
+		check(t, r.body["status"] == nil && r.body["avatar_url"] == nil && r.body["avatar_shape"] == nil && r.body["online"] == false &&
+			r.body["username"] == a.username, "blocked viewer sees: %s", r.raw)
+		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
+		check(t, r.body["status"] != nil && r.body["avatar_url"] != nil && r.body["avatar_shape"] != nil && r.body["online"] == true,
+			"other viewer lost fields: %s", r.raw)
+
+		// новый статус заменяет прежний целиком
+		r = a.dev.do(t, "POST", "/api/users/me/status", body("moon", "Ночь", "#312E81", "#E0E7FF", "never"))
+		check(t, r.status == 201 && r.body["expires_at"] == nil, "replace status: %d %s", r.status, r.raw)
+		st = statusOf(b)
+		check(t, st["icon"] == "moon" && st["background"] == "#312E81" && st["expires_at"] == nil, "replaced status: %v", st)
+		check(t, statusOf(c) == nil, "blocked C sees replaced status")
+
+		r = a.dev.do(t, "DELETE", "/api/users/"+c.id+"/block", nil)
+		check(t, r.status == 200, "unblock: %d %s", r.status, r.raw)
+		check(t, statusOf(c) != nil, "unblocked C must see status again")
+		r = a.dev.do(t, "DELETE", "/api/users/me/avatar-shape", nil)
+		check(t, r.status == 200, "clear shape: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
+		check(t, r.body["avatar_shape"] == nil, "shape after clear: %s", r.raw)
+		r = a.dev.do(t, "DELETE", "/api/users/me/status", nil)
+		check(t, r.status == 200, "clear status: %d %s", r.status, r.raw)
+		check(t, statusOf(b) == nil, "status after clear")
+	})
+
+	// статус и фигуру группы ставит только админ; участники видят их в карточке, событий нет
+	step(t, "group status and avatar shape", false, func(t *testing.T) {
+		r := a.dev.do(t, "POST", "/api/conversations", map[string]any{
+			"name": "e2e-group-" + w.run, "visibility": "private", "member_ids": []string{b.id},
+		})
+		if r.status != 201 {
+			t.Fatalf("create group: %d %s", r.status, r.raw)
+		}
+		groupID, _ := r.body["id"].(string)
+		check(t, r.body["status"] == nil, "new group has a status: %s", r.raw)
+
+		groupBody := func(icon, text, duration string) map[string]string {
+			return map[string]string{"icon": icon, "text": text, "background": "#F59E0B", "foreground": "#451A03", "duration": duration}
+		}
+		r = b.dev.do(t, "POST", "/api/conversations/"+groupID+"/status", groupBody("heart", "x", "1h"))
+		check(t, r.status == 403, "member sets group status: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/conversations/"+convID+"/status", groupBody("heart", "x", "1h"))
+		check(t, r.status == 403, "direct status: %d %s", r.status, r.raw)
+
+		bw.drain()
+		r = a.dev.do(t, "POST", "/api/conversations/"+groupID+"/status", groupBody("ok", "Читаем правила", "24h"))
+		check(t, r.status == 201 && r.body["icon"] == "ok" && r.body["foreground"] == "#451A03", "set group status: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/conversations/"+groupID, nil)
+		st, _ := r.body["status"].(map[string]any)
+		check(t, st["text"] == "Читаем правила" && st["background"] == "#F59E0B", "group card status: %s", r.raw)
+		check(t, bw.waitWhere("conversation.updated", time.Second, func(f frame) bool { return f.data()["conversation_id"] == groupID }) == nil,
+			"group status change must not be pushed over WS")
+
+		r = a.dev.do(t, "DELETE", "/api/conversations/"+groupID+"/status", nil)
+		check(t, r.status == 200, "clear group status: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/conversations/"+groupID, nil)
+		check(t, r.body["status"] == nil, "group status after clear: %s", r.raw)
+
+		shapeBody := map[string]string{"shape": "soft-boom", "color": "#F59E0B"}
+		r = b.dev.do(t, "POST", "/api/conversations/"+groupID+"/avatar-shape", shapeBody)
+		check(t, r.status == 403, "member sets group shape: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/conversations/"+convID+"/avatar-shape", shapeBody)
+		check(t, r.status == 403, "direct shape: %d %s", r.status, r.raw)
+		r = a.dev.do(t, "POST", "/api/conversations/"+groupID+"/avatar-shape", shapeBody)
+		check(t, r.status == 201 && r.body["shape"] == "soft-boom", "set group shape: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/conversations/"+groupID, nil)
+		sh, _ := r.body["avatar_shape"].(map[string]any)
+		check(t, sh["shape"] == "soft-boom" && sh["color"] == "#F59E0B", "group card shape: %s", r.raw)
+		r = a.dev.do(t, "DELETE", "/api/conversations/"+groupID+"/avatar-shape", nil)
+		check(t, r.status == 200, "clear group shape: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/conversations/"+groupID, nil)
+		check(t, r.body["avatar_shape"] == nil, "group shape after clear: %s", r.raw)
+	})
+
 	step(t, "presence offline and last_seen_at", false, func(t *testing.T) {
 		r := a.dev.do(t, "GET", "/api/users/"+b.id, nil)
 		seenBefore, _ := r.body["last_seen_at"].(string)

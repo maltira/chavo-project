@@ -18,6 +18,9 @@ type BlockService interface {
 	GetBlockStatus(ctx context.Context, myID, targetID uuid.UUID) (blockedByMe, blockedByThem bool, err error)
 	BlockUser(ctx context.Context, myID, targetID uuid.UUID) error
 	UnblockUser(ctx context.Context, myID, targetID uuid.UUID) error
+	// BlockedBy — кто из ownerIDs заблокировал viewer: от него скрываются аватар, онлайн и статус владельца.
+	BlockedBy(ctx context.Context, viewer uuid.UUID, ownerIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	BlockedIDs(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error)
 }
 
 type blockService struct {
@@ -36,6 +39,14 @@ func (s *blockService) GetBlockedUsers(ctx context.Context, userID uuid.UUID, li
 
 func (s *blockService) GetBlockStatus(ctx context.Context, myID, targetID uuid.UUID) (blockedByMe, blockedByThem bool, err error) {
 	return s.repo.CheckBlockBidirectional(ctx, myID, targetID)
+}
+
+func (s *blockService) BlockedBy(ctx context.Context, viewer uuid.UUID, ownerIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	return s.repo.BlockedBy(ctx, viewer, ownerIDs)
+}
+
+func (s *blockService) BlockedIDs(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error) {
+	return s.repo.BlockedIDs(ctx, owner)
 }
 
 func (s *blockService) BlockUser(ctx context.Context, myID, targetID uuid.UUID) error {

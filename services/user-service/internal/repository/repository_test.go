@@ -173,6 +173,18 @@ func TestBlocks(t *testing.T) {
 		t.Fatalf("blocked list: %+v %v", list, err)
 	}
 
+	by, err := repo.BlockedBy(ctx, b, []uuid.UUID{a, c})
+	if err != nil || len(by) != 1 || !by[a] {
+		t.Fatalf("blocked by: %v %v", by, err)
+	}
+	if by, _ := repo.BlockedBy(ctx, b, nil); len(by) != 0 {
+		t.Fatal("empty owners")
+	}
+	ids, err := repo.BlockedIDs(ctx, a)
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("blocked ids: %v %v", ids, err)
+	}
+
 	if err := repo.UnblockUser(ctx, a, b); err != nil {
 		t.Fatal(err)
 	}
@@ -181,5 +193,128 @@ func TestBlocks(t *testing.T) {
 	}
 	if list, _ := repo.GetBlockedUsers(ctx, a, 10, 0); len(list) != 1 || list[0].BlockedUserID != c {
 		t.Fatalf("after unblock: %+v", list)
+	}
+}
+
+func TestStatuses(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	profiles := repository.NewProfileRepository(pool)
+	statuses := repository.NewStatusRepository(pool)
+	ctx := context.Background()
+	id := createProfile(t, pool, "st_a")
+	other := createProfile(t, pool, "st_b")
+
+	if p, _ := profiles.FindByID(ctx, id); p.Status != nil {
+		t.Fatal("new profile has a status")
+	}
+	exp := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
+	if err := statuses.Set(ctx, id, models.Status{Icon: "shine", Text: "Отдыхаю", Background: "#34D399", Foreground: "#064E3B", ExpiresAt: &exp}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := profiles.FindByID(ctx, id)
+	if err != nil || p.Status == nil || p.Status.Icon != "shine" || p.Status.Text != "Отдыхаю" || p.Status.Background != "#34D399" || p.Status.Foreground != "#064E3B" || !p.Status.ExpiresAt.Equal(exp) {
+		t.Fatalf("status: %+v %v", p, err)
+	}
+
+	// Установка заменяет статус целиком.
+	if err := statuses.Set(ctx, id, models.Status{Icon: "moon", Text: "Ночь", Background: "#312E81", Foreground: "#E0E7FF"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.Status.Icon != "moon" || p.Status.Background != "#312E81" || p.Status.ExpiresAt != nil {
+		t.Fatalf("replace: %+v", p.Status)
+	}
+
+	// Истёкший статус не читается ни в профиле, ни в поиске.
+	past := time.Now().Add(-time.Minute)
+	if err := statuses.Set(ctx, other, models.Status{Icon: "heart", Text: "был", Background: "#F43F5E", Foreground: "#FFFFFF", ExpiresAt: &past}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, other); p.Status != nil {
+		t.Fatalf("expired status read: %+v", p.Status)
+	}
+	found, err := profiles.GetAllBySearch(ctx, "st_", 10, 0)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("search: %v %v", found, err)
+	}
+	for _, f := range found {
+		if (f.UserID == id) != (f.Status != nil) {
+			t.Fatalf("search status for %s: %+v", f.Username, f.Status)
+		}
+	}
+
+	if removed, err := statuses.Clear(ctx, id); err != nil || !removed {
+		t.Fatalf("clear: %v %v", removed, err)
+	}
+	if removed, _ := statuses.Clear(ctx, id); removed {
+		t.Fatal("second clear reported a removal")
+	}
+
+	// Статус удаляется вместе с профилем.
+	if _, err := pool.Exec(ctx, `DELETE FROM profiles WHERE user_id = $1`, other); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_statuses WHERE user_id = $1`, other).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("cascade: %d %v", n, err)
+	}
+}
+
+func TestAvatarShapes(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	profiles := repository.NewProfileRepository(pool)
+	shapes := repository.NewAvatarShapeRepository(pool)
+	ctx := context.Background()
+	id := createProfile(t, pool, "sh_a")
+	other := createProfile(t, pool, "sh_b")
+
+	if p, _ := profiles.FindByID(ctx, id); p.AvatarShape != nil {
+		t.Fatal("new profile has a shape")
+	}
+	if err := shapes.Set(ctx, id, models.AvatarShape{Shape: "4-leaf-clover", Color: "#34D399"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := profiles.FindByID(ctx, id)
+	if err != nil || p.AvatarShape == nil || p.AvatarShape.Shape != "4-leaf-clover" || p.AvatarShape.Color != "#34D399" {
+		t.Fatalf("shape: %+v %v", p, err)
+	}
+
+	// установка заменяет фигуру целиком
+	if err := shapes.Set(ctx, id, models.AvatarShape{Shape: "bun", Color: "#000000"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.AvatarShape.Shape != "bun" || p.AvatarShape.Color != "#000000" {
+		t.Fatalf("replace: %+v", p.AvatarShape)
+	}
+
+	found, err := profiles.GetAllBySearch(ctx, "sh_", 10, 0)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("search: %v %v", found, err)
+	}
+	for _, f := range found {
+		if (f.UserID == id) != (f.AvatarShape != nil) {
+			t.Fatalf("search shape for %s: %+v", f.Username, f.AvatarShape)
+		}
+	}
+
+	if err := shapes.Clear(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.AvatarShape != nil {
+		t.Fatalf("not cleared: %+v", p.AvatarShape)
+	}
+	if err := shapes.Clear(ctx, id); err != nil {
+		t.Fatalf("second clear: %v", err)
+	}
+
+	// фигура удаляется вместе с профилем
+	if err := shapes.Set(ctx, other, models.AvatarShape{Shape: "circle", Color: "#FFFFFF"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM profiles WHERE user_id = $1`, other); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_avatar_shapes WHERE user_id = $1`, other).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("cascade: %d %v", n, err)
 	}
 }

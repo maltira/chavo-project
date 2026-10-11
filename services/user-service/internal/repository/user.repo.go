@@ -115,12 +115,43 @@ func (r *profileRepository) Update(ctx context.Context, userID uuid.UUID, update
 	return nil
 }
 
+// profileColumns и profileJoins - общие для чтения профиля со статусом и фигурой; истёкший статус не читается
+const (
+	profileColumns = `p.user_id, p.username, p.display_name, p.bio, p.avatar_url, p.last_seen_at, p.created_at, p.updated_at,
+		s.icon, s.text, s.background, s.foreground, s.expires_at, sh.shape, sh.color`
+	profileJoins = `LEFT JOIN user_statuses s ON s.user_id = p.user_id AND (s.expires_at IS NULL OR s.expires_at > NOW())
+		LEFT JOIN user_avatar_shapes sh ON sh.user_id = p.user_id`
+)
+
+func scanProfile(row pgx.Row) (*models.Profile, error) {
+	var (
+		p                          models.Profile
+		stIcon, stText, stBg, stFg *string
+		stExpires                  *time.Time
+		shShape, shColor           *string
+	)
+	if err := row.Scan(
+		&p.UserID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL,
+		&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt,
+		&stIcon, &stText, &stBg, &stFg, &stExpires, &shShape, &shColor,
+	); err != nil {
+		return nil, err
+	}
+	if stIcon != nil && stText != nil && stBg != nil && stFg != nil {
+		p.Status = &models.Status{Icon: *stIcon, Text: *stText, Background: *stBg, Foreground: *stFg, ExpiresAt: stExpires}
+	}
+	if shShape != nil && shColor != nil {
+		p.AvatarShape = &models.AvatarShape{Shape: *shShape, Color: *shColor}
+	}
+	return &p, nil
+}
+
 func (r *profileRepository) GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT user_id, username, display_name, bio, avatar_url, last_seen_at, created_at, updated_at
-		 FROM profiles
-		 WHERE username ILIKE $1 AND deleted_at IS NULL
-		 ORDER BY username ASC
+		`SELECT `+profileColumns+`
+		 FROM profiles p `+profileJoins+`
+		 WHERE p.username ILIKE $1 AND p.deleted_at IS NULL
+		 ORDER BY p.username ASC
 		 LIMIT $2 OFFSET $3`,
 		query+"%", limit, offset,
 	)
@@ -131,36 +162,29 @@ func (r *profileRepository) GetAllBySearch(ctx context.Context, query string, li
 
 	profiles := make([]models.Profile, 0)
 	for rows.Next() {
-		var p models.Profile
-		if err := rows.Scan(
-			&p.UserID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL,
-			&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
+		p, err := scanProfile(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan profile row: %w", err)
 		}
-		profiles = append(profiles, p)
+		profiles = append(profiles, *p)
 	}
 	return profiles, nil
 }
 
 func (r *profileRepository) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {
-	var p models.Profile
-	err := r.pool.QueryRow(ctx,
-		`SELECT user_id, username, display_name, bio, avatar_url, last_seen_at, created_at, updated_at
-		 FROM profiles
-		 WHERE user_id = $1 AND deleted_at IS NULL`,
+	p, err := scanProfile(r.pool.QueryRow(ctx,
+		`SELECT `+profileColumns+`
+		 FROM profiles p `+profileJoins+`
+		 WHERE p.user_id = $1 AND p.deleted_at IS NULL`,
 		userID,
-	).Scan(
-		&p.UserID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL,
-		&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt,
-	)
+	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.ErrNotFound
 		}
 		return nil, fmt.Errorf("find profile by id: %w", err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 func (r *profileRepository) UsernameExists(ctx context.Context, username string) (bool, error) {

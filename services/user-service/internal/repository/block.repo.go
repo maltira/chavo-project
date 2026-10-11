@@ -17,6 +17,10 @@ type BlockRepository interface {
 	CheckBlockBidirectional(ctx context.Context, userA, userB uuid.UUID) (blockedByA, blockedByB bool, err error)
 	BlockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error
 	UnblockUser(ctx context.Context, userID, blockedUserID uuid.UUID) error
+	// BlockedBy — кто из ownerIDs заблокировал viewer.
+	BlockedBy(ctx context.Context, viewer uuid.UUID, ownerIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	// BlockedIDs — кого заблокировал owner.
+	BlockedIDs(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error)
 }
 
 type blockRepository struct {
@@ -103,4 +107,42 @@ func (r *blockRepository) UnblockUser(ctx context.Context, userID, blockedUserID
 		return apperror.ErrNotFound
 	}
 	return nil
+}
+
+func (r *blockRepository) BlockedBy(ctx context.Context, viewer uuid.UUID, ownerIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	res := make(map[uuid.UUID]bool)
+	if len(ownerIDs) == 0 {
+		return res, nil
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id FROM user_blocks WHERE blocked_user_id = $1 AND user_id = ANY($2)`, viewer, ownerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("blocked by: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan blocked by: %w", err)
+		}
+		res[id] = true
+	}
+	return res, rows.Err()
+}
+
+func (r *blockRepository) BlockedIDs(ctx context.Context, owner uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.pool.Query(ctx, `SELECT blocked_user_id FROM user_blocks WHERE user_id = $1`, owner)
+	if err != nil {
+		return nil, fmt.Errorf("blocked ids: %w", err)
+	}
+	defer rows.Close()
+	res := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan blocked id: %w", err)
+		}
+		res = append(res, id)
+	}
+	return res, rows.Err()
 }

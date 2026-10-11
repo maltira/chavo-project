@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS conversation_avatar_shapes;
+DROP TABLE IF EXISTS conversation_statuses;
 DROP TABLE IF EXISTS outbox_events;
 DROP TABLE IF EXISTS conversation_join_requests;
 DROP TABLE IF EXISTS conversation_bans;

@@ -125,6 +125,9 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	pub.POST("/reset/request", h.requestReset)
 	pub.POST("/reset/confirm", h.confirmReset)
 
+	// каталог кастомизации публичный: иконки и сроки статусов, фигуры за аватаром
+	api.GET("/customization", h.customization)
+
 	// Авторизованные, профиль не нужен: управление аккаунтом и создание профиля.
 	authed := api.Group("", middleware.Authenticate(d.Verifier, d.Log))
 	sendLimit := []gin.HandlerFunc{}
@@ -146,6 +149,10 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	p.GET("/users/me/blocked", h.listBlocked)
 	p.GET("/users/me/settings", h.getSettings)
 	p.PATCH("/users/me/settings", h.updateSettings)
+	p.POST("/users/me/status", h.setMyStatus)
+	p.DELETE("/users/me/status", h.clearMyStatus)
+	p.POST("/users/me/avatar-shape", h.setMyAvatarShape)
+	p.DELETE("/users/me/avatar-shape", h.clearMyAvatarShape)
 	p.GET("/users/:user_id", h.getProfile)
 	p.GET("/users/:user_id/block-status", h.blockStatus)
 	p.POST("/users/:user_id/block", h.block)
@@ -158,6 +165,10 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.GET("/:id", h.getConversation)
 	conv.PATCH("/:id", h.updateGroup)
 	conv.DELETE("/:id", h.deleteConversation)
+	conv.POST("/:id/status", h.setGroupStatus)
+	conv.DELETE("/:id/status", h.clearGroupStatus)
+	conv.POST("/:id/avatar-shape", h.setGroupAvatarShape)
+	conv.DELETE("/:id/avatar-shape", h.clearGroupAvatarShape)
 	conv.POST("/:id/join", h.joinGroup)
 	conv.POST("/:id/invite-link/regenerate", h.regenerateInvite)
 	conv.POST("/:id/join-requests", h.requestJoin)

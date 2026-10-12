@@ -11,7 +11,6 @@
     border: 1px solid var(--color-bg-muted);
     border-radius: $radius-md;
     background-color: var(--color-bg-secondary);
-    outline: none;
 
     transition: $transition-fast;
 
@@ -27,6 +26,10 @@
     &:hover,
     &:focus {
         background-color: var(--color-bg-tertiary);
+    }
+
+    &[aria-invalid='true'] {
+        border-color: var(--color-danger);
     }
 
     &:disabled {

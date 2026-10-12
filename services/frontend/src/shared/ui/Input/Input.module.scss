@@ -28,8 +28,7 @@
     color: var(--color-text);
     border-radius: $radius-md;
     background-color: var(--color-bg-tertiary);
-    outline: none;
-    border: none;
+    border: 1px solid transparent;
 
     transition: $transition-fast;
 
@@ -40,6 +39,11 @@
     &:hover,
     &:focus-within {
         background-color: var(--color-bg-muted);
+    }
+
+    // состояние ошибки задаёт aria-invalid
+    &[aria-invalid='true'] {
+        border-color: var(--color-danger);
     }
 }
 

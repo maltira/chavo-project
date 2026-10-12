@@ -1,0 +1,50 @@
+// полный оборот всей фигуры; кадры внутри меняются независимо, поэтому форма «перетекает» на ходу
+$spin-duration: 1200ms;
+
+// кадры лежат стопкой в одной ячейке, виден только активный
+.root {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+
+    animation: spin $spin-duration linear infinite;
+}
+
+// слой с кадрами: без контейнера занимает весь блок, с контейнером лежит внутри круга
+.shapes {
+    position: absolute;
+    inset: 0;
+}
+
+.withContainer {
+    border-radius: $radius-full;
+    background-color: var(--color-accent);
+
+    .shapes {
+        inset: 5%; // отступ фигуры от края круга-контейнера
+    }
+}
+
+.frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+
+    opacity: 0;
+    transform: scale(0.25);
+    transition:
+        opacity 360ms ease,
+        transform 360ms ease;
+
+    &[data-active='true'] {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

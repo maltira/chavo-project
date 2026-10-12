@@ -47,4 +47,9 @@ describe('Input', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Показать' }))
         expect(onSubmit).not.toHaveBeenCalled()
     })
+
+    it('marks an error with aria-invalid on the field', () => {
+        render(<Input aria-label="Почта" aria-invalid />)
+        expect(screen.getByLabelText('Почта')).toHaveAttribute('aria-invalid', 'true')
+    })
 })

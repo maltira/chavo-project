@@ -1,5 +1,5 @@
 import styles from './HomePage.module.scss'
-import { Button, IconButton, Input, InputCode, Switch, Tag } from '@/shared/ui'
+import { Button, Field, IconButton, Input, InputCode, Loader, Switch, Tag } from '@/shared/ui'
 
 export function HomePage() {
     return (
@@ -24,6 +24,12 @@ export function HomePage() {
             <Switch aria-label="" />
 
             <Tag variant="muted">99+</Tag>
+
+            <Loader />
+
+            <Field label="Электронная почта" hint='сука введи почту'>
+                {(props) => <Input {...props} placeholder="example@gmail.com" />}
+            </Field>
         </main>
     )
 }

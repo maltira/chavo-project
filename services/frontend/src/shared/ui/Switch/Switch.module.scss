@@ -1,0 +1,84 @@
+$width: 32px;
+$height: 18px;
+$thumb: 14px;
+// во сколько раз ползунок растягивается по x в момент нажатия
+$thumb-stretch: 1.6;
+// путь ползунка от левого края до правого
+$travel: $width - $thumb - 2 * 2;
+// сдвиг растянутого включённого ползунка: правый край остаётся на месте, поэтому он едет меньше
+$travel-stretched: $travel - $thumb * ($thumb-stretch - 1);
+
+.root {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    width: $width;
+    height: $height;
+
+    &.disabled {
+        opacity: 0.3;
+        pointer-events: none;
+    }
+}
+
+.input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+
+    &:hover + .track {
+        background-color: var(--color-bg-tertiary);
+    }
+
+    &:focus-visible + .track {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    &:checked + .track,
+    &:checked:hover + .track {
+        background-color: var(--color-accent);
+    }
+
+    &:active + .track .thumb {
+        border-radius: 6px;
+        transform: translateX(0) scaleX($thumb-stretch);
+    }
+
+    &:checked + .track .thumb {
+        transform: translateX($travel) scaleX(1);
+    }
+
+    &:checked:active + .track .thumb {
+        transform: translateX($travel-stretched) scaleX($thumb-stretch);
+    }
+}
+
+.track {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 0 2px;
+    border-radius: $radius-full;
+    background-color: var(--color-bg-secondary);
+    pointer-events: none;
+
+    transition: $transition-fast;
+}
+
+.thumb {
+    width: $thumb;
+    height: $thumb;
+
+    border-radius: $radius-md;
+    background-color: var(--color-text);
+
+    transform-origin: left center;
+    transform: translateX(0) scaleX(1);
+    transition: transform $transition-fast;
+}

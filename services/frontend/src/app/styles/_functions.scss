@@ -1,0 +1,9 @@
+@use 'sass:math';
+
+@function alpha($color, $value) {
+    @if $value < 0 or $value >1 {
+        @error 'alpha() ждёт число от 0 до 1, получено #{$value}';
+    }
+
+    @return color-mix(in srgb, #{$color} #{math.percentage($value)}, transparent);
+}

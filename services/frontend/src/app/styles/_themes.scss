@@ -1,7 +1,8 @@
 @use 'sass:map';
 
 $themes: (
-    dark: (bg-primary: #141413,
+    dark: (
+        bg-primary: #141413,
         bg-secondary: #1b1b1a,
         bg-tertiary: #222222,
         bg-muted: #2a2a2a,
@@ -9,10 +10,11 @@ $themes: (
         accent: #d97757,
         danger: #ff8787,
     ),
-    light: (bg-primary: #faf9f5,
+    light: (
+        bg-primary: #faf9f5,
         bg-secondary: #f0eee6,
         bg-tertiary: #ffffff,
-        bg-muted: #e8e6dc,
+        bg-muted: #f0f0f0,
         text: #141413,
         accent: #d97757,
         danger: #c0392b,
@@ -34,11 +36,3 @@ $themes: (
 :root[data-theme='light'] {
     @include theme-vars(map.get($themes, light));
 }
-
-$radius-sm: 4px;
-$radius-md: 12px;
-$radius-lg: 16px;
-$radius-xl: 24px;
-$radius-full: 9999px;
-
-$drop-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.1);

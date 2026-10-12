@@ -1,0 +1,36 @@
+.input {
+    @include type(h5-inter-medium);
+
+    width: 48px;
+    height: 48px;
+
+    color: var(--color-text);
+    text-align: center;
+    caret-color: var(--color-accent);
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-md;
+    background-color: var(--color-bg-secondary);
+    outline: none;
+
+    transition: $transition-fast;
+
+    &::placeholder {
+        color: alpha(var(--color-text), 0.4);
+        transition: $transition-fast;
+    }
+
+    &:focus::placeholder {
+        color: transparent;
+    }
+
+    &:hover,
+    &:focus {
+        background-color: var(--color-bg-tertiary);
+    }
+
+    &:disabled {
+        opacity: 0.3;
+        pointer-events: none;
+    }
+}

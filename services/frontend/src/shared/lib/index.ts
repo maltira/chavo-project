@@ -1,2 +1,1 @@
-// public api сегмента - экспорты добавляются по мере появления кода
-export {}
+export { cn } from './utils'

@@ -2,32 +2,92 @@
 
 // семейства: Lora - заголовки, Inter 18pt - интерфейс
 $font-serif: 'Lora', serif;
-$font-sans: 'Inter', sans-serif;
+$font-sans: 'Inter 18pt', sans-serif;
 
 $typography: (
-  h1-lora-regular: (family: $font-serif, weight: 400, size: 42px, line-height: 1, letter-spacing: -0.02em),
-  h4-lora-medium: (family: $font-serif, weight: 500, size: 22px, line-height: 1.2, letter-spacing: 0),
-  h5-lora-medium: (family: $font-serif, weight: 500, size: 20px, line-height: 1, letter-spacing: 0),
-  h5-inter-regular: (family: $font-sans, weight: 400, size: 20px, line-height: 1.1, letter-spacing: 0),
-  h5-inter-medium: (family: $font-sans, weight: 500, size: 20px, line-height: 1, letter-spacing: 0),
-  main-regular: (family: $font-sans, weight: 400, size: 16px, line-height: 1.2, letter-spacing: 0),
-  button-medium: (family: $font-sans, weight: 500, size: 16px, line-height: 1, letter-spacing: 0),
-  tag-regular: (family: $font-sans, weight: 400, size: 14px, line-height: 1.2, letter-spacing: 0),
-  tag-medium: (family: $font-sans, weight: 500, size: 14px, line-height: 1.2, letter-spacing: 0),
-  xs-regular: (family: $font-sans, weight: 400, size: 12px, line-height: 1.2, letter-spacing: 0),
+    h1-lora-regular: (
+        family: $font-serif,
+        weight: 400,
+        size: 42px,
+        line-height: 1,
+        letter-spacing: -0.02em,
+    ),
+    h4-lora-medium: (
+        family: $font-serif,
+        weight: 500,
+        size: 22px,
+        line-height: 1.2,
+        letter-spacing: 0,
+    ),
+    h5-lora-medium: (
+        family: $font-serif,
+        weight: 500,
+        size: 20px,
+        line-height: 1,
+        letter-spacing: 0,
+    ),
+    h5-inter-regular: (
+        family: $font-sans,
+        weight: 400,
+        size: 20px,
+        line-height: 1.1,
+        letter-spacing: 0,
+    ),
+    h5-inter-medium: (
+        family: $font-sans,
+        weight: 500,
+        size: 20px,
+        line-height: 1,
+        letter-spacing: 0,
+    ),
+    main-regular: (
+        family: $font-sans,
+        weight: 400,
+        size: 16px,
+        line-height: 1.2,
+        letter-spacing: 0,
+    ),
+    button-medium: (
+        family: $font-sans,
+        weight: 500,
+        size: 16px,
+        line-height: 1,
+        letter-spacing: 0,
+    ),
+    tag-regular: (
+        family: $font-sans,
+        weight: 400,
+        size: 14px,
+        line-height: 1.2,
+        letter-spacing: 0,
+    ),
+    tag-medium: (
+        family: $font-sans,
+        weight: 500,
+        size: 14px,
+        line-height: 1.2,
+        letter-spacing: 0,
+    ),
+    xs-regular: (
+        family: $font-sans,
+        weight: 400,
+        size: 12px,
+        line-height: 1.2,
+        letter-spacing: 0,
+    ),
 );
 
 // применяет стиль из $typography: @include type(main-regular);
 @mixin type($style) {
-  $s: map.get($typography, $style);
+    $s: map.get($typography, $style);
 
-  @if $s ==null {
-    @error 'unknown text style: #{$style}';
-  }
+    @if $s ==null {
+        @error 'unknown text style: #{$style}';
+    }
 
-  font-family: map.get($s, family);
-  font-size: map.get($s, size);
-  font-weight: map.get($s, weight);
-  line-height: map.get($s, line-height);
-  letter-spacing: map.get($s, letter-spacing);
+    font-family: map.get($s, family);
+    font-size: map.get($s, size);
+    font-weight: map.get($s, weight);
+    line-height: map.get($s, line-height);
+    letter-spacing: map.get($s, letter-spacing);
 }

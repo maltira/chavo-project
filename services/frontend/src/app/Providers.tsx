@@ -5,9 +5,9 @@ import { queryClient } from './lib/queryClient'
 import { router } from './lib/router'
 
 export function Providers() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  )
+    return (
+        <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+        </QueryClientProvider>
+    )
 }

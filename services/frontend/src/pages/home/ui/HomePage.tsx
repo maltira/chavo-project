@@ -27,7 +27,7 @@ export function HomePage() {
 
             <Loader />
 
-            <Field label="Электронная почта" hint='сука введи почту'>
+            <Field label="Электронная почта" hint="сука введи почту">
                 {(props) => <Input {...props} placeholder="example@gmail.com" />}
             </Field>
         </main>

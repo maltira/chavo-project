@@ -1,4 +1,4 @@
-import { Providers } from './Providers'
+import { Providers } from './providers'
 
 export function App() {
     return <Providers />

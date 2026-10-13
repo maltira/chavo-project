@@ -1,2 +1,5 @@
-// public api сегмента - экспорты добавляются по мере появления кода
-export {}
+export { ApiError, refreshAccessToken, request, setSessionLostHandler } from './http'
+export { errorMessage } from './messages'
+export { getAccessToken, setAccessToken } from './token'
+export type { RefreshResult } from './http'
+export type { ErrorResponse } from './types'

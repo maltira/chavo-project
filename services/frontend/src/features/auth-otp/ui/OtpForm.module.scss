@@ -1,0 +1,57 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    width: 100%;
+
+    & .header {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+
+        & .title {
+            @include type(h4-lora-medium);
+            color: var(--color-text);
+        }
+
+        & .text {
+            @include type(main-regular);
+            color: alpha(var(--color-text), 0.6);
+
+            & .email {
+                font-weight: 500;
+                word-break: break-all;
+            }
+        }
+    }
+}
+
+.code {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+
+    & .submit {
+        justify-content: center;
+        width: 100%;
+    }
+
+    & .resend {
+        @include type(tag-medium);
+
+        display: flex;
+        gap: 4px;
+
+        & .muted {
+            color: alpha(var(--color-text), 0.6);
+        }
+    }
+}

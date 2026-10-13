@@ -7,4 +7,12 @@ export default defineConfig([
         files: ['./src/shared/**'],
         rules: { 'fsd/public-api': 'off' },
     },
+    {
+        // в app сегмент providers - обычное для FSD имя, правило про «назначение» его не принимает
+        files: ['./src/app/**'],
+        rules: { 'fsd/segments-by-purpose': 'off' },
+    },
+    {
+        rules: { 'fsd/insignificant-slice': 'warn' },
+    },
 ])

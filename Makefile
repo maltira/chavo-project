@@ -209,6 +209,9 @@ e2e:
 # Фронтенд
 # ──────────────────────────────────────────────
 
+frontend-dev:
+	@cd services/frontend && npm run dev
+
 frontend-install:
 	@cd services/frontend && npm ci
 

@@ -4,7 +4,11 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    justify-content: center;
+
+    width: 100%;
     height: $button-height;
+
     padding: 0 16px;
     border-radius: $radius-md;
     border: 1px solid transparent;

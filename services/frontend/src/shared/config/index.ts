@@ -1,2 +1,2 @@
-// public api сегмента - экспорты добавляются по мере появления кода
-export {}
+export { TELEGRAM_URL } from './links'
+export { ROUTES } from './routes'

@@ -1,0 +1,19 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 100dvh;
+    padding: 0 24px;
+
+    background-color: var(--color-bg-primary);
+}
+
+.text {
+    @include type(main-regular);
+
+    max-width: 320px;
+    text-align: center;
+    color: alpha(var(--color-text), 0.6);
+}

@@ -1,0 +1,38 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+
+    & .header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+
+        & .caption {
+            @include type(main-regular);
+
+            text-align: center;
+            color: alpha(var(--color-text), 0.6);
+        }
+    }
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.submit {
+    justify-content: center;
+    width: 100%;
+}
+
+.terms {
+    @include type(tag-regular);
+
+    text-align: center;
+    color: alpha(var(--color-text), 0.6);
+}

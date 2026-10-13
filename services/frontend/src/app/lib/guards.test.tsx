@@ -1,9 +1,15 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { useSession } from '@/entities/session'
 
-import { GuestOnly, RequireAuth } from './guards'
+import { getMe } from '@/entities/user'
+
+import { GuestOnly, RequireAuth, RequireNoProfile, RequireProfile } from './guards'
+
+// useMe берёт getMe прямо из api/me, поэтому подменяется именно этот модуль
+vi.mock('@/entities/user/api/me', () => ({ getMe: vi.fn() }))
 
 function renderAt(route: string) {
     return render(
@@ -39,5 +45,37 @@ describe('route guards', () => {
         expect(screen.queryByText('главная')).toBeNull()
         expect(screen.queryByText('вход')).toBeNull()
         expect(screen.getByRole('status')).toBeInTheDocument()
+    })
+})
+
+function renderProfileRoutes(route: string) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+        <QueryClientProvider client={client}>
+            <MemoryRouter initialEntries={[route]}>
+                <Routes>
+                    <Route element={<RequireNoProfile />}>
+                        <Route path="/profile/setup" element={<p>создание профиля</p>} />
+                    </Route>
+                    <Route element={<RequireProfile />}>
+                        <Route path="/" element={<p>главная</p>} />
+                    </Route>
+                </Routes>
+            </MemoryRouter>
+        </QueryClientProvider>,
+    )
+}
+
+describe('profile guards', () => {
+    it('sends a user without a profile to profile setup', async () => {
+        vi.mocked(getMe).mockResolvedValue(null)
+        renderProfileRoutes('/')
+        expect(await screen.findByText('создание профиля')).toBeInTheDocument()
+    })
+
+    it('sends a user with a profile from profile setup to the home page', async () => {
+        vi.mocked(getMe).mockResolvedValue({ username: 'me' } as never)
+        renderProfileRoutes('/profile/setup')
+        expect(await screen.findByText('главная')).toBeInTheDocument()
     })
 })

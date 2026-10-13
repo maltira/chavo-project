@@ -1,0 +1,36 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    width: 100%;
+}
+
+.header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+
+    & .title {
+        @include type(h4-lora-medium);
+
+        color: var(--color-text);
+    }
+
+    & .text {
+        @include type(main-regular);
+
+        color: alpha(var(--color-text), 0.6);
+    }
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.submit {
+    justify-content: center;
+    width: 100%;
+}

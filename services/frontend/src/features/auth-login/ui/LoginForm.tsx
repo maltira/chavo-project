@@ -1,13 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link } from 'react-router'
 
 import { errorMessage } from '@/shared/api'
 import { ROUTES } from '@/shared/config'
 import { notify } from '@/shared/lib'
-import { Button, Field, Input, Logo, TextLink } from '@/shared/ui'
+import { Button, Field, Input, Logo, PasswordInput, TextLink } from '@/shared/ui'
 
 import { login } from '../api/login'
 import { loginSchema } from '../model/schema'
@@ -24,7 +23,6 @@ interface Props {
 }
 
 export function LoginForm({ onSuccess }: Props) {
-    const [passwordVisible, setPasswordVisible] = useState(false)
     // ошибки поля появляются только после попытки отправки, дальше исчезают по мере исправления
     const {
         register,
@@ -79,16 +77,10 @@ export function LoginForm({ onSuccess }: Props) {
                 <div className={styles.password}>
                     <Field label="Пароль" error={errors.password?.message}>
                         {(props) => (
-                            <Input
+                            <PasswordInput
                                 {...props}
-                                type={passwordVisible ? 'text' : 'password'}
                                 autoComplete="current-password"
                                 placeholder="Введите пароль"
-                                rightIcon={passwordVisible ? 'eye-open' : 'eye-closed'}
-                                rightIconLabel={
-                                    passwordVisible ? 'Скрыть пароль' : 'Показать пароль'
-                                }
-                                onRightIconClick={() => setPasswordVisible((visible) => !visible)}
                                 {...register('password')}
                             />
                         )}

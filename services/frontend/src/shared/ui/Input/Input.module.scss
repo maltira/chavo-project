@@ -18,6 +18,15 @@
     }
 }
 
+// прячем стили автозаполнения браузером (желтый или голубой)
+@mixin autofill($bg) {
+    -webkit-text-fill-color: var(--color-text);
+    caret-color: var(--color-text);
+    box-shadow: 0 0 0 1000px $bg inset;
+    border-color: $bg;
+    transition: background-color 9999s ease-out 0s;
+}
+
 .input {
     @include type(main-regular);
 
@@ -43,6 +52,35 @@
 
     // состояние ошибки задаёт aria-invalid
     &[aria-invalid='true'] {
+        border-color: var(--color-danger);
+    }
+
+    // селекторы :-webkit-autofill и :autofill нельзя объединять запятой: браузер, не знающий
+    // один из них, отбросил бы всё правило целиком
+    &:-webkit-autofill {
+        @include autofill(var(--color-bg-tertiary));
+    }
+
+    &:-webkit-autofill:hover,
+    &:-webkit-autofill:focus {
+        @include autofill(var(--color-bg-muted));
+    }
+
+    &:autofill {
+        @include autofill(var(--color-bg-tertiary));
+    }
+
+    &:autofill:hover,
+    &:autofill:focus {
+        @include autofill(var(--color-bg-muted));
+    }
+
+    // рамка ошибки важнее рамки автозаполнения
+    &:-webkit-autofill[aria-invalid='true'] {
+        border-color: var(--color-danger);
+    }
+
+    &:autofill[aria-invalid='true'] {
         border-color: var(--color-danger);
     }
 

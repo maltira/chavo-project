@@ -40,6 +40,7 @@ export const router = createBrowserRouter([
                         element: <AppRoot />,
                         children: [
                             { path: ROUTES.home, element: <ChatsPage /> },
+                            { path: ROUTES.chat, element: <ChatsPage /> },
                             // песочница компонентов: только в разработке
                             ...(import.meta.env.DEV
                                 ? [{ path: '/ui', element: <HomePage /> }]

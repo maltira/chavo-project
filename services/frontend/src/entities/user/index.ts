@@ -1,3 +1,8 @@
 export { getMe } from './api/me'
+export { getUser } from './api/user'
 export { useMe } from './model/useMe'
+export { userKey, useUser } from './model/useUser'
+export { presenceKey, usePresence } from './model/presence'
+export type { Presence } from './model/presence'
+export { UserAvatar } from './ui/UserAvatar'
 export type { AvatarShape, Profile, Status } from './model/types'

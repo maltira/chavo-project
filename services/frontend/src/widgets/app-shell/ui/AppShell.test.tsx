@@ -21,7 +21,7 @@ function renderShell() {
     })
     return render(
         <QueryClientProvider client={client}>
-            <AppShell>
+            <AppShell list={(compact) => <p>список: {compact ? 'свёрнут' : 'полный'}</p>}>
                 <p>панель</p>
             </AppShell>
         </QueryClientProvider>,
@@ -41,11 +41,11 @@ describe('AppShell', () => {
         document.documentElement.dataset.theme = 'dark'
     })
 
-    it('shows the sidebar controls, the empty list and the panel', () => {
+    it('shows the sidebar controls, the list and the panel', () => {
         renderShell()
         expect(screen.getByLabelText('Поиск')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Новый чат' })).toBeInTheDocument()
-        expect(screen.getByText('Здесь пока что пусто')).toBeInTheDocument()
+        expect(screen.getByText('список: полный')).toBeInTheDocument()
         expect(screen.getByText('панель')).toBeInTheDocument()
     })
 

@@ -1,0 +1,89 @@
+.list {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+
+    & .emptyText {
+        @include type(main-regular);
+
+        color: var(--color-text);
+    }
+
+    & .emptyButton {
+        width: auto;
+        height: 36px;
+    }
+}
+
+.skeleton {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+
+    &.compact {
+        justify-content: center;
+        padding: 10px 0;
+    }
+}
+
+.skeletonAvatar,
+.skeletonLine {
+    background-color: var(--color-bg-tertiary);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+.skeletonAvatar {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: $radius-full;
+}
+
+.skeletonTexts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.skeletonLine {
+    width: 60%;
+    height: 14px;
+    border-radius: $radius-sm;
+
+    &.short {
+        width: 85%;
+    }
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.5;
+    }
+}
+
+// метка для подгрузки: незаметна, но на ней срабатывает наблюдатель
+.sentinel {
+    flex-shrink: 0;
+    height: 1px;
+}
+// повтор подгрузки после ошибки
+.retry {
+    flex-shrink: 0;
+    width: auto;
+    height: 36px;
+    margin: 12px auto;
+}

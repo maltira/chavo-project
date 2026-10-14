@@ -7,4 +7,7 @@ export const ROUTES = {
     reset: '/auth/reset',
     resetConfirm: '/auth/reset/confirm',
     profileSetup: '/profile/setup',
+    chat: '/chats/:id',
 } as const
+
+export const chatPath = (id: string) => `/chats/${encodeURIComponent(id)}`

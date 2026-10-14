@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 
 import { useSession } from '@/entities/session'
+import { presenceKey } from '@/entities/user'
+import type { Presence } from '@/entities/user'
 import { useNotifications } from '@/shared/lib'
 
-import { applyEvent, presenceKey, RealtimeBridge } from './RealtimeBridge'
-import type { Presence } from './RealtimeBridge'
+import { applyEvent, RealtimeBridge } from './RealtimeBridge'
 
 class FakeSocket {
     static OPEN = 1

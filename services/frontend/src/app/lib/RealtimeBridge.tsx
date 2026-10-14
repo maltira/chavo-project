@@ -2,21 +2,22 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
+import { applyConversationEvent } from '@/entities/conversation'
 import { useSession } from '@/entities/session'
+import { presenceKey, userKey } from '@/entities/user'
+import type { Presence, Profile } from '@/entities/user'
 import { connectSocket } from '@/shared/api'
 import type { ServerEvent } from '@/shared/api'
 import { dismiss, notify } from '@/shared/lib'
 
-export const presenceKey = (userId: string) => ['presence', userId] as const
-
-export interface Presence {
-    online: boolean
-    lastSeenAt: string | null
-}
-
 // события сервера обновляют кеш запросов, а не состояние компонентов: экраны уже читают кеш
 export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
-    const data = (event.data ?? {}) as { user_id?: string; last_seen_at?: string | null }
+    const data = (event.data ?? {}) as {
+        user_id?: string
+        last_seen_at?: string | null
+        blocker_id?: string
+        blocked_id?: string
+    }
 
     switch (event.type) {
         case 'user.online':
@@ -35,8 +36,21 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
                 })
             }
             break
+        case 'user.blocked':
+        case 'user.unblocked':
+            // блокировка прячет аватар, фигуру, онлайн и статус: перечитываем оба профиля
+            for (const id of [data.blocker_id, data.blocked_id]) {
+                if (id) {
+                    void queryClient.invalidateQueries({ queryKey: userKey(id) })
+                }
+            }
+            break
         default:
-            // остальные события (сообщения, чаты) подключаются вместе с соответствующими экранами
+            applyConversationEvent(
+                queryClient,
+                event,
+                queryClient.getQueryData<Profile | null>(['me'])?.user_id,
+            )
             break
     }
 }

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { cn } from '@/shared/lib'
-import { Button, IconButton, Input } from '@/shared/ui'
+import { IconButton, Input } from '@/shared/ui'
 
 import { useSidebarWidth } from '../model/sidebarWidth'
 import { ProfileMenu } from './ProfileMenu'
@@ -10,7 +10,8 @@ import { SidebarResizer } from './SidebarResizer'
 import styles from './AppShell.module.scss'
 
 interface Props {
-    list?: ReactNode // список чатов
+    // список чатов; compact - сайдбар свёрнут до колонки аватаров
+    list?: (compact: boolean) => ReactNode
     children?: ReactNode // выбранный чат
 }
 
@@ -41,15 +42,7 @@ export function AppShell({ list, children }: Props) {
                     )}
                 </div>
 
-                {list ??
-                    (compact ? null : (
-                        <div className={styles.empty}>
-                            <p className={styles.emptyText}>Здесь пока что пусто</p>
-                            <Button variant="secondary" className={styles.emptyButton}>
-                                Искать друзей
-                            </Button>
-                        </div>
-                    ))}
+                {list?.(compact)}
 
                 <SidebarResizer
                     target={sidebarRef}

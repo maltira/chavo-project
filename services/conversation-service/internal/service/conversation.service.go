@@ -62,10 +62,11 @@ func (s *conversationService) Get(ctx context.Context, userID, convID uuid.UUID)
 
 func (s *conversationService) toSummary(rec *repository.SummaryRecord) (*models.ConversationSummary, error) {
 	item := &models.ConversationSummary{
-		Conversation: rec.Conversation,
-		MyRole:       rec.MyRole,
-		PeerID:       rec.PeerID,
-		UnreadCount:  rec.UnreadCount,
+		Conversation:    rec.Conversation,
+		MyRole:          rec.MyRole,
+		PeerID:          rec.PeerID,
+		UnreadCount:     rec.UnreadCount,
+		LastMessageRead: rec.LastMessageRead,
 	}
 	if rec.LastMessage != nil {
 		m, err := recordToModel(s.cipher, rec.LastMessage)

@@ -338,6 +338,29 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 	if len(list) != 1 || list[0].UnreadCount != 0 {
 		t.Fatalf("list for a: %+v", list)
 	}
+
+	// галочки у автора: последнее сообщение ids[4] b ещё не дочитал
+	if list[0].LastMessageRead {
+		t.Fatal("last message must be unread before b reaches it")
+	}
+	if err = e.msgs.MarkRead(ctx, b, conv, ids[4]); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = e.convs.List(ctx, a, 10, 0)
+	if !list[0].LastMessageRead {
+		t.Fatal("last message must be read after b's cursor reaches it")
+	}
+	// собственный курсор автора не считается: у b последнее сообщение чужое, его прочитал только сам b
+	reply, err := e.msgs.Send(ctx, b, service.SendMessageInput{RecipientID: &a, Content: "ответ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.msgs.MarkRead(ctx, b, conv, reply.ID); err != nil {
+		t.Fatal(err)
+	}
+	if summary, _ = e.convs.Get(ctx, b, conv); summary.LastMessageRead {
+		t.Fatal("author's own cursor must not mark the message as read")
+	}
 }
 
 func mustConv(t *testing.T, e *env, user uuid.UUID) uuid.UUID {

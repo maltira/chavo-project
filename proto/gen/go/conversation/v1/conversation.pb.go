@@ -260,14 +260,16 @@ func (x *Message) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 type ConversationSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Conversation  *Conversation          `protobuf:"bytes,1,opt,name=conversation,proto3" json:"conversation,omitempty"`
-	MyRole        string                 `protobuf:"bytes,2,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"`
-	PeerId        *string                `protobuf:"bytes,3,opt,name=peer_id,json=peerId,proto3,oneof" json:"peer_id,omitempty"`
-	LastMessage   *Message               `protobuf:"bytes,4,opt,name=last_message,json=lastMessage,proto3" json:"last_message,omitempty"`
-	UnreadCount   int32                  `protobuf:"varint,5,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Conversation *Conversation          `protobuf:"bytes,1,opt,name=conversation,proto3" json:"conversation,omitempty"`
+	MyRole       string                 `protobuf:"bytes,2,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"`
+	PeerId       *string                `protobuf:"bytes,3,opt,name=peer_id,json=peerId,proto3,oneof" json:"peer_id,omitempty"`
+	LastMessage  *Message               `protobuf:"bytes,4,opt,name=last_message,json=lastMessage,proto3" json:"last_message,omitempty"`
+	UnreadCount  int32                  `protobuf:"varint,5,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	// последнее сообщение прочитал кто-то кроме его автора (галочки у своего сообщения)
+	LastMessageRead bool `protobuf:"varint,6,opt,name=last_message_read,json=lastMessageRead,proto3" json:"last_message_read,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ConversationSummary) Reset() {
@@ -333,6 +335,13 @@ func (x *ConversationSummary) GetUnreadCount() int32 {
 		return x.UnreadCount
 	}
 	return 0
+}
+
+func (x *ConversationSummary) GetLastMessageRead() bool {
+	if x != nil {
+		return x.LastMessageRead
+	}
+	return false
 }
 
 type Member struct {
@@ -3889,13 +3898,14 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\n" +
 	"\n" +
 	"\b_contentB\x16\n" +
-	"\x14_reply_to_message_id\"\xfb\x01\n" +
+	"\x14_reply_to_message_id\"\xa7\x02\n" +
 	"\x13ConversationSummary\x12A\n" +
 	"\fconversation\x18\x01 \x01(\v2\x1d.conversation.v1.ConversationR\fconversation\x12\x17\n" +
 	"\amy_role\x18\x02 \x01(\tR\x06myRole\x12\x1c\n" +
 	"\apeer_id\x18\x03 \x01(\tH\x00R\x06peerId\x88\x01\x01\x12;\n" +
 	"\flast_message\x18\x04 \x01(\v2\x18.conversation.v1.MessageR\vlastMessage\x12!\n" +
-	"\funread_count\x18\x05 \x01(\x05R\vunreadCountB\n" +
+	"\funread_count\x18\x05 \x01(\x05R\vunreadCount\x12*\n" +
+	"\x11last_message_read\x18\x06 \x01(\bR\x0flastMessageReadB\n" +
 	"\n" +
 	"\b_peer_id\"\xe6\x01\n" +
 	"\x06Member\x12'\n" +

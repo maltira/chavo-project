@@ -28,6 +28,8 @@ type SummaryRecord struct {
 	PeerID       *uuid.UUID
 	LastMessage  *MessageRecord
 	UnreadCount  int
+	// LastMessageRead - кто-то кроме автора последнего сообщения дочитал до него (курсор прочтения)
+	LastMessageRead bool
 }
 
 // conversationColumns и customJoins - чтение разговора со статусом и фигурой за аватаром; истёкший статус не читается
@@ -231,7 +233,12 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		        (SELECT COUNT(*) FROM messages m
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
 		            AND m.created_at >= cm.joined_at
-		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id)))
+		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))),
+		        COALESCE((SELECT TRUE FROM conversation_members om
+		          JOIN messages orm ON orm.id = om.last_read_message_id
+		          WHERE om.conversation_id = c.id AND om.user_id <> lm.sender_id
+		            AND (orm.created_at, orm.id) >= (lm.created_at, lm.id)
+		          LIMIT 1), FALSE)
 		 FROM conversation_members cm
 		 JOIN conversations c ON c.id = cm.conversation_id
 		 `+customJoins+`
@@ -270,7 +277,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		dest = append(dest, cu.dest()...)
 		dest = append(dest, &s.MyRole, &s.PeerID,
 			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmCreated, &lmUpdated, &lmDeleted,
-			&s.UnreadCount)
+			&s.UnreadCount, &s.LastMessageRead)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}

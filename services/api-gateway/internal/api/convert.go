@@ -186,6 +186,8 @@ type summaryJSON struct {
 	PeerID      *string      `json:"peer_id"`
 	LastMessage *messageJSON `json:"last_message"`
 	UnreadCount int32        `json:"unread_count"`
+	// LastMessageRead - последнее сообщение прочитал кто-то кроме его автора
+	LastMessageRead bool `json:"last_message_read"`
 }
 
 func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
@@ -195,6 +197,7 @@ func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 		PeerID:           s.PeerId,
 		LastMessage:      toMessage(s.GetLastMessage()),
 		UnreadCount:      s.GetUnreadCount(),
+		LastMessageRead:  s.GetLastMessageRead(),
 	}
 }
 

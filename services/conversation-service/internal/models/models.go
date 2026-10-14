@@ -90,6 +90,8 @@ type ConversationSummary struct {
 	PeerID      *uuid.UUID `json:"peer_id"`
 	LastMessage *Message   `json:"last_message"`
 	UnreadCount int        `json:"unread_count"`
+	// LastMessageRead - последнее сообщение прочитал кто-то кроме его автора
+	LastMessageRead bool `json:"last_message_read"`
 }
 
 // InviteInfo — краткая информация о приватной группе по invite-ссылке.

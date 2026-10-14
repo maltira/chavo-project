@@ -91,6 +91,8 @@ message ConversationSummary {
   optional string peer_id = 3;
   Message last_message = 4;
   int32 unread_count = 5;
+  // последнее сообщение прочитал кто-то кроме его автора (галочки у своего сообщения)
+  bool last_message_read = 6;
 }
 
 message Member {

@@ -150,11 +150,12 @@ func toMessage(m *models.Message) *conversationv1.Message {
 
 func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummary {
 	return &conversationv1.ConversationSummary{
-		Conversation: toConversation(&s.Conversation),
-		MyRole:       s.MyRole,
-		PeerId:       optStr(s.PeerID),
-		LastMessage:  toMessage(s.LastMessage),
-		UnreadCount:  int32(s.UnreadCount),
+		Conversation:    toConversation(&s.Conversation),
+		MyRole:          s.MyRole,
+		PeerId:          optStr(s.PeerID),
+		LastMessage:     toMessage(s.LastMessage),
+		UnreadCount:     int32(s.UnreadCount),
+		LastMessageRead: s.LastMessageRead,
 	}
 }
 

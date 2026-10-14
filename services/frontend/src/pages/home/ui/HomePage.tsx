@@ -1,12 +1,9 @@
-import { LogoutButton } from '@/features/auth-logout'
-
 import styles from './HomePage.module.scss'
 import { Button, Field, IconButton, Input, InputCode, Loader, Switch, Tag } from '@/shared/ui'
 
 export function HomePage() {
     return (
         <main className={styles.root}>
-            <LogoutButton />
             <Button variant="secondary" icon="heart">
                 Click me
             </Button>

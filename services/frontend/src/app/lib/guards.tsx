@@ -5,6 +5,7 @@ import { useMe } from '@/entities/user'
 import { ROUTES } from '@/shared/config'
 
 import { Splash } from './Splash'
+import { RealtimeBridge } from './RealtimeBridge'
 
 // закрытые страницы: гость уходит на вход
 export function RequireAuth() {
@@ -40,4 +41,14 @@ export function RequireNoProfile() {
         return <Splash retrying={me.failureCount > 0} failed={me.isError} />
     }
     return me.data ? <Navigate to={ROUTES.home} replace /> : <Outlet />
+}
+
+// корень закрытой части приложения: гарды уже пропустили, можно держать соединение
+export function AppRoot() {
+    return (
+        <>
+            <RealtimeBridge />
+            <Outlet />
+        </>
+    )
 }

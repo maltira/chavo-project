@@ -5,10 +5,12 @@ import { RegisterPage } from '@/pages/auth-register'
 import { RegisterVerifyPage } from '@/pages/auth-register-verify'
 import { ResetPage } from '@/pages/auth-reset'
 import { ResetConfirmPage } from '@/pages/auth-reset-confirm'
+import { ChatsPage } from '@/pages/chats'
 import { HomePage } from '@/pages/home'
 import { ProfileSetupPage } from '@/pages/profile-setup'
 import { ROUTES } from '@/shared/config'
 
+import { AppRoot } from './guards'
 import { GuestOnly, RequireAuth, RequireNoProfile, RequireProfile } from './guards'
 
 export const router = createBrowserRouter([
@@ -33,7 +35,18 @@ export const router = createBrowserRouter([
             },
             {
                 element: <RequireProfile />,
-                children: [{ path: ROUTES.home, element: <HomePage /> }],
+                children: [
+                    {
+                        element: <AppRoot />,
+                        children: [
+                            { path: ROUTES.home, element: <ChatsPage /> },
+                            // песочница компонентов: только в разработке
+                            ...(import.meta.env.DEV
+                                ? [{ path: '/ui', element: <HomePage /> }]
+                                : []),
+                        ],
+                    },
+                ],
             },
         ],
     },

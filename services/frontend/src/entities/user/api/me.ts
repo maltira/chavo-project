@@ -7,7 +7,8 @@ export async function getMe(): Promise<Profile | null> {
     try {
         return await request<Profile>('/users/me')
     } catch (error) {
-        if (error instanceof ApiError && error.status === 404) { // профиль не создан
+        if (error instanceof ApiError && error.status === 404) {
+            // профиль не создан
             return null
         }
         throw error

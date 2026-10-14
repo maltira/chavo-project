@@ -1,3 +1,3 @@
 export { getMe } from './api/me'
 export { useMe } from './model/useMe'
-export type { Profile } from './model/types'
+export type { AvatarShape, Profile, Status } from './model/types'

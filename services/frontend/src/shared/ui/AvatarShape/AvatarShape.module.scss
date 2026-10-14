@@ -1,38 +1,26 @@
-// доля блока, которую занимает аватар, когда за ним есть фигура
-$avatar-scale: 80%;
+// размер фигуры относительно аватара; выступ в размер блока не входит
+$shape-scale: 150%;
 
-// размер блока задаёт родитель (width), высота равна ширине
+// размер блока равен размеру аватара внутри
 .root {
-    display: inline-grid;
-    aspect-ratio: 1;
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    line-height: 0;
 }
 
-// фигура и аватар лежат в одной ячейке сетки, аватар поверх
-.shape,
-.content {
-    grid-area: 1 / 1;
-}
-
+// фигура стоит по центру под аватаром и выходит за границы блока
 .shape {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: $shape-scale;
+    height: $shape-scale;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
 }
 
 .content {
-    display: grid;
-    place-self: center;
-    width: 100%;
-    height: 100%;
-
-    // аватар заполняет область содержимого
-    > * {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-.withShape .content {
-    width: $avatar-scale;
-    height: $avatar-scale;
+    position: relative;
+    display: block;
 }

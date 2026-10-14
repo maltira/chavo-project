@@ -33,11 +33,8 @@ export function AvatarShape({ shape, color, className, children }: Props) {
     const known = isKnownShape(shape)
     const Shape = known ? shapes[shape]! : null
 
-    // обёртка есть и без фигуры - размер блока не меняется, когда фигуру ставят или убирают
-    const rootClass = [styles.root, known && styles.withShape, className].filter(Boolean).join(' ')
-
     return (
-        <span className={rootClass}>
+        <span className={[styles.root, className].filter(Boolean).join(' ')}>
             {Shape && (
                 <Shape
                     className={styles.shape}

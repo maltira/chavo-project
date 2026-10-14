@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
-import { cn } from '@/shared/lib'
+import { cn, useDismiss } from '@/shared/lib'
 
 import { IconButton } from '../IconButton'
 import { Tag } from '../Tag'
@@ -22,27 +22,7 @@ export function LanguageMenu({ value, options, onChange }: Props) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
 
-    useEffect(() => {
-        if (!open) {
-            return
-        }
-        function onPointerDown(event: MouseEvent) {
-            if (!rootRef.current?.contains(event.target as Node)) {
-                setOpen(false)
-            }
-        }
-        function onKeyDown(event: KeyboardEvent) {
-            if (event.key === 'Escape') {
-                setOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', onPointerDown)
-        document.addEventListener('keydown', onKeyDown)
-        return () => {
-            document.removeEventListener('mousedown', onPointerDown)
-            document.removeEventListener('keydown', onKeyDown)
-        }
-    }, [open])
+    useDismiss(open, rootRef, () => setOpen(false))
 
     function select(next: string) {
         onChange(next)

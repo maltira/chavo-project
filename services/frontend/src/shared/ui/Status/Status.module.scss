@@ -1,0 +1,16 @@
+.root {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px 6px 6px;
+    border-radius: $radius-full;
+}
+
+.text {
+    @include type(button-medium);
+
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

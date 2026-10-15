@@ -1,0 +1,11 @@
+.text {
+    @include type(main-regular);
+
+    margin: -8px 0 0; // окно даёт 24 между блоками, в макете текст ближе к заголовку
+    color: alpha(var(--color-text), 0.6);
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+}

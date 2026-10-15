@@ -6,7 +6,7 @@ import { Icon } from '../Icon'
 import styles from './Button.module.scss'
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'primary' | 'secondary'
+    variant?: 'primary' | 'secondary' | 'danger'
     icon?: string
     children?: ReactNode
 }

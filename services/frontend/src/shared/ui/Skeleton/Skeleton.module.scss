@@ -1,0 +1,51 @@
+.skeleton {
+    display: block;
+    flex-shrink: 0;
+    background-color: var(--color-bg-tertiary);
+    animation: pulse 1.2s ease-in-out infinite;
+
+    &.muted {
+        background-color: var(--color-bg-muted);
+    }
+}
+
+.circle {
+    border-radius: $radius-full;
+}
+
+.line {
+    height: 14px;
+    border-radius: $radius-sm;
+}
+
+.bubble {
+    height: 36px;
+    max-width: 340px;
+    border-radius: $radius-xl;
+}
+
+// строка списка: те же отступы, что у настоящей строки чата
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+
+    &.compact {
+        justify-content: center;
+        padding: 10px 0;
+    }
+}
+
+.texts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.5;
+    }
+}

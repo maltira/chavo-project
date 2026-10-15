@@ -92,3 +92,12 @@ export function formatLastSeen(iso: string | null, now = new Date()): string {
     }
     return `был(а) ${formatDay(iso, now)} в ${formatTime(iso)}`
 }
+
+// полная дата: «13 июля 2026 г.»
+export function formatDate(iso: string): string {
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) {
+        return ''
+    }
+    return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()} г.`
+}

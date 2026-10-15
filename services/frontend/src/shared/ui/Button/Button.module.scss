@@ -43,4 +43,15 @@
             background-color: var(--color-bg-muted);
         }
     }
+
+    // опасное действие: блокировка, удаление, выход
+    &--danger {
+        color: var(--color-danger);
+        background-color: alpha(var(--color-danger), 0.1);
+        border-color: alpha(var(--color-danger), 0.25);
+
+        &:hover {
+            background-color: alpha(var(--color-danger), 0.2);
+        }
+    }
 }

@@ -6,12 +6,16 @@ import type { Message } from '@/entities/message'
 import { useMe, useUser } from '@/entities/user'
 import { MessageComposer } from '@/features/compose-message'
 import type { ReplyTarget } from '@/features/compose-message'
+import { ChatActionsMenu, useOpenChatInfo } from '@/features/chat-actions'
 import { useDeleteMessage } from '@/features/delete-message'
 import { useMarkRead } from '@/features/mark-read'
-import { Button, Icon, Loader } from '@/shared/ui'
+import { Button, Icon, IconButton } from '@/shared/ui'
+import type { MenuPosition } from '@/shared/ui'
 
 import { firstUnreadId, readBoundary } from '../lib/readState'
+import { BlockedNotice, useCanWrite } from './BlockedNotice'
 import { ChatHeader } from './ChatHeader'
+import { HeaderSkeleton, MessagesSkeleton } from './ChatSkeleton'
 import styles from './ChatWindow.module.scss'
 import { MessageList } from './MessageList'
 
@@ -27,10 +31,16 @@ export function ChatWindow({ conversationId }: Props) {
     const me = useMe()
     const myId = me.data?.user_id
     const chat = useConversation(conversationId)
+    // в личном чате писать нельзя, если кто-то из двоих заблокировал другого
+    const peerId = chat.data?.conversation_type === 'direct' ? chat.data.peer_id : null
+    const canWrite = useCanWrite(peerId)
     const history = useMessages(conversationId)
     const members = useMembers(conversationId)
     const remove = useDeleteMessage()
+    const openInfo = useOpenChatInfo()
 
+    // меню «⋮» в шапке - под кнопкой
+    const [menuAt, setMenuAt] = useState<MenuPosition | null>(null)
     const [reply, setReply] = useState<Message | null>(null)
     const [editing, setEditing] = useState<Message | null>(null)
     const replyAuthor = useUser(reply && reply.sender_id !== myId ? reply.sender_id : null)
@@ -83,8 +93,9 @@ export function ChatWindow({ conversationId }: Props) {
 
     if (!chat.data) {
         return (
-            <div className={styles.state}>
-                <Loader size={48} />
+            <div className={styles.root}>
+                <HeaderSkeleton />
+                <MessagesSkeleton />
             </div>
         )
     }
@@ -99,12 +110,32 @@ export function ChatWindow({ conversationId }: Props) {
 
     return (
         <div className={styles.root}>
-            <ChatHeader chat={chat.data} />
+            <ChatHeader
+                chat={chat.data}
+                onOpenInfo={() => openInfo(chat.data!)}
+                actions={
+                    <IconButton
+                        icon="menu-dot"
+                        aria-label="Действия с чатом"
+                        aria-haspopup="menu"
+                        isActive={!!menuAt}
+                        // нажатие не должно считаться кликом «снаружи» меню: кнопка сама открывает и закрывает его
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect()
+                            setMenuAt((current) =>
+                                current
+                                    ? null
+                                    : { x: rect.right, y: rect.bottom + 8, align: 'end' },
+                            )
+                        }}
+                    />
+                }
+            />
+            <ChatActionsMenu chat={chat.data} position={menuAt} onClose={() => setMenuAt(null)} />
 
             {history.isPending ? (
-                <div className={styles.state}>
-                    <Loader size={48} />
-                </div>
+                <MessagesSkeleton />
             ) : history.isError && messages.length === 0 ? (
                 <div className={styles.state}>
                     <p className={styles.stateText}>Не удалось загрузить сообщения</p>
@@ -146,17 +177,21 @@ export function ChatWindow({ conversationId }: Props) {
             )}
 
             <div className={styles.composer}>
-                <MessageComposer
-                    key={editing?.id ?? 'new'}
-                    conversationId={conversationId}
-                    myId={myId}
-                    replyTo={replyTarget}
-                    editing={editing}
-                    onCancel={() => {
-                        setReply(null)
-                        setEditing(null)
-                    }}
-                />
+                {canWrite || !peerId ? (
+                    <MessageComposer
+                        key={editing?.id ?? 'new'}
+                        conversationId={conversationId}
+                        myId={myId}
+                        replyTo={replyTarget}
+                        editing={editing}
+                        onCancel={() => {
+                            setReply(null)
+                            setEditing(null)
+                        }}
+                    />
+                ) : (
+                    <BlockedNotice peerId={peerId} />
+                )}
             </div>
         </div>
     )

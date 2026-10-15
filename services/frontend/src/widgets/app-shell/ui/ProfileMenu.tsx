@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 
-import { useMe } from '@/entities/user'
+import { useMe, useProfileCard } from '@/entities/user'
 import { useLogout } from '@/features/auth-logout'
 import { useTheme } from '@/features/toggle-theme'
 import { useDismiss } from '@/shared/lib'
@@ -14,6 +14,7 @@ export function ProfileMenu() {
     const [mounted, setMounted] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const me = useMe()
+    const openProfile = useProfileCard((state) => state.open)
     const { theme, toggle } = useTheme()
     const logout = useLogout()
 
@@ -52,7 +53,16 @@ export function ProfileMenu() {
                     }}
                 >
                     {profile && (
-                        <div className={styles.user}>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            className={styles.user}
+                            onClick={() => {
+                                hide()
+                                // свой профиль в «Недавние» не попадает
+                                openProfile(profile.user_id, { remember: false })
+                            }}
+                        >
                             <AvatarShape
                                 shape={profile.avatar_shape?.shape}
                                 color={profile.avatar_shape?.color}
@@ -64,7 +74,7 @@ export function ProfileMenu() {
                                 <span className={styles.username}>@{profile.username}</span>
                             </div>
                             <Icon name="arrow-right" size={24} className={styles.arrow} />
-                        </div>
+                        </button>
                     )}
 
                     {profile?.status && (

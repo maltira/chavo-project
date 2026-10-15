@@ -60,3 +60,11 @@ export function applyConversationEvent(
         void queryClient.invalidateQueries({ queryKey: conversationsKey })
     }
 }
+
+// личный чат с человеком среди загруженных; если его нет, чат создаст первое сообщение
+export function findDirectWith(queryClient: QueryClient, userId: string) {
+    return queryClient
+        .getQueryData<Pages>(conversationsKey)
+        ?.pages.flat()
+        .find((c) => c.conversation_type === 'direct' && c.peer_id === userId)
+}

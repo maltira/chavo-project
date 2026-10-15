@@ -3,8 +3,8 @@ import { useEffect, useRef } from 'react'
 import { useConversations } from '@/entities/conversation'
 import { useMe } from '@/entities/user'
 import { ApiError, errorMessage } from '@/shared/api'
-import { cn, notify } from '@/shared/lib'
-import { Button } from '@/shared/ui'
+import { notify } from '@/shared/lib'
+import { Button, SkeletonRow } from '@/shared/ui'
 
 import styles from './ChatList.module.scss'
 import { ChatListItem } from './ChatListItem'
@@ -69,15 +69,7 @@ export function ChatList({ compact = false }: Props) {
         return (
             <div className={styles.list} aria-busy="true" aria-label="Загрузка чатов">
                 {Array.from({ length: SKELETON_ROWS }, (_, i) => (
-                    <div key={i} className={cn(styles.skeleton, compact && styles.compact)}>
-                        <span className={styles.skeletonAvatar} />
-                        {!compact && (
-                            <span className={styles.skeletonTexts}>
-                                <span className={styles.skeletonLine} />
-                                <span className={cn(styles.skeletonLine, styles.short)} />
-                            </span>
-                        )}
-                    </div>
+                    <SkeletonRow key={i} compact={compact} />
                 ))}
             </div>
         )
@@ -119,17 +111,7 @@ export function ChatList({ compact = false }: Props) {
             {chats.data.map((chat) => (
                 <ChatListItem key={chat.id} chat={chat} myId={me.data?.user_id} compact={compact} />
             ))}
-            {isFetchingNextPage && (
-                <div className={cn(styles.skeleton, compact && styles.compact)} aria-hidden="true">
-                    <span className={styles.skeletonAvatar} />
-                    {!compact && (
-                        <span className={styles.skeletonTexts}>
-                            <span className={styles.skeletonLine} />
-                            <span className={cn(styles.skeletonLine, styles.short)} />
-                        </span>
-                    )}
-                </div>
-            )}
+            {isFetchingNextPage && <SkeletonRow compact={compact} />}
             {isFetchNextPageError && !isFetchingNextPage && (
                 <Button
                     variant="secondary"

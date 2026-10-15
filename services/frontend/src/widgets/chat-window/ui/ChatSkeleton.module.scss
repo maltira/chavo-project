@@ -1,0 +1,31 @@
+// column-reverse: первый пузырь - внизу, как в настоящей истории
+.messages {
+    display: flex;
+    flex: 1;
+    flex-direction: column-reverse;
+    gap: 12px;
+    min-height: 0;
+    padding: 24px;
+    overflow: hidden;
+}
+
+.mine {
+    align-self: flex-end;
+}
+
+.header {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 32px;
+
+    background-color: var(--color-bg-tertiary);
+}
+
+.texts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+}

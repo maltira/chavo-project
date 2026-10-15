@@ -19,8 +19,10 @@ export function getMessages(conversationId: string, before?: string): Promise<Me
     return request<MessagesPage>(`/messages?${params}`)
 }
 
+// в существующий чат - conversation_id; первое сообщение человеку - recipient_id (чат создаст сервер)
 export interface SendMessageInput {
-    conversation_id: string
+    conversation_id?: string
+    recipient_id?: string
     content: string
     reply_to_message_id?: string | null
 }

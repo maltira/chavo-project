@@ -1,8 +1,19 @@
-export { getConversation, getConversations, getMembers } from './api/conversations'
-export type { Member } from './api/conversations'
+export {
+    createGroup,
+    deleteConversation,
+    getConversation,
+    getConversations,
+    getMembers,
+    joinGroup,
+    searchGroups,
+} from './api/conversations'
+export type { CreateGroupInput, Member, PublicGroup } from './api/conversations'
+export { useGroupSearch } from './model/useGroupSearch'
+export { useGroupCard } from './model/groupCard'
 export {
     applyConversationEvent,
     conversationsKey,
+    findDirectWith,
     useConversations,
 } from './model/useConversations'
 export {

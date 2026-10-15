@@ -27,8 +27,12 @@ export function useConversation(id: string) {
 }
 
 // участники с курсорами прочтения: от них зависят галочки у своих сообщений
-export function useMembers(id: string) {
-    return useQuery({ queryKey: membersKey(id), queryFn: () => getMembers(id) })
+export function useMembers(id: string | null | undefined) {
+    return useQuery({
+        queryKey: membersKey(id ?? ''),
+        queryFn: () => getMembers(id!),
+        enabled: !!id,
+    })
 }
 
 // событие message.read двигает курсор участника вперёд

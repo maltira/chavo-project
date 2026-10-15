@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import type { ConversationSummary } from '@/entities/conversation'
 import { useMembers } from '@/entities/conversation'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
@@ -7,20 +9,27 @@ import { Status } from '@/shared/ui'
 import styles from './ChatHeader.module.scss'
 
 interface Props {
-    chat: ConversationSummary
+    // открытый чат; без него - новый личный чат с peerId, которого ещё нет на сервере
+    chat?: ConversationSummary
+    peerId?: string
+    // клик по аватару и имени: профиль собеседника или сведения о группе
+    onOpenInfo?: () => void
+    // кнопки справа (меню чата)
+    actions?: ReactNode
 }
 
 // шапка чата
-export function ChatHeader({ chat }: Props) {
-    const isDirect = chat.conversation_type === 'direct'
+export function ChatHeader({ chat, peerId, onOpenInfo, actions }: Props) {
+    const isDirect = !chat || chat.conversation_type === 'direct'
+    const peerUserId = chat ? chat.peer_id : peerId
 
-    const peer = useUser(isDirect ? chat.peer_id : null)
-    const presence = usePresence(isDirect ? chat.peer_id : null)
-    const members = useMembers(chat.id)
+    const peer = useUser(isDirect ? peerUserId : null)
+    const presence = usePresence(isDirect ? peerUserId : null)
+    const members = useMembers(isDirect ? null : chat?.id)
 
     const profile = peer.data
-    const name = isDirect ? (profile?.display_name ?? '') : (chat.name ?? 'Группа')
-    const status = isDirect ? profile?.status : chat.status
+    const name = isDirect ? (profile?.display_name ?? '') : (chat?.name ?? 'Группа')
+    const status = isDirect ? profile?.status : chat?.status
     const online = isDirect && (presence?.online ?? profile?.online ?? false)
 
     let subtitle = ''
@@ -36,15 +45,23 @@ export function ChatHeader({ chat }: Props) {
 
     return (
         <header className={styles.root}>
-            <UserAvatar
-                src={isDirect ? profile?.avatar_url : chat.avatar_url}
-                shape={isDirect ? profile?.avatar_shape : chat.avatar_shape}
-                online={online}
-            />
-            <div className={styles.texts}>
-                <h2 className={styles.name}>{name || ' '}</h2>
-                <span className={styles.subtitle}>{subtitle || ' '}</span>
-            </div>
+            <button
+                type="button"
+                className={styles.who}
+                disabled={!onOpenInfo}
+                aria-label={isDirect ? 'Профиль собеседника' : 'Сведения о группе'}
+                onClick={onOpenInfo}
+            >
+                <UserAvatar
+                    src={isDirect ? profile?.avatar_url : chat?.avatar_url}
+                    shape={isDirect ? profile?.avatar_shape : chat?.avatar_shape}
+                    online={online}
+                />
+                <div className={styles.texts}>
+                    <h2 className={styles.name}>{name || ' '}</h2>
+                    <span className={styles.subtitle}>{subtitle || ' '}</span>
+                </div>
+            </button>
             {status && (
                 <Status
                     icon={status.icon}
@@ -55,6 +72,7 @@ export function ChatHeader({ chat }: Props) {
                     className={styles.status}
                 />
             )}
+            {actions}
         </header>
     )
 }

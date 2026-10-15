@@ -1,5 +1,7 @@
 import { request } from '@/shared/api'
 
+import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
+
 import type { ConversationSummary } from '../model/types'
 
 // размер страницы списка; сервер отдаёт не больше 30 за запрос
@@ -38,4 +40,45 @@ export async function getMembers(id: string): Promise<Member[]> {
         `/conversations/${encodeURIComponent(id)}/members?limit=${MEMBERS_LIMIT}`,
     )
     return page.items
+}
+
+// открытая группа в поиске (закрытые сервер не отдаёт)
+export interface PublicGroup {
+    id: string
+    name: string
+    description: string | null
+    avatar_url: string | null
+    // null - число неизвестно (сведения о своей группе открыты из списка чатов)
+    members_count: number | null
+    is_member: boolean
+    status: Status | null
+    avatar_shape: AvatarShape | null
+}
+
+export async function searchGroups(query: string): Promise<PublicGroup[]> {
+    const page = await request<Page<PublicGroup>>(
+        `/conversations/search?q=${encodeURIComponent(query)}&limit=20`,
+    )
+    return page.items
+}
+
+export function joinGroup(id: string): Promise<void> {
+    return request<void>(`/conversations/${encodeURIComponent(id)}/join`, { method: 'POST' })
+}
+
+// участник выходит из группы, админ удаляет её для всех; личный чат так удалить нельзя
+export function deleteConversation(id: string): Promise<void> {
+    return request<void>(`/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export interface CreateGroupInput {
+    name: string
+    description?: string
+    visibility: 'public' | 'private'
+    member_ids: string[]
+}
+
+// новая группа; создатель - её админ, member_ids добавляются сразу
+export function createGroup(input: CreateGroupInput): Promise<ConversationSummary> {
+    return request<ConversationSummary>('/conversations', { method: 'POST', body: input })
 }

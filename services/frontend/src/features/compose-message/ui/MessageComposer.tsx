@@ -16,8 +16,12 @@ export interface ReplyTarget {
 }
 
 interface Props {
-    conversationId: string
+    // куда писать: существующий чат или человек, с которым чата ещё нет
+    conversationId?: string
+    recipientId?: string
     myId: string | undefined
+    // сервер принял сообщение (для нового чата - в нём уже есть conversation_id)
+    onSent?: (message: Message) => void
     replyTo?: ReplyTarget | null
     // редактируемое сообщение; при смене родитель пересоздаёт компонент через key
     editing?: Message | null
@@ -28,10 +32,18 @@ interface Props {
 const MAX_HEIGHT = 160
 
 // поле ввода сообщения: отправка, ответ и редактирование; Enter - отправить, Shift+Enter - перенос
-export function MessageComposer({ conversationId, myId, replyTo, editing, onCancel }: Props) {
+export function MessageComposer({
+    conversationId,
+    recipientId,
+    myId,
+    onSent,
+    replyTo,
+    editing,
+    onCancel,
+}: Props) {
     const [text, setText] = useState(editing?.content ?? '')
     const fieldRef = useRef<HTMLTextAreaElement>(null)
-    const send = useSendMessage(myId)
+    const send = useSendMessage(myId, onSent)
 
     // при редактировании поле открывается с текстом: подгоняем высоту и ставим курсор в конец,
     // иначе autoFocus оставил бы его в начале
@@ -83,7 +95,9 @@ export function MessageComposer({ conversationId, myId, replyTo, editing, onCanc
             return
         }
         send.mutate({
-            conversation_id: conversationId,
+            ...(conversationId
+                ? { conversation_id: conversationId }
+                : { recipient_id: recipientId }),
             content,
             reply_to_message_id: replyTo?.id ?? null,
         })

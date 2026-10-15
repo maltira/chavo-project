@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 import { applyConversationEvent, moveReadCursor } from '@/entities/conversation'
 import { applyMessageEvent } from '@/entities/message'
 import { useSession } from '@/entities/session'
-import { presenceKey, userKey } from '@/entities/user'
+import { blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
 import { connectSocket } from '@/shared/api'
 import type { ServerEvent } from '@/shared/api'
@@ -39,10 +39,12 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             break
         case 'user.blocked':
         case 'user.unblocked':
-            // блокировка прячет аватар, фигуру, онлайн и статус: перечитываем оба профиля
+            // блокировка прячет аватар, фигуру, онлайн и статус и запрещает писать:
+            // перечитываем профили и статус блокировки обоих
             for (const id of [data.blocker_id, data.blocked_id]) {
                 if (id) {
                     void queryClient.invalidateQueries({ queryKey: userKey(id) })
+                    void queryClient.invalidateQueries({ queryKey: blockStatusKey(id) })
                 }
             }
             break

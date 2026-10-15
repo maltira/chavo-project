@@ -7,13 +7,17 @@ import { notify } from '@/shared/lib'
 
 let tempCounter = 0
 
-// отправка с оптимистичной вставкой: сообщение видно сразу, при ошибке исчезает
-export function useSendMessage(myId: string | undefined) {
+// отправка с оптимистичной вставкой: сообщение видно сразу, при ошибке исчезает;
+// первое сообщение новому собеседнику вставлять некуда - чата ещё нет, его вернёт сервер
+export function useSendMessage(myId: string | undefined, onSent?: (message: Message) => void) {
     const queryClient = useQueryClient()
 
     return useMutation({
         mutationFn: (input: SendMessageInput) => sendMessage(input),
         onMutate: (input) => {
+            if (!input.conversation_id) {
+                return { tempId: null }
+            }
             const temp: Message = {
                 id: `temp-${++tempCounter}`,
                 conversation_id: input.conversation_id,
@@ -30,10 +34,13 @@ export function useSendMessage(myId: string | undefined) {
             return { tempId: temp.id }
         },
         onSuccess: (message, _input, context) => {
-            replaceMessage(queryClient, context.tempId, message)
+            if (context.tempId) {
+                replaceMessage(queryClient, context.tempId, message)
+            }
+            onSent?.(message)
         },
         onError: (error, input, context) => {
-            if (context) {
+            if (context?.tempId && input.conversation_id) {
                 removeMessage(queryClient, input.conversation_id, context.tempId)
             }
             notify({

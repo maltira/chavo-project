@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter, useNavigate } from 'react-router'
 
 import { useSession } from '@/entities/session'
 
@@ -7,6 +8,12 @@ import { AppShell } from './AppShell'
 
 // запрос выхода подменяется глобальным fetch: тест не лезет внутрь фичи в обход публичного api
 const fetchMock = vi.fn()
+
+// кнопка внутри окна: переход на другой адрес, как после выбора чата или вступления в группу
+function GoToChat() {
+    const navigate = useNavigate()
+    return <button onClick={() => navigate('/chats/c1')}>перейти в чат</button>
+}
 
 function renderShell() {
     // данные профиля заданы заранее и считаются свежими: лишнего запроса /users/me не будет
@@ -21,9 +28,19 @@ function renderShell() {
     })
     return render(
         <QueryClientProvider client={client}>
-            <AppShell list={(compact) => <p>список: {compact ? 'свёрнут' : 'полный'}</p>}>
-                <p>панель</p>
-            </AppShell>
+            <MemoryRouter>
+                <AppShell
+                    list={(compact) => <p>список: {compact ? 'свёрнут' : 'полный'}</p>}
+                    search={({ query }) => (
+                        <div>
+                            <p>поиск: {query}</p>
+                            <GoToChat />
+                        </div>
+                    )}
+                >
+                    <p>панель</p>
+                </AppShell>
+            </MemoryRouter>
         </QueryClientProvider>,
     )
 }
@@ -167,5 +184,32 @@ describe('AppShell sidebar width', () => {
         fireEvent.doubleClick(resizer())
         expect(sidebar()).toHaveStyle({ width: '362px' })
         expect(localStorage.getItem('chavo:sidebar-width')).toBe('362')
+    })
+
+    it('shows search results instead of the list and closes the search', () => {
+        renderShell()
+        const field = screen.getByLabelText('Поиск')
+        fireEvent.focus(field)
+        fireEvent.change(field, { target: { value: 'arren' } })
+        expect(screen.getByText('поиск: arren')).toBeInTheDocument()
+        expect(screen.queryByText('список: полный')).toBeNull()
+
+        fireEvent.keyDown(field, { key: 'Escape' })
+        expect(screen.getByText('список: полный')).toBeInTheDocument()
+        expect(field).toHaveValue('')
+    })
+
+    it('closes the search, clears and unfocuses the field after a navigation', () => {
+        renderShell()
+        const field = screen.getByLabelText('Поиск')
+        field.focus()
+        fireEvent.focus(field)
+        fireEvent.change(field, { target: { value: 'клуб' } })
+        expect(screen.getByText('поиск: клуб')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'перейти в чат' }))
+        expect(screen.getByText('список: полный')).toBeInTheDocument()
+        expect(field).toHaveValue('')
+        expect(field).not.toHaveFocus()
     })
 })

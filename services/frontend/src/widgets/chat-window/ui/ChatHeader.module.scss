@@ -8,6 +8,32 @@
     background-color: var(--color-bg-tertiary);
 }
 
+// аватар и имя - одна кнопка, открывающая сведения
+.who {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: default;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 4px;
+        border-radius: $radius-md;
+    }
+}
+
 .texts {
     display: flex;
     flex: 1;

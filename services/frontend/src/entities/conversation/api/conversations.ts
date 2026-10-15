@@ -17,3 +17,25 @@ export async function getConversations(offset = 0): Promise<ConversationSummary[
     )
     return page.items
 }
+
+export function getConversation(id: string): Promise<ConversationSummary> {
+    return request<ConversationSummary>(`/conversations/${encodeURIComponent(id)}`)
+}
+
+export interface Member {
+    conversation_id: string
+    user_id: string
+    role: 'admin' | 'member'
+    last_read_message_id: string | null
+    joined_at: string
+}
+
+// предел страницы участников на сервере
+export const MEMBERS_LIMIT = 100
+
+export async function getMembers(id: string): Promise<Member[]> {
+    const page = await request<Page<Member>>(
+        `/conversations/${encodeURIComponent(id)}/members?limit=${MEMBERS_LIMIT}`,
+    )
+    return page.items
+}

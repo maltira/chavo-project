@@ -94,7 +94,7 @@
     align-self: stretch;
 
     & .time {
-        @include type(tag-regular);
+        @include type(xs-regular);
 
         display: inline-flex;
         align-items: center;

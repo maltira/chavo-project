@@ -2,7 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
-import { applyConversationEvent } from '@/entities/conversation'
+import { applyConversationEvent, moveReadCursor } from '@/entities/conversation'
+import { applyMessageEvent } from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
@@ -45,7 +46,25 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
                 }
             }
             break
+        case 'message.read': {
+            // курсор участника - для галочек в открытом чате
+            const read = event.data as {
+                conversation_id?: string
+                reader_id?: string
+                message_id?: string
+            }
+            if (read.conversation_id && read.reader_id && read.message_id) {
+                moveReadCursor(queryClient, read.conversation_id, read.reader_id, read.message_id)
+            }
+            applyConversationEvent(
+                queryClient,
+                event,
+                queryClient.getQueryData<Profile | null>(['me'])?.user_id,
+            )
+            break
+        }
         default:
+            applyMessageEvent(queryClient, event)
             applyConversationEvent(
                 queryClient,
                 event,

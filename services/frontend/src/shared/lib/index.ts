@@ -1,6 +1,6 @@
-export { cn } from './utils'
+export { cn, plural } from './utils'
 export { dismiss, notify, useNotifications } from './notifications'
 export type { Notice } from './notifications'
 export { newPasswordSchema, PASSWORD_HINT } from './password'
 export { useDismiss } from './useDismiss'
-export { formatChatTime } from './date'
+export { dayKey, formatChatTime, formatDay, formatLastSeen, formatTime } from './date'

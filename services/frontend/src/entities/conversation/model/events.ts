@@ -1,6 +1,8 @@
 import type { ServerEvent } from '@/shared/api'
 
-import type { ConversationSummary, Message } from './types'
+import type { Message } from '@/entities/message/@x/conversation'
+
+import type { ConversationSummary } from './types'
 
 interface MessagePayload {
     conversation_id?: string

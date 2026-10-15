@@ -1,4 +1,4 @@
-import { formatChatTime } from './date'
+import { formatChatTime, formatDay, formatLastSeen } from './date'
 
 describe('formatChatTime', () => {
     const now = new Date(2026, 9, 14, 18, 30) // среда, 14 октября 2026
@@ -19,5 +19,39 @@ describe('formatChatTime', () => {
 
     it('returns an empty string for a broken date', () => {
         expect(formatChatTime('nope', now)).toBe('')
+    })
+})
+
+describe('formatDay', () => {
+    const now = new Date(2026, 9, 14, 18, 30)
+
+    it('names today, yesterday and older days', () => {
+        expect(formatDay(new Date(2026, 9, 14, 1).toISOString(), now)).toBe('Сегодня')
+        expect(formatDay(new Date(2026, 9, 13, 23).toISOString(), now)).toBe('Вчера')
+        expect(formatDay(new Date(2026, 9, 2).toISOString(), now)).toBe('2 октября')
+        expect(formatDay(new Date(2025, 0, 2).toISOString(), now)).toBe('2 января 2025')
+    })
+})
+
+describe('formatLastSeen', () => {
+    const now = new Date(2026, 9, 14, 18, 30)
+
+    it('describes how long ago the user was online', () => {
+        expect(formatLastSeen(null, now)).toBe('был(а) недавно')
+        expect(formatLastSeen(new Date(2026, 9, 14, 18, 29, 40).toISOString(), now)).toBe(
+            'был(а) только что',
+        )
+        expect(formatLastSeen(new Date(2026, 9, 14, 18, 25).toISOString(), now)).toBe(
+            'был(а) 5 мин. назад',
+        )
+        expect(formatLastSeen(new Date(2026, 9, 14, 15, 0).toISOString(), now)).toBe(
+            'был(а) 3 ч. назад',
+        )
+        expect(formatLastSeen(new Date(2026, 9, 13, 9, 7).toISOString(), now)).toBe(
+            'был(а) вчера в 9:07',
+        )
+        expect(formatLastSeen(new Date(2026, 9, 1, 9, 7).toISOString(), now)).toBe(
+            'был(а) 1 октября в 9:07',
+        )
     })
 })

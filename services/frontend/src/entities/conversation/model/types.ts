@@ -1,18 +1,5 @@
+import type { Message } from '@/entities/message/@x/conversation'
 import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
-
-// сообщение в том виде, в каком его отдаёт Gateway
-export interface Message {
-    id: string
-    conversation_id: string
-    sender_id: string
-    // null у удалённого сообщения
-    content: string | null
-    reply_to_message_id: string | null
-    is_edited: boolean
-    is_deleted: boolean
-    created_at: string
-    updated_at: string | null
-}
 
 export interface Conversation {
     id: string

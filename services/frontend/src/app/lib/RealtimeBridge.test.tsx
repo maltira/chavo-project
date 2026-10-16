@@ -113,6 +113,61 @@ describe('RealtimeBridge', () => {
         expect(client.getQueryData(['me'])).toBeUndefined()
     })
 
+    it('explains why the session ended when it was closed from another device', () => {
+        const { socket } = mount()
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'session.revoked', data: { reason: 'remote_logout' } }),
+        })
+        socket().onclose?.({ code: 4001 })
+
+        expect(useSession.getState().status).toBe('guest')
+        expect(useNotifications.getState().items).toEqual(
+            expect.arrayContaining([expect.objectContaining({ title: 'Сеанс завершён' })]),
+        )
+    })
+
+    it('tells to sign in with the new password after a password change', () => {
+        const { socket } = mount()
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'session.revoked', data: { reason: 'password_changed' } }),
+        })
+        socket().onclose?.({ code: 4001 })
+        expect(useNotifications.getState().items).toEqual(
+            expect.arrayContaining([expect.objectContaining({ title: 'Пароль изменён' })]),
+        )
+    })
+
+    it('does not claim an expired session when the server just refused it', () => {
+        const { socket } = mount()
+        socket().onclose?.({ code: 4401 })
+        expect(useSession.getState().status).toBe('guest')
+        const titles = useNotifications.getState().items.map((n) => n.title)
+        expect(titles).toContain('Нужно войти снова')
+        expect(titles).not.toContain('Сеанс истёк')
+    })
+
+    it('signs out by the revoke event itself when the connection is not closed', () => {
+        const { socket } = mount()
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'session.revoked', data: { reason: 'remote_logout' } }),
+        })
+        expect(useSession.getState().status).toBe('authenticated')
+        vi.advanceTimersByTime(2000)
+        expect(useSession.getState().status).toBe('guest')
+    })
+
+    it('signs out and notifies once when the close follows the event', () => {
+        const { socket } = mount()
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'session.revoked', data: { reason: 'remote_logout' } }),
+        })
+        socket().onclose?.({ code: 4001 })
+        // дольше страховки, но меньше 5 с - уведомления сами пропадают через 5 с
+        vi.advanceTimersByTime(3000)
+        const ended = useNotifications.getState().items.filter((n) => n.id === 'session-ended')
+        expect(ended).toHaveLength(1)
+    })
+
     it('rechecks the profile instead of signing out when it is missing', () => {
         const { client, socket } = mount()
         const invalidate = vi.spyOn(client, 'invalidateQueries')

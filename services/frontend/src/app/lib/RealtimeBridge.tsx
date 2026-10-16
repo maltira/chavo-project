@@ -5,11 +5,14 @@ import { useEffect } from 'react'
 import { applyConversationEvent, moveReadCursor } from '@/entities/conversation'
 import { applyMessageEvent } from '@/entities/message'
 import { useSession } from '@/entities/session'
-import { blockStatusKey, presenceKey, userKey } from '@/entities/user'
+import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
 import { connectSocket } from '@/shared/api'
 import type { ServerEvent } from '@/shared/api'
 import { dismiss, notify } from '@/shared/lib'
+import type { Notice } from '@/shared/lib'
+
+import { notifyNewMessage } from './messageNotice'
 
 // события сервера обновляют кеш запросов, а не состояние компонентов: экраны уже читают кеш
 export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
@@ -47,6 +50,8 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
                     void queryClient.invalidateQueries({ queryKey: blockStatusKey(id) })
                 }
             }
+            // блокировали с другого моего устройства - чёрный список здесь тоже меняется
+            void queryClient.invalidateQueries({ queryKey: blockedKey })
             break
         case 'message.read': {
             // курсор участника - для галочек в открытом чате
@@ -76,16 +81,96 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
     }
 }
 
+// чем объяснить выход из аккаунта; reason - причина session.revoked или unauthorized (код 4401);
+// null - объяснять не нужно (вышел сам на этом устройстве)
+export function sessionEndedNotice(reason: string | undefined): Notice | null {
+    switch (reason) {
+        case 'logout':
+            return null
+        case 'password_changed':
+            // то же id, что у уведомления формы смены пароля: на этом устройстве оно не задвоится
+            return {
+                id: 'password-changed',
+                icon: 'lock',
+                title: 'Пароль изменён',
+                description: 'Все сеансы завершены, войдите с новым паролем',
+            }
+        case 'password_reset':
+            return {
+                id: 'session-ended',
+                icon: 'lock',
+                title: 'Пароль сброшен',
+                description: 'Все сеансы завершены, войдите с новым паролем',
+            }
+        case 'unauthorized':
+            // сервер не принял сеанс (истёк или не нашёлся): причину точно не знаем, не гадаем
+            return {
+                id: 'session-ended',
+                icon: 'warn',
+                title: 'Нужно войти снова',
+                description: 'Сеанс больше не действует',
+            }
+        default:
+            return {
+                id: 'session-ended',
+                icon: 'session',
+                title: 'Сеанс завершён',
+                description: 'Этот сеанс завершили с другого устройства',
+            }
+    }
+}
+
+// сколько ждать закрытия соединения после session.revoked, прежде чем выйти самим
+const REVOKE_GRACE_MS = 2000
+
 // единственное WebSocket-соединение вкладки; монтируется только когда есть сессия и профиль
 export function RealtimeBridge() {
     const queryClient = useQueryClient()
     const signOut = useSession((state) => state.signOut)
 
     useEffect(() => {
+        // перед закрытием соединения с кодом 4001 сервер присылает session.revoked с причиной
+        let revokeReason: string | undefined
+        // страховка: если после session.revoked соединение не закрылось, выходим сами
+        let revokeTimer: ReturnType<typeof setTimeout> | undefined
+        let ended = false
+
+        function endSession(reason: string | undefined) {
+            if (ended) {
+                return
+            }
+            ended = true
+            clearTimeout(revokeTimer)
+            const notice = sessionEndedNotice(reason)
+            if (notice) {
+                notify(notice)
+            }
+            queryClient.clear()
+            signOut()
+        }
+
         const socket = connectSocket({
-            onEvent: (event) => applyEvent(event, queryClient), // обработка событий
+            onEvent: (event) => {
+                if (event.type === 'session.revoked') {
+                    revokeReason = (event.data as { reason?: string } | undefined)?.reason
+                    clearTimeout(revokeTimer)
+                    revokeTimer = setTimeout(() => {
+                        endSession(revokeReason)
+                        socket.close()
+                    }, REVOKE_GRACE_MS)
+                    return
+                }
+                applyEvent(event, queryClient)
+                void notifyNewMessage(
+                    event,
+                    queryClient,
+                    queryClient.getQueryData<Profile | null>(['me'])?.user_id,
+                )
+            },
             onOpen: ({ reconnected }) => {
                 dismiss('network')
+                // новое соединение - причина прошлого закрытия к нему не относится
+                revokeReason = undefined
                 // пока связи не было, события не доставлялись: данные перечитываем
                 if (reconnected) {
                     void queryClient.invalidateQueries()
@@ -105,12 +190,14 @@ export function RealtimeBridge() {
                     void queryClient.invalidateQueries({ queryKey: ['me'] })
                     return
                 }
-                // сессия завершена: на другом устройстве, при смене пароля или истекла
-                queryClient.clear()
-                signOut()
+                // сессия завершена: на другом устройстве, при смене пароля или сервер её не принял
+                endSession(reason === 'revoked' ? revokeReason : 'unauthorized')
             },
         })
-        return () => socket.close()
+        return () => {
+            clearTimeout(revokeTimer)
+            socket.close()
+        }
     }, [queryClient, signOut])
 
     return null

@@ -1,17 +1,24 @@
 import { useRef, useState } from 'react'
 
 import { useMe, useProfileCard } from '@/entities/user'
-import { useLogout } from '@/features/auth-logout'
+import { useLogout } from '@/features/auth/logout'
 import { useTheme } from '@/features/toggle-theme'
 import { useDismiss } from '@/shared/lib'
-import { Avatar, AvatarShape, Icon, IconButton, MenuItem, Status, Switch } from '@/shared/ui'
+import { MyStatusButton, StatusEditor } from '@/features/set-status'
+import { Avatar, AvatarShape, Icon, IconButton, MenuItem, Modal, Switch } from '@/shared/ui'
 
 import styles from './ProfileMenu.module.scss'
 import { DEFAULT_WIDTH } from '../model/sidebarWidth'
 
-export function ProfileMenu() {
+interface Props {
+    // «Настройки» - окно настроек показывает страница
+    onSettings?: () => void
+}
+
+export function ProfileMenu({ onSettings }: Props) {
     const [open, setOpen] = useState(false)
     const [mounted, setMounted] = useState(false)
+    const [editingStatus, setEditingStatus] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const me = useMe()
     const openProfile = useProfileCard((state) => state.open)
@@ -77,13 +84,14 @@ export function ProfileMenu() {
                         </button>
                     )}
 
-                    {profile?.status && (
-                        <Status
-                            icon={profile.status.icon}
-                            text={profile.status.text}
-                            background={profile.status.background}
-                            foreground={profile.status.foreground}
-                            expiresAt={profile.status.expires_at}
+                    {/* статус нажимается: меню закрывается, открывается редактор статуса */}
+                    {profile && (
+                        <MyStatusButton
+                            block
+                            onEdit={() => {
+                                hide()
+                                setEditingStatus(true)
+                            }}
                         />
                     )}
 
@@ -100,7 +108,13 @@ export function ProfileMenu() {
                         >
                             Тёмная тема
                         </MenuItem>
-                        <MenuItem icon="settings" onClick={hide}>
+                        <MenuItem
+                            icon="settings"
+                            onClick={() => {
+                                hide()
+                                onSettings?.()
+                            }}
+                        >
                             Настройки
                         </MenuItem>
                         <MenuItem icon="help" onClick={hide}>
@@ -117,6 +131,11 @@ export function ProfileMenu() {
                     </div>
                 </div>
             )}
+
+            {/* редактор статуса из меню - отдельное окно, меню к этому моменту закрыто */}
+            <Modal open={editingStatus} onClose={() => setEditingStatus(false)} title="Статус">
+                {editingStatus && <StatusEditor onDone={() => setEditingStatus(false)} />}
+            </Modal>
         </div>
     )
 }

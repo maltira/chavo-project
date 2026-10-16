@@ -23,11 +23,13 @@ interface Props {
     search?: (slot: SearchSlot) => ReactNode
     // «+» - создать групповой чат
     onCreate?: () => void
+    // «Настройки» в меню профиля
+    onSettings?: () => void
     children?: ReactNode // выбранный чат
 }
 
 // окно приложения: сайдбар и область чата
-export function AppShell({ list, search, onCreate, children }: Props) {
+export function AppShell({ list, search, onCreate, onSettings, children }: Props) {
     const sidebarRef = useRef<HTMLElement>(null)
     const { width, compact, preview, commit } = useSidebarWidth()
     const [dragging, setDragging] = useState(false)
@@ -68,7 +70,7 @@ export function AppShell({ list, search, onCreate, children }: Props) {
                 style={{ width }}
             >
                 <div className={styles.toolbar}>
-                    <ProfileMenu />
+                    <ProfileMenu onSettings={onSettings} />
                     {!compact && (
                         <>
                             <Input

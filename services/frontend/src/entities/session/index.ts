@@ -1,2 +1,5 @@
 export { bootstrapSession, useSession } from './model/store'
 export type { SessionStatus } from './model/store'
+export { changePassword, currentSessionId, getSessions, terminateSession } from './api/sessions'
+export type { Session } from './api/sessions'
+export { sessionsKey, useSessions } from './model/useSessions'

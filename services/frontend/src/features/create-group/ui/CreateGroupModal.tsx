@@ -127,7 +127,6 @@ function CreateGroupForm({ open, onClose }: Props) {
 
     return (
         <Modal open={open} onClose={onClose} aria-label="Новый групповой чат">
-            {/* загрузки фото на сервере пока нет: кнопка по макету, но неактивна */}
             <div className={styles.photo}>
                 <Avatar size={96} />
                 <TextLink as="button" className={styles.photoButton} disabled>

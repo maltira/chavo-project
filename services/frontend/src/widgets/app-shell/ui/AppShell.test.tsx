@@ -212,4 +212,12 @@ describe('AppShell sidebar width', () => {
         expect(field).toHaveValue('')
         expect(field).not.toHaveFocus()
     })
+
+    it('opens the status editor from the profile menu and closes the menu', () => {
+        renderShell()
+        fireEvent.click(screen.getByRole('button', { name: 'Меню' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Установить статус' }))
+        expect(screen.getByRole('dialog', { name: 'Статус' })).toBeInTheDocument()
+        expect(screen.getByRole('menu')).toHaveAttribute('data-state', 'closed')
+    })
 })

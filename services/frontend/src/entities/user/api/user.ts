@@ -1,6 +1,6 @@
 import { request } from '@/shared/api'
 
-import type { Profile } from '../model/types'
+import type { AvatarShape, Profile, Status } from '../model/types'
 
 // чужой профиль
 export function getUser(userId: string): Promise<Profile> {
@@ -27,4 +27,70 @@ export function blockUser(userId: string): Promise<void> {
 
 export function unblockUser(userId: string): Promise<void> {
     return request<void>(`/users/${encodeURIComponent(userId)}/block`, { method: 'DELETE' })
+}
+
+export interface ProfileUpdate {
+    display_name?: string
+    username?: string
+    bio?: string
+}
+
+export function updateMe(update: ProfileUpdate): Promise<void> {
+    return request<void>('/users/me', { method: 'PATCH', body: update })
+}
+
+export interface StatusInput {
+    icon: string
+    text: string
+    background: string
+    foreground: string
+    duration: string
+}
+
+// каждый вызов ставит новый статус целиком, срок считается от момента запроса
+export function setMyStatus(input: StatusInput): Promise<Status> {
+    return request<Status>('/users/me/status', { method: 'POST', body: input })
+}
+
+export function clearMyStatus(): Promise<void> {
+    return request<void>('/users/me/status', { method: 'DELETE' })
+}
+
+export function setMyAvatarShape(shape: AvatarShape): Promise<AvatarShape> {
+    return request<AvatarShape>('/users/me/avatar-shape', { method: 'POST', body: shape })
+}
+
+export function clearMyAvatarShape(): Promise<void> {
+    return request<void>('/users/me/avatar-shape', { method: 'DELETE' })
+}
+
+export interface Settings {
+    allow_group_invites: boolean
+    show_online_status: boolean
+}
+
+export function getSettings(): Promise<Settings> {
+    return request<Settings>('/users/me/settings')
+}
+
+export function updateSettings(update: Partial<Settings>): Promise<Settings> {
+    return request<Settings>('/users/me/settings', { method: 'PATCH', body: update })
+}
+
+export interface BlockedUser {
+    blocked_user_id: string
+    username: string
+    display_name: string
+    avatar_url?: string
+    blocked_at: string
+}
+
+// размер страницы чёрного списка; сервер отдаёт не больше 100 за запрос
+export const BLOCKED_PAGE = 50
+
+export async function getBlocked(offset = 0): Promise<BlockedUser[]> {
+    const page = await request<{ items: BlockedUser[] }>(
+        `/users/me/blocked?limit=${BLOCKED_PAGE}&offset=${offset}`,
+    )
+    return page.items
 }

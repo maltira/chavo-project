@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
-import { LoginForm } from '@/features/auth-login'
-import { OtpForm } from '@/features/auth-otp'
+import { LoginForm } from '@/features/auth/login'
+import { OtpForm } from '@/features/auth/otp'
 import { notify } from '@/shared/lib'
 import { AuthCard, AuthLayout } from '@/widgets/auth-layout'
 

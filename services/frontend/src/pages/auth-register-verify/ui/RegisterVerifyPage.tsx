@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router'
 
-import { useVerifyEmail } from '@/features/auth-verify-email'
+import { useVerifyEmail } from '@/features/auth/verify-email'
 import { ROUTES } from '@/shared/config'
 import { Button } from '@/shared/ui'
 import { AuthCard, AuthLayout, AuthStatus } from '@/widgets/auth-layout'

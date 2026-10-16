@@ -8,6 +8,7 @@ import { AppShell } from '@/widgets/app-shell'
 import { ChatList } from '@/widgets/chat-list'
 import { ChatWindow, NewChatWindow } from '@/widgets/chat-window'
 import { GroupPreviewModal } from '@/widgets/group-preview'
+import { SettingsModal } from '@/widgets/settings'
 import { SearchResults } from '@/widgets/sidebar-search'
 import { UserProfileModal } from '@/widgets/user-profile'
 
@@ -18,12 +19,14 @@ import styles from './ChatsPage.module.scss'
 export function ChatsPage() {
     const { id, userId } = useParams()
     const [creating, setCreating] = useState(false)
+    const [settings, setSettings] = useState(false)
 
     return (
         <AppShell
             list={(compact) => <ChatList compact={compact} />}
             search={({ query, close }) => <SearchResults query={query} close={close} />}
             onCreate={() => setCreating(true)}
+            onSettings={() => setSettings(true)}
         >
             {id ? (
                 // key: при переходе в другой чат состояние окна (ответ, правка, текст) сбрасывается
@@ -40,6 +43,7 @@ export function ChatsPage() {
             <UserProfileModal />
             <GroupPreviewModal />
             <CreateGroupModal open={creating} onClose={() => setCreating(false)} />
+            <SettingsModal open={settings} onClose={() => setSettings(false)} />
         </AppShell>
     )
 }

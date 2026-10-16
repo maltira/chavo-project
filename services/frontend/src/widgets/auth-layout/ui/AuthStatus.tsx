@@ -5,7 +5,7 @@ import { Icon, Loader } from '@/shared/ui'
 import styles from './AuthStatus.module.scss'
 
 interface Props {
-    // loading - вращающаяся фигура, success и error - иконки из макета
+    // loading - вращающаяся фигура, success и error - иконки
     state: 'loading' | 'success' | 'error'
     children: ReactNode
     // кнопки под текстом, например «Войти»

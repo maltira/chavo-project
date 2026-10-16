@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { blockStatusKey, blockUser, unblockUser, userKey } from '@/entities/user'
+import { blockedKey, blockStatusKey, blockUser, unblockUser, userKey } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
 
@@ -12,6 +12,8 @@ export function useBlockUser(userId: string) {
     const refresh = () => {
         void queryClient.invalidateQueries({ queryKey: blockStatusKey(userId) })
         void queryClient.invalidateQueries({ queryKey: userKey(userId) })
+        // и мой чёрный список: человек в нём появился или пропал
+        void queryClient.invalidateQueries({ queryKey: blockedKey })
     }
     const onError = (error: unknown) =>
         notify({ icon: 'warn', title: 'Не получилось', description: errorMessage(error) })

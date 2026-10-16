@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// правила совпадают с user-service: username 3-32 символа [a-zA-Z0-9_], имя 1-100, о себе до 255
+// правила профиля - общие для создания и редактирования; совпадают с user-service: username 3-32 символа [a-zA-Z0-9_], имя 1-100, о себе до 255
 export const profileSchema = z.object({
     display_name: z
         .string()

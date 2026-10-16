@@ -35,10 +35,6 @@ export function MenuItem({
     )
     const rootClass = cn(styles.root, danger && styles.danger, className)
 
-    if (trailing) {
-        return <label className={cn(rootClass, styles.interactive)}>{content}</label>
-    }
-
     if (onClick) {
         return (
             <button
@@ -51,6 +47,11 @@ export function MenuItem({
                 {content}
             </button>
         )
+    }
+
+    // без onClick, но с элементом управления справа (Switch): клик по строке переключает его
+    if (trailing) {
+        return <label className={cn(rootClass, styles.interactive)}>{content}</label>
     }
 
     return (

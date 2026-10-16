@@ -34,7 +34,7 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                     <MenuItem
                         icon="check-double"
                         // счётчик в списке обновит событие о своём прочтении
-                        onClick={() => void markRead(chat.id, last.id).catch(() => { })}
+                        onClick={() => void markRead(chat.id, last.id).catch(() => {})}
                     >
                         Прочитать чат
                     </MenuItem>

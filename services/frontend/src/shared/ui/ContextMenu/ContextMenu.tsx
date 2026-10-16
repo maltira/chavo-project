@@ -40,7 +40,8 @@ export function ContextMenu({ position, onClose, 'aria-label': ariaLabel, childr
             setPlaced(null)
             return
         }
-        const { width, height } = node.getBoundingClientRect()
+        const width = node.offsetWidth
+        const height = node.offsetHeight
         const left = position.align === 'end' ? position.x - width : position.x
         setPlaced({
             x: Math.max(EDGE, Math.min(left, window.innerWidth - width - EDGE)),

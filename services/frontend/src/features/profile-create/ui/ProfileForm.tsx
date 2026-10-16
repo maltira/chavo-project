@@ -2,13 +2,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 
+import { profileSchema } from '@/entities/user'
+import type { ProfileInput, ProfileValues } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
 import { Avatar, Button, Field, Input, Textarea, TextLink } from '@/shared/ui'
 
 import { createProfile } from '../api/createProfile'
-import { profileSchema } from '../model/schema'
-import type { ProfileInput, ProfileValues } from '../model/schema'
 import styles from './ProfileForm.module.scss'
 
 const ERRORS: Record<string, string> = {
@@ -56,7 +56,7 @@ export function ProfileForm() {
                 }),
             )}
         >
-            {/* загрузки фото на сервере пока нет: кнопка по макету, но неактивна */}
+            {/* загрузки фото на сервере пока нет: кнопка неактивна */}
             <div className={styles.photo}>
                 <Avatar size={96} />
                 <TextLink as="button" className={styles.photoButton} disabled>

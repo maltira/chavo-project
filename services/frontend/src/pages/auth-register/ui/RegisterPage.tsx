@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
-import { RegisterForm } from '@/features/auth-register'
+import { RegisterForm } from '@/features/auth/register'
 import { ROUTES } from '@/shared/config'
 import { Button } from '@/shared/ui'
 import { AuthCard, AuthLayout, AuthStatus } from '@/widgets/auth-layout'

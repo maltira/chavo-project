@@ -64,10 +64,12 @@ describe('SearchResults', () => {
         renderSearch('@arren')
         act(() => vi.advanceTimersByTime(300))
 
-        expect(screen.getByText('Общий поиск: 2')).toBeInTheDocument()
+        expect(screen.getByText('Глобальный поиск')).toBeInTheDocument()
+        // человек из поиска и тот же собеседник в «Моих чатах»
+        expect(screen.getAllByText('Арефий Некрасов')).toHaveLength(2)
         expect(screen.queryByText('@arrenme')).toBeNull()
         expect(screen.getByText('Arrenoas fans')).toBeInTheDocument()
-        expect(screen.getByText('Мои чаты: 1')).toBeInTheDocument()
+        expect(screen.getByText('Мои чаты')).toBeInTheDocument()
     })
 
     it('opens the profile from people and the group card from groups', () => {
@@ -93,7 +95,7 @@ describe('SearchResults', () => {
     it('hides empty sections', () => {
         renderSearch('nobody')
         act(() => vi.advanceTimersByTime(300))
-        expect(screen.queryByText(/Общий поиск/)).toBeNull()
+        expect(screen.queryByText('Глобальный поиск')).toBeNull()
         expect(screen.queryByText(/Мои чаты/)).toBeNull()
         expect(screen.queryByText('Недавние')).toBeNull()
     })

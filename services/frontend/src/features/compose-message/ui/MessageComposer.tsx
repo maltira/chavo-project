@@ -45,13 +45,14 @@ export function MessageComposer({
     const fieldRef = useRef<HTMLTextAreaElement>(null)
     const send = useSendMessage(myId, onSent)
 
-    // при редактировании поле открывается с текстом: подгоняем высоту и ставим курсор в конец,
-    // иначе autoFocus оставил бы его в начале
+    // при открытии чата фокуса нет - пользователь сам нажмёт на поле;
+    // при редактировании - фокус и курсор в конце текста, высота по тексту
     const editingId = editing?.id
     useEffect(() => {
         resize()
         const field = fieldRef.current
         if (editingId && field) {
+            field.focus()
             const end = field.value.length
             field.setSelectionRange(end, end)
             // длинный текст не должен оставаться прокрученным к началу
@@ -75,8 +76,6 @@ export function MessageComposer({
         const field = fieldRef.current
         if (field) {
             field.style.height = 'auto'
-            // scrollHeight не включает рамку, а высота поля считается вместе с ней (border-box):
-            // без этой добавки внутри остаётся лишний пиксель и появляется полоса прокрутки
             const border = field.offsetHeight - field.clientHeight
             const wanted = field.scrollHeight + border
             field.style.height = `${Math.min(wanted, MAX_HEIGHT)}px`
@@ -150,8 +149,6 @@ export function MessageComposer({
                     aria-label="Сообщение"
                     value={text}
                     maxLength={MAX_MESSAGE_LENGTH}
-                    // фокус при открытии чата, ответе и редактировании
-                    autoFocus
                     onChange={(event) => {
                         setText(event.target.value)
                         resize()

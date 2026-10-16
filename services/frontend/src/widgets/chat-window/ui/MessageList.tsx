@@ -187,6 +187,20 @@ export function MessageList({
                     // имя автора - у первого сообщения из серии подряд идущих чужих в группе
                     const showAuthor =
                         isGroup && !mine && (newDay || older?.sender_id !== message.sender_id)
+                    // аватар - у нижнего (самого свежего) сообщения серии; у остальных - пустое место
+                    // той же ширины, чтобы пузыри серии стояли ровно
+                    const newer = messages[index - 1]
+                    const lastInSeries =
+                        !newer ||
+                        newer.sender_id !== message.sender_id ||
+                        dayKey(newer.created_at) !== dayKey(message.created_at)
+                    const avatar = isGroup && !mine ? (lastInSeries ? 'show' : 'space') : 'none'
+                    // продолжение серии: сверху сообщение того же автора за тот же день без разделителя -
+                    // между ними отступ меньше обычного
+                    const continued =
+                        !newDay &&
+                        older?.sender_id === message.sender_id &&
+                        message.id !== firstUnreadId
 
                     return (
                         <Fragment key={message.id}>
@@ -195,6 +209,8 @@ export function MessageList({
                                 mine={mine}
                                 read={readBoundary !== undefined && index >= readBoundary}
                                 showAuthor={showAuthor}
+                                avatar={avatar}
+                                continued={continued}
                                 replyTo={
                                     message.reply_to_message_id
                                         ? byId.get(message.reply_to_message_id)

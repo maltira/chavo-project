@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 
 import type { Message } from '@/entities/message'
-import { useUser } from '@/entities/user'
+import { useProfileCard, UserAvatar, useUser } from '@/entities/user'
 import { cn, formatTime, notify, useDismiss } from '@/shared/lib'
 import { Icon, IconButton } from '@/shared/ui'
 
@@ -12,6 +12,10 @@ interface Props {
     mine: boolean
     read: boolean // прочитано кем-то кроме меня
     showAuthor: boolean // имя автора над пузырём
+    // аватар автора слева (чужие сообщения в группе): show - у нижнего в серии, space - место под него
+    avatar: 'show' | 'space' | 'none'
+    // продолжение серии того же автора: ближе к сообщению над ним
+    continued: boolean
     replyTo: Message | null | undefined
     canEdit: boolean
     canDelete: boolean
@@ -20,6 +24,23 @@ interface Props {
     onEdit: (message: Message) => void
     onDelete: (message: Message) => void
     onJump: (messageId: string) => void
+}
+
+// аватар автора; нажатие открывает его профиль
+function AuthorAvatar({ userId }: { userId: string }) {
+    const user = useUser(userId)
+    const openProfile = useProfileCard((state) => state.open)
+    const profile = user.data
+    return (
+        <button
+            type="button"
+            className={styles.avatarButton}
+            aria-label={profile ? `Профиль: ${profile.display_name}` : 'Профиль'}
+            onClick={() => openProfile(userId)}
+        >
+            <UserAvatar src={profile?.avatar_url} shape={profile?.avatar_shape} size={32} />
+        </button>
+    )
 }
 
 // высота панели действий с отступом от сообщения
@@ -36,6 +57,8 @@ export function MessageBubble({
     mine,
     read,
     showAuthor,
+    avatar,
+    continued,
     replyTo,
     canEdit,
     canDelete,
@@ -95,14 +118,23 @@ export function MessageBubble({
     return (
         <div
             ref={rootRef}
-            className={cn(styles.row, mine && styles.mine, message.pending && styles.pending)}
+            className={cn(
+                styles.row,
+                mine && styles.mine,
+                continued && styles.continued,
+                message.pending && styles.pending,
+            )}
             data-message-id={message.id}
         >
             {mine && meta}
 
-            <div className={styles.column}>
-                {showAuthor && <AuthorName userId={message.sender_id} className={styles.author} />}
+            {avatar !== 'none' && (
+                <span className={styles.avatar}>
+                    {avatar === 'show' && <AuthorAvatar userId={message.sender_id} />}
+                </span>
+            )}
 
+            <div className={styles.column}>
                 <div
                     className={cn(
                         styles.bubble,
@@ -110,6 +142,10 @@ export function MessageBubble({
                         highlighted && styles.highlighted,
                     )}
                 >
+                    {/* имя автора - внутри пузыря, над цитатой и текстом */}
+                    {showAuthor && (
+                        <AuthorName userId={message.sender_id} className={styles.bubbleAuthor} />
+                    )}
                     {message.reply_to_message_id && (
                         <button
                             type="button"

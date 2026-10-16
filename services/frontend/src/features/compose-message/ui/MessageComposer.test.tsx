@@ -39,6 +39,11 @@ describe('MessageComposer', () => {
         expect(field).toHaveValue('')
     })
 
+    it('does not grab the focus when a chat is just opened', () => {
+        renderWithProviders(<MessageComposer conversationId="c1" myId="me" onCancel={vi.fn()} />)
+        expect(screen.getByLabelText('Сообщение')).not.toHaveFocus()
+    })
+
     it('sends a reply to the chosen message', async () => {
         renderWithProviders(
             <MessageComposer

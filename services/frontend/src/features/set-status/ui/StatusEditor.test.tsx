@@ -87,3 +87,55 @@ describe('StatusEditor', () => {
         expect(fetchMock.mock.calls[0]![1].method).toBe('DELETE')
     })
 })
+
+describe('StatusEditor for a group', () => {
+    beforeEach(() => {
+        fetchMock.mockReset()
+        vi.stubGlobal('fetch', fetchMock)
+    })
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('starts from the group status and saves it into the chat card', async () => {
+        const current = {
+            icon: 'moon',
+            text: 'Тихий час',
+            background: '#2A2A2A',
+            foreground: '#FAF9F5',
+            expires_at: null,
+        }
+        const client = new QueryClient({
+            defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+        })
+        client.setQueryData(['me'], { user_id: 'me', status: null })
+        client.setQueryData(['conversation', 'g1'], { id: 'g1', status: current })
+        client.setQueryData(['customization'], {
+            status: { icons: ['moon', 'flame'], durations: ['24h'] },
+            avatar_shapes: [],
+        })
+        const saved = { ...current, text: 'Наводим тишину' }
+        fetchMock.mockImplementation(() =>
+            Promise.resolve(new Response(JSON.stringify(saved), { status: 201 })),
+        )
+        const onDone = vi.fn()
+        render(
+            <QueryClientProvider client={client}>
+                <StatusEditor target={{ kind: 'group', id: 'g1' }} onDone={onDone} />
+            </QueryClientProvider>,
+        )
+
+        const text = screen.getByPlaceholderText(/Сегодня отдыхаю/)
+        expect(text).toHaveValue('Тихий час')
+        fireEvent.change(text, { target: { value: 'Наводим тишину' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+
+        await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+        expect(fetchMock.mock.calls[0]![0]).toBe('/api/conversations/g1/status')
+        expect(client.getQueryData<{ status: unknown }>(['conversation', 'g1'])?.status).toEqual(
+            saved,
+        )
+        // мой статус не тронут
+        expect(client.getQueryData<{ status: unknown }>(['me'])?.status).toBeNull()
+    })
+})

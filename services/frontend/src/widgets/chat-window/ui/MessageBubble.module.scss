@@ -23,6 +23,42 @@
     &.pending {
         animation: pending-blink 800ms ease-in-out infinite alternate;
     }
+
+    // новое сообщение вырастает от нижнего края: от своего угла пузыря
+    &.appear {
+        transform-origin: bottom left;
+        animation: message-appear 250ms ease-out;
+    }
+
+    &.appear.mine {
+        transform-origin: bottom right;
+    }
+
+    // своё неподтверждённое: сначала въезжает, потом мигает
+    &.appear.pending {
+        animation:
+            message-appear 250ms ease-out,
+            pending-blink 800ms ease-in-out 250ms infinite alternate;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        &.appear,
+        &.appear.pending {
+            animation: none;
+        }
+    }
+}
+
+@keyframes message-appear {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
 }
 
 @keyframes pending-blink {

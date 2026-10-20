@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 
 import type { ConversationSummary } from '@/entities/conversation'
-import { useMembers } from '@/entities/conversation'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { formatLastSeen, plural } from '@/shared/lib'
 import { Status } from '@/shared/ui'
@@ -25,7 +24,6 @@ export function ChatHeader({ chat, peerId, onOpenInfo, actions }: Props) {
 
     const peer = useUser(isDirect ? peerUserId : null)
     const presence = usePresence(isDirect ? peerUserId : null)
-    const members = useMembers(isDirect ? null : chat?.id)
 
     const profile = peer.data
     const name = isDirect ? (profile?.display_name ?? '') : (chat?.name ?? 'Группа')
@@ -37,10 +35,9 @@ export function ChatHeader({ chat, peerId, onOpenInfo, actions }: Props) {
         subtitle = online
             ? 'в сети'
             : formatLastSeen(presence?.lastSeenAt ?? profile?.last_seen_at ?? null)
-    } else if (members.data) {
-        // сервер отдаёт до 100 участников за раз
-        const count = members.data.length
-        subtitle = `${count >= 100 ? '100+' : count} ${plural(count, ['участник', 'участника', 'участников'])}`
+    } else if (chat) {
+        const count = chat.members_count
+        subtitle = `${count} ${plural(count, ['участник', 'участника', 'участников'])}`
     }
 
     return (

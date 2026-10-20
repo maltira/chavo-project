@@ -13,6 +13,9 @@ interface MessagePayload {
     content?: string | null
     created_at?: string
     updated_at?: string
+    kind?: Message['kind']
+    system_event?: Message['system_event']
+    target_id?: string | null
 }
 
 // результат применения события к списку:
@@ -65,13 +68,18 @@ export function applyToConversations(
                 is_deleted: false,
                 created_at: data.created_at,
                 updated_at: null,
+                kind: data.kind ?? 'user',
+                system_event: data.system_event ?? null,
+                target_id: data.target_id ?? null,
             }
+            // системные сообщения поднимают чат, но в непрочитанные не идут (так считает и сервер)
+            const counts = data.sender_id !== myId && message.kind !== 'system'
             const updated: ConversationSummary = {
                 ...chat,
                 last_message: message,
                 last_message_at: data.created_at,
                 last_message_read: false,
-                unread_count: chat.unread_count + (data.sender_id === myId ? 0 : 1),
+                unread_count: chat.unread_count + (counts ? 1 : 0),
             }
             const next = list.map((c, i) => (i === index ? updated : c))
             return { kind: 'list', list: next.sort(byFreshness) }

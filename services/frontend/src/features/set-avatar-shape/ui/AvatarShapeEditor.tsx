@@ -1,14 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import {
+    clearGroupAvatarShape,
+    conversationKey,
+    conversationsKey,
+    setGroupAvatarShape,
+    useConversation,
+} from '@/entities/conversation'
+import type { ConversationSummary } from '@/entities/conversation'
 import { useCustomization } from '@/entities/customization'
 import { clearMyAvatarShape, setMyAvatarShape, useMe, UserAvatar } from '@/entities/user'
 import type { AvatarShape as Shape, Profile } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
 import { cn, notify } from '@/shared/lib'
-import { AvatarShape, Button, ColorPicker, Modal } from '@/shared/ui'
+import { AvatarShape, Button, ColorPicker } from '@/shared/ui'
 
-import styles from './AvatarShapeModal.module.scss'
+import styles from './AvatarShapeEditor.module.scss'
 
 const COLORS = [
     '#D97757',
@@ -21,47 +29,64 @@ const COLORS = [
     '#9BE36C',
 ]
 
+// чья фигура: моя или группы (меняет только её админ)
+export type ShapeTarget = { kind: 'me' } | { kind: 'group'; id: string }
+
+const ME: ShapeTarget = { kind: 'me' }
+
 interface Props {
-    open: boolean
-    onClose: () => void
+    // фигура сохранена или убрана - вернуться туда, откуда открыли
+    onDone: () => void
+    // по умолчанию - моя фигура
+    target?: ShapeTarget
 }
 
-// фигура за моим аватаром: форма из каталога и цвет; видна всем, кроме тех, кого я заблокировал
-export function AvatarShapeModal({ open, onClose }: Props) {
-    return (
-        <Modal open={open} onClose={onClose} title="Фигура">
-            {open && <ShapeForm onClose={onClose} />}
-        </Modal>
-    )
-}
-
-function ShapeForm({ onClose }: { onClose: () => void }) {
+// фигура за аватаром: форма из каталога и цвет; моя видна всем, кроме тех, кого я заблокировал.
+// это содержимое окна, а не отдельное окно: его показывают мой профиль и настройки группы со стрелкой «назад»
+export function AvatarShapeEditor({ onDone, target = ME }: Props) {
     const me = useMe()
+    const groupId = target.kind === 'group' ? target.id : ''
+    const chat = useConversation(groupId, target.kind === 'group')
+    const owner = target.kind === 'me' ? me.data : chat.data
     const catalog = useCustomization()
     const queryClient = useQueryClient()
-    const current = me.data?.avatar_shape ?? null
+    const current = owner?.avatar_shape ?? null
     const shapes = catalog.data?.avatar_shapes ?? []
     const [shape, setShape] = useState(current?.shape ?? '')
     const [color, setColor] = useState(current?.color ?? COLORS[0]!)
     const chosen = shape || shapes[0] || ''
 
-    const put = (avatar_shape: Shape | null) =>
-        queryClient.setQueryData<Profile | null>(['me'], (p) => (p ? { ...p, avatar_shape } : p))
+    const put = (avatar_shape: Shape | null) => {
+        if (target.kind === 'me') {
+            queryClient.setQueryData<Profile | null>(['me'], (p) =>
+                p ? { ...p, avatar_shape } : p,
+            )
+            return
+        }
+        queryClient.setQueryData<ConversationSummary>(conversationKey(target.id), (c) =>
+            c ? { ...c, avatar_shape } : c,
+        )
+        void queryClient.invalidateQueries({ queryKey: conversationsKey })
+    }
     const onError = (error: unknown) =>
         notify({ icon: 'warn', title: 'Не получилось', description: errorMessage(error) })
     const save = useMutation({
-        mutationFn: () => setMyAvatarShape({ shape: chosen, color }),
+        mutationFn: () =>
+            target.kind === 'me'
+                ? setMyAvatarShape({ shape: chosen, color })
+                : setGroupAvatarShape(target.id, { shape: chosen, color }),
         onSuccess: (saved) => {
             put(saved)
-            onClose()
+            onDone()
         },
         onError,
     })
     const remove = useMutation({
-        mutationFn: clearMyAvatarShape,
+        mutationFn: () =>
+            target.kind === 'me' ? clearMyAvatarShape() : clearGroupAvatarShape(target.id),
         onSuccess: () => {
             put(null)
-            onClose()
+            onDone()
         },
         onError,
     })
@@ -71,7 +96,7 @@ function ShapeForm({ onClose }: { onClose: () => void }) {
         <div className={styles.form}>
             <div className={styles.preview}>
                 <UserAvatar
-                    src={me.data?.avatar_url}
+                    src={owner?.avatar_url}
                     shape={chosen ? { shape: chosen, color } : null}
                     size={96}
                 />

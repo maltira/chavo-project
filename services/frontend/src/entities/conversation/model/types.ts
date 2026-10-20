@@ -14,6 +14,8 @@ export interface Conversation {
     updated_at: string
     status: Status | null
     avatar_shape: AvatarShape | null
+    // код ссылки на чат открытой группы; у закрытых и личных - null
+    slug: string | null
 }
 
 // строка списка чатов (GET /api/conversations)
@@ -24,4 +26,7 @@ export interface ConversationSummary extends Conversation {
     unread_count: number
     // последнее сообщение прочитал кто-то кроме его автора
     last_message_read: boolean
+    members_count: number
+    // код ссылки закрытой группы: только у её админов и только в карточке чата
+    invite_code?: string | null
 }

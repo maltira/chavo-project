@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 
 import { conversationsKey, createGroup } from '@/entities/conversation'
 import type { CreateGroupInput } from '@/entities/conversation'
-import { errorMessage } from '@/shared/api'
+import { ApiError, errorMessage } from '@/shared/api'
 import { chatPath } from '@/shared/config'
 import { notify } from '@/shared/lib'
 
@@ -19,11 +19,16 @@ export function useCreateGroup(onCreated: () => void) {
             onCreated()
             navigate(chatPath(group.id))
         },
-        onError: (error) =>
+        onError: (error) => {
+            // ошибку ссылки форма показывает у поля
+            if (error instanceof ApiError && error.reason?.startsWith('SLUG_')) {
+                return
+            }
             notify({
                 icon: 'warn',
                 title: 'Не удалось создать чат',
                 description: errorMessage(error),
-            }),
+            })
+        },
     })
 }

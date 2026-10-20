@@ -1,7 +1,7 @@
 import { useSessions } from '@/entities/session'
 import { useBlocked, useMe, useProfileCard, UserAvatar } from '@/entities/user'
 import { useLogout } from '@/features/auth/logout'
-import { MyStatusButton } from '@/features/set-status'
+import { StatusButton } from '@/features/set-status'
 import { Button, Icon, MenuItem, Modal, Tag } from '@/shared/ui'
 
 import type { Screen } from './SettingsModal'
@@ -28,7 +28,7 @@ export function MainScreen({ open, onClose, onNavigate }: Props) {
             open={open}
             onClose={onClose}
             aria-label="Настройки"
-            headerStart={<MyStatusButton onEdit={() => onNavigate('status')} />}
+            headerStart={<StatusButton onEdit={() => onNavigate('status')} />}
         >
             {profile && (
                 <div className={styles.head}>

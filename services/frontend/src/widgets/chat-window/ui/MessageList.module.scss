@@ -27,6 +27,70 @@
     text-align: center;
 }
 
+// системное сообщение («Герман присоединился к чату»): плашка по центру
+.system {
+    @include type(xs-regular);
+
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    margin: 4px 0;
+}
+
+// системное сообщение, пришедшее при открытом чате, появляется так же, как обычные
+.appear {
+    transform-origin: bottom center;
+    animation: system-appear 250ms ease-out;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
+}
+
+@keyframes system-appear {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.systemText {
+    max-width: 80%;
+    padding: 4px 12px;
+    overflow: hidden;
+
+    border-radius: $radius-md;
+    background-color: alpha(var(--color-text), 0.06);
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.systemName {
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: alpha(var(--color-text), 0.85);
+    font: inherit;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
+
+    &:focus-visible {
+        border-radius: 4px;
+        outline: 2px solid var(--color-accent);
+    }
+}
+
 .sentinel {
     flex-shrink: 0;
     height: 1px;

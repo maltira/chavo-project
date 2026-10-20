@@ -68,3 +68,11 @@ export function findDirectWith(queryClient: QueryClient, userId: string) {
         ?.pages.flat()
         .find((c) => c.conversation_type === 'direct' && c.peer_id === userId)
 }
+
+// собеседники из моих личных чатов (загруженных): их можно позвать в группу
+export function useDirectPeers() {
+    const chats = useConversations()
+    return (chats.data ?? [])
+        .filter((chat) => chat.conversation_type === 'direct' && chat.peer_id)
+        .map((chat) => chat.peer_id!)
+}

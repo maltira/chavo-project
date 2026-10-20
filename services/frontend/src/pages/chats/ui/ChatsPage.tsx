@@ -7,17 +7,19 @@ import { Icon } from '@/shared/ui'
 import { AppShell } from '@/widgets/app-shell'
 import { ChatList } from '@/widgets/chat-list'
 import { ChatWindow, NewChatWindow } from '@/widgets/chat-window'
-import { GroupPreviewModal } from '@/widgets/group-preview'
+import { GroupInfoModal } from '@/widgets/group-info'
 import { SettingsModal } from '@/widgets/settings'
 import { SearchResults } from '@/widgets/sidebar-search'
 import { UserProfileModal } from '@/widgets/user-profile'
 
+import { useChatLink } from '../model/useChatLink'
 import styles from './ChatsPage.module.scss'
 
 // главная приложения: / - пустой чат, /chats/:id - открытый чат,
-// /chats/new/:userId - личный чат, который создаст первое сообщение
+// /chats/new/:userId - личный чат, который создаст первое сообщение, /chat/:code - ссылка на чат
 export function ChatsPage() {
-    const { id, userId } = useParams()
+    const { id, userId, code } = useParams()
+    useChatLink(code)
     const [creating, setCreating] = useState(false)
     const [settings, setSettings] = useState(false)
 
@@ -41,7 +43,7 @@ export function ChatsPage() {
             )}
             {/* модалки открываются из разных мест через сторы сущностей, показываются здесь */}
             <UserProfileModal />
-            <GroupPreviewModal />
+            <GroupInfoModal />
             <CreateGroupModal open={creating} onClose={() => setCreating(false)} />
             <SettingsModal open={settings} onClose={() => setSettings(false)} />
         </AppShell>

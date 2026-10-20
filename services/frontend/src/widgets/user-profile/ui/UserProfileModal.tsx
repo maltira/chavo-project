@@ -13,8 +13,8 @@ import {
 } from '@/entities/user'
 import { useBlockUser } from '@/features/block-user'
 import { ProfileEditForm } from '@/features/profile-edit'
-import { AvatarShapeModal } from '@/features/set-avatar-shape'
-import { MyStatusButton, StatusEditor } from '@/features/set-status'
+import { AvatarShapeEditor } from '@/features/set-avatar-shape'
+import { StatusButton, StatusEditor } from '@/features/set-status'
 import { chatPath, newChatPath } from '@/shared/config'
 import { formatDate, formatLastSeen } from '@/shared/lib'
 import type { InfoItem } from '@/shared/ui'
@@ -32,9 +32,24 @@ export function UserProfileModal() {
     if (userId && userId !== shownId) {
         setShownId(userId)
     }
+    // каждое открытие - с самого профиля, а не со статуса или правки, где окно закрыли
+    const open = !!userId
+    const [session, setSession] = useState(0)
+    const [wasOpen, setWasOpen] = useState(open)
+    if (open !== wasOpen) {
+        setWasOpen(open)
+        if (open) {
+            setSession((n) => n + 1)
+        }
+    }
 
     return shownId ? (
-        <ProfileContent key={shownId} userId={shownId} open={!!userId} onClose={close} />
+        <ProfileContent
+            key={`${session}:${shownId}`}
+            userId={shownId}
+            open={open}
+            onClose={close}
+        />
     ) : null
 }
 
@@ -91,9 +106,34 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
         info.push({ icon: 'shape-message', label: 'О себе', value: profile.bio })
     }
 
+    // разные key у окон профиля, статуса и фигуры: переход между ними - новое окно со своей анимацией
+    if (isMe && pickingShape) {
+        return (
+            <Modal
+                key="shape"
+                open={open}
+                onClose={onClose}
+                title="Фигура"
+                headerStart={
+                    <button
+                        type="button"
+                        className={styles.back}
+                        aria-label="Назад"
+                        onClick={() => setPickingShape(false)}
+                    >
+                        <Icon name="arrow-left" size={24} color="inherit" />
+                    </button>
+                }
+            >
+                <AvatarShapeEditor onDone={() => setPickingShape(false)} />
+            </Modal>
+        )
+    }
+
     if (isMe && editingStatus) {
         return (
             <Modal
+                key="status"
                 open={open}
                 onClose={onClose}
                 title="Статус"
@@ -121,13 +161,14 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
 
     return (
         <Modal
+            key="profile"
             open={open}
             onClose={onClose}
             aria-label={`Профиль: ${profile.display_name}`}
             headerStart={
                 // свой статус - кнопка: по нажатию редактор статуса
                 isMe ? (
-                    <MyStatusButton onEdit={() => setEditingStatus(true)} />
+                    <StatusButton onEdit={() => setEditingStatus(true)} />
                 ) : (
                     profile.status && (
                         <Status
@@ -206,10 +247,6 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
                         )}
                     </div>
                 </>
-            )}
-
-            {isMe && (
-                <AvatarShapeModal open={pickingShape} onClose={() => setPickingShape(false)} />
             )}
 
             <ConfirmModal

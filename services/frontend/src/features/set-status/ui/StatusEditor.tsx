@@ -1,11 +1,12 @@
 import { useState } from 'react'
 
 import { durationLabel, useCustomization } from '@/entities/customization'
-import { useMe } from '@/entities/user'
 import { cn } from '@/shared/lib'
 import { Button, ColorPicker, Icon, Input, Segmented, Status } from '@/shared/ui'
 
-import { useMyStatus } from '../model/useMyStatus'
+import { ME } from '../model/target'
+import type { CustomTarget } from '../model/target'
+import { useStatusMutations, useTargetStatus } from '../model/useTargetStatus'
 import styles from './StatusEditor.module.scss'
 
 // готовые цвета: фон и общий цвет текста и иконки; любой другой - через пипетку
@@ -27,17 +28,18 @@ const TEXT_MAX = 70
 interface Props {
     // статус сохранён или снят - вернуться туда, откуда открыли
     onDone: () => void
+    // по умолчанию - мой статус
+    target?: CustomTarget
 }
 
 // установка статуса: иконка, текст, цвета и срок; статус всегда ставится целиком заново.
-// это содержимое окна, а не отдельное окно: его показывают настройки и мой профиль со стрелкой «назад»
-export function StatusEditor({ onDone }: Props) {
-    const me = useMe()
+// это содержимое окна, а не отдельное окно: его показывают настройки, мой профиль и настройки группы
+export function StatusEditor({ onDone, target = ME }: Props) {
     const catalog = useCustomization()
-    const current = me.data?.status ?? null
+    const current = useTargetStatus(target)
     const icons = catalog.data?.status.icons ?? []
     const durations = catalog.data?.status.durations ?? []
-    const { set, clear, pending } = useMyStatus(onDone)
+    const { set, clear, pending } = useStatusMutations(target, onDone)
 
     // форма начинается с текущего статуса, если он есть
     const [icon, setIcon] = useState(current?.icon ?? '')
@@ -55,7 +57,7 @@ export function StatusEditor({ onDone }: Props) {
             <div className={styles.preview}>
                 <Status
                     icon={chosenIcon}
-                    text={text.trim() || 'Ваш статус'}
+                    text={text.trim() || (target.kind === 'me' ? 'Ваш статус' : 'Статус группы')}
                     background={background}
                     foreground={foreground}
                 />

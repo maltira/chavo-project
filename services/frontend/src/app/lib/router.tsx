@@ -7,6 +7,7 @@ import { ResetPage } from '@/pages/auth-reset'
 import { ResetConfirmPage } from '@/pages/auth-reset-confirm'
 import { ChatsPage } from '@/pages/chats'
 import { HomePage } from '@/pages/home'
+import { FaqPage, PrivacyPage, TermsPage } from '@/pages/info'
 import { ProfileSetupPage } from '@/pages/profile-setup'
 import { ROUTES } from '@/shared/config'
 
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
     // ссылки из писем открываются в любом состоянии сессии
     { path: ROUTES.registerVerify, element: <RegisterVerifyPage /> },
     { path: ROUTES.resetConfirm, element: <ResetConfirmPage /> },
+    // справочные страницы - в любом состоянии сессии
+    { path: ROUTES.faq, element: <FaqPage /> },
+    { path: ROUTES.terms, element: <TermsPage /> },
+    { path: ROUTES.privacy, element: <PrivacyPage /> },
     {
         element: <RequireAuth />,
         children: [
@@ -42,6 +47,7 @@ export const router = createBrowserRouter([
                             { path: ROUTES.home, element: <ChatsPage /> },
                             { path: ROUTES.chat, element: <ChatsPage /> },
                             { path: ROUTES.newChat, element: <ChatsPage /> },
+                            { path: ROUTES.chatLink, element: <ChatsPage /> },
                             // песочница компонентов: только в разработке
                             ...(import.meta.env.DEV
                                 ? [{ path: '/ui', element: <HomePage /> }]

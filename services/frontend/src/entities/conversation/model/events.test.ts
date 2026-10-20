@@ -23,6 +23,8 @@ function chat(
         last_message: null,
         unread_count: 0,
         last_message_read: false,
+        members_count: 2,
+        slug: null,
         ...extra,
     }
 }
@@ -53,6 +55,31 @@ describe('applyToConversations', () => {
         expect(update.list[0]).toMatchObject({
             unread_count: 1,
             last_message: { id: 'm1', content: 'привет' },
+        })
+    })
+
+    it('lifts the chat with a system message but does not count it as unread', () => {
+        const update = applyToConversations(
+            list,
+            {
+                type: 'message.created',
+                data: {
+                    conversation_id: 'b',
+                    message_id: 's1',
+                    sender_id: 'peer',
+                    created_at: '2026-10-14T11:00:00Z',
+                    kind: 'system',
+                    system_event: 'joined',
+                    target_id: 'peer',
+                },
+            },
+            ME,
+        )
+        if (update.kind !== 'list') throw new Error('list expected')
+        expect(update.list.map((c) => c.id)).toEqual(['b', 'a'])
+        expect(update.list[0]).toMatchObject({
+            unread_count: 0,
+            last_message: { id: 's1', kind: 'system', system_event: 'joined', content: null },
         })
     })
 

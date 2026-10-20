@@ -34,6 +34,8 @@ const base: ConversationSummary = {
     },
     unread_count: 0,
     last_message_read: true,
+    members_count: 2,
+    slug: null,
 }
 
 function renderList(chats: ConversationSummary[] | undefined, compact = false) {

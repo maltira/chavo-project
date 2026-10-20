@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { useSession } from '@/entities/session'
@@ -20,6 +20,7 @@ function renderAt(route: string) {
                 </Route>
                 <Route element={<RequireAuth />}>
                     <Route path="/" element={<p>главная</p>} />
+                    <Route path="/chat/:code" element={<p>ссылка на чат</p>} />
                 </Route>
             </Routes>
         </MemoryRouter>,
@@ -37,6 +38,14 @@ describe('route guards', () => {
         useSession.setState({ status: 'authenticated' })
         renderAt('/auth/login')
         expect(screen.getByText('главная')).toBeInTheDocument()
+    })
+
+    it('returns a guest to the chat link after signing in', () => {
+        useSession.setState({ status: 'guest' })
+        renderAt('/chat/book_club')
+        expect(screen.getByText('вход')).toBeInTheDocument()
+        act(() => useSession.setState({ status: 'authenticated' }))
+        expect(screen.getByText('ссылка на чат')).toBeInTheDocument()
     })
 
     it('shows a loader instead of any page while the session is unknown', () => {

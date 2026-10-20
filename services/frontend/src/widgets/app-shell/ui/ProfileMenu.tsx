@@ -3,8 +3,9 @@ import { useRef, useState } from 'react'
 import { useMe, useProfileCard } from '@/entities/user'
 import { useLogout } from '@/features/auth/logout'
 import { useTheme } from '@/features/toggle-theme'
+import { ROUTES } from '@/shared/config'
 import { useDismiss } from '@/shared/lib'
-import { MyStatusButton, StatusEditor } from '@/features/set-status'
+import { StatusButton, StatusEditor } from '@/features/set-status'
 import { Avatar, AvatarShape, Icon, IconButton, MenuItem, Modal, Switch } from '@/shared/ui'
 
 import styles from './ProfileMenu.module.scss'
@@ -86,7 +87,7 @@ export function ProfileMenu({ onSettings }: Props) {
 
                     {/* статус нажимается: меню закрывается, открывается редактор статуса */}
                     {profile && (
-                        <MyStatusButton
+                        <StatusButton
                             block
                             onEdit={() => {
                                 hide()
@@ -117,7 +118,14 @@ export function ProfileMenu({ onSettings }: Props) {
                         >
                             Настройки
                         </MenuItem>
-                        <MenuItem icon="help" onClick={hide}>
+                        <MenuItem
+                            icon="help"
+                            onClick={() => {
+                                hide()
+                                // в новой вкладке: открытый чат и соединение остаются
+                                window.open(ROUTES.faq, '_blank', 'noopener,noreferrer')
+                            }}
+                        >
                             FAQ и поддержка
                         </MenuItem>
                         <MenuItem

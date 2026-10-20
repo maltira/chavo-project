@@ -7,6 +7,8 @@ export interface Notice {
     icon?: string
     // без таймера: убирается только вызовом dismiss или крестиком
     persistent?: boolean
+    // клик по уведомлению (например, открыть чат); после него уведомление закрывается
+    onClick?: () => void
 }
 
 type NoticeInput = Omit<Notice, 'id'> & { id?: string }

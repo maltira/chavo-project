@@ -17,12 +17,13 @@ function fromList(queryClient: QueryClient, id: string) {
 }
 
 // карточка чата; пока загружается, берётся строка из списка - окно открывается без ожидания
-export function useConversation(id: string) {
+export function useConversation(id: string, enabled = true) {
     const queryClient = useQueryClient()
     return useQuery({
         queryKey: conversationKey(id),
         queryFn: () => getConversation(id),
         placeholderData: () => fromList(queryClient, id),
+        enabled,
     })
 }
 

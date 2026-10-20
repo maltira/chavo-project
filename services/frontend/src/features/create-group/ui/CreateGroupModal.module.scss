@@ -87,40 +87,6 @@
     background-color: var(--color-bg-tertiary);
 }
 
-.card {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    min-height: 48px;
-}
-
-.texts {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-}
-
-.name,
-.username {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.name {
-    @include type(button-medium);
-
-    color: var(--color-text);
-}
-
-.username {
-    @include type(tag-regular);
-
-    color: alpha(var(--color-text), 0.6);
-}
-
 .list .toggle {
     flex-shrink: 0;
     border-color: transparent;

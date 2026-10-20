@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 
 import { errorMessage } from '@/shared/api'
+import { ROUTES } from '@/shared/config'
 import { notify, PASSWORD_HINT } from '@/shared/lib'
 import { Button, Field, Input, Logo, PasswordInput, TextLink } from '@/shared/ui'
 
@@ -108,8 +109,23 @@ export function RegisterForm({ onSuccess }: Props) {
 
             <p className={styles.terms}>
                 Продолжая, вы соглашаетесь с{' '}
-                <TextLink className={styles.termsLink}>условиями использования</TextLink> и{' '}
-                <TextLink className={styles.termsLink}>политикой конфиденциальности</TextLink>
+                <TextLink
+                    className={styles.termsLink}
+                    href={ROUTES.terms}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    условиями использования
+                </TextLink>{' '}
+                и{' '}
+                <TextLink
+                    className={styles.termsLink}
+                    href={ROUTES.privacy}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    политикой конфиденциальности
+                </TextLink>
             </p>
         </form>
     )

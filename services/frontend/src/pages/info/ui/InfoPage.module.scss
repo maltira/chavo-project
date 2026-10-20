@@ -1,0 +1,15 @@
+.title {
+    @include type(h4-lora-medium);
+
+    margin: 0;
+    color: var(--color-text);
+    text-align: center;
+}
+
+.text {
+    @include type(main-regular);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}

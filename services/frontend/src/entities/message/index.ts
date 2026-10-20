@@ -16,4 +16,6 @@ export {
     replaceMessage,
 } from './model/cache'
 export { useMessages } from './model/useMessages'
-export type { Message, MessagesPage } from './model/types'
+export type { Message, MessagesPage, SystemEvent } from './model/types'
+export { isSystem, systemParts, useSystemParts, useSystemText } from './lib/system'
+export type { SystemPart } from './lib/system'

@@ -45,7 +45,7 @@ describe('ChatActionsMenu', () => {
         fetchMock.mockResolvedValue(new Response('{"message":"ok"}'))
         vi.stubGlobal('fetch', fetchMock)
         useProfileCard.setState({ userId: null })
-        useGroupCard.setState({ group: null })
+        useGroupCard.setState({ target: null })
     })
     afterEach(() => {
         vi.unstubAllGlobals()
@@ -82,6 +82,6 @@ describe('ChatActionsMenu', () => {
         renderMenu({ ...group, my_role: 'admin' })
         expect(screen.getByRole('menuitem', { name: 'Удалить чат' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('menuitem', { name: 'Сведения о чате' }))
-        expect(useGroupCard.getState().group).toMatchObject({ id: 'g1', is_member: true })
+        expect(useGroupCard.getState().target).toEqual({ kind: 'chat', id: 'g1' })
     })
 })

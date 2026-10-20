@@ -1,2 +1,2 @@
 export { TELEGRAM_URL } from './links'
-export { chatPath, newChatPath, ROUTES } from './routes'
+export { chatLinkPath, chatLinkText, chatLinkUrl, chatPath, newChatPath, ROUTES } from './routes'

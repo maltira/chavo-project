@@ -1,17 +1,20 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router'
 
-import { applyConversationEvent, moveReadCursor } from '@/entities/conversation'
+import { applyConversationEvent, moveReadCursor, useGroupCard } from '@/entities/conversation'
 import { applyMessageEvent } from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
 import { connectSocket } from '@/shared/api'
+import { chatPath } from '@/shared/config'
 import type { ServerEvent } from '@/shared/api'
 import { dismiss, notify } from '@/shared/lib'
 import type { Notice } from '@/shared/lib'
 
+import { applyGroupEvent, notifyGroupEvent } from './groupEvents'
 import { notifyNewMessage } from './messageNotice'
 
 // события сервера обновляют кеш запросов, а не состояние компонентов: экраны уже читают кеш
@@ -70,14 +73,13 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             )
             break
         }
-        default:
+        default: {
+            const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
             applyMessageEvent(queryClient, event)
-            applyConversationEvent(
-                queryClient,
-                event,
-                queryClient.getQueryData<Profile | null>(['me'])?.user_id,
-            )
+            applyConversationEvent(queryClient, event, myId)
+            applyGroupEvent(event, queryClient, myId)
             break
+        }
     }
 }
 
@@ -127,6 +129,12 @@ const REVOKE_GRACE_MS = 2000
 export function RealtimeBridge() {
     const queryClient = useQueryClient()
     const signOut = useSession((state) => state.signOut)
+    // клик по уведомлению открывает чат; navigate через ref, чтобы смена маршрута не переподключала сокет
+    const navigate = useNavigate()
+    const navigateRef = useRef(navigate)
+    useEffect(() => {
+        navigateRef.current = navigate
+    }, [navigate])
 
     useEffect(() => {
         // перед закрытием соединения с кодом 4001 сервер присылает session.revoked с причиной
@@ -134,6 +142,10 @@ export function RealtimeBridge() {
         // страховка: если после session.revoked соединение не закрылось, выходим сами
         let revokeTimer: ReturnType<typeof setTimeout> | undefined
         let ended = false
+        const open = {
+            chat: (id: string) => navigateRef.current(chatPath(id)),
+            group: (id: string) => useGroupCard.getState().openChat(id),
+        }
 
         function endSession(reason: string | undefined) {
             if (ended) {
@@ -161,11 +173,9 @@ export function RealtimeBridge() {
                     return
                 }
                 applyEvent(event, queryClient)
-                void notifyNewMessage(
-                    event,
-                    queryClient,
-                    queryClient.getQueryData<Profile | null>(['me'])?.user_id,
-                )
+                const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
+                void notifyNewMessage(event, queryClient, myId, open)
+                void notifyGroupEvent(event, queryClient, myId, open)
             },
             onOpen: ({ reconnected }) => {
                 dismiss('network')

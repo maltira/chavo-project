@@ -86,6 +86,20 @@ describe('UserProfileModal', () => {
         )
     })
 
+    it('picks the avatar shape on a screen with a back arrow, not in another window', () => {
+        renderModal()
+        act(() => useProfileCard.getState().open('me'))
+        fireEvent.click(screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }))
+
+        // экран фигуры заменяет окно профиля, а не открывается поверх него
+        expect(screen.getAllByRole('dialog')).toHaveLength(1)
+        expect(screen.getByRole('dialog', { name: 'Фигура' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+        expect(screen.getAllByRole('dialog')).toHaveLength(1)
+        expect(screen.getByRole('dialog', { name: /Профиль: Я/ })).toBeInTheDocument()
+    })
+
     it('shows my own profile without actions', () => {
         renderModal()
         act(() => useProfileCard.getState().open('me', { remember: false }))

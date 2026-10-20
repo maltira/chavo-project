@@ -24,6 +24,16 @@ describe('Notification', () => {
         expect(onClose).toHaveBeenCalledTimes(1)
     })
 
+    it('is a button only when it has an action', () => {
+        const { rerender } = render(<Notification title="Привет" description="текст" />)
+        expect(screen.queryByRole('button', { name: /Привет/ })).toBeNull()
+
+        const onClick = vi.fn()
+        rerender(<Notification title="Привет" description="текст" onClick={onClick} />)
+        fireEvent.click(screen.getByRole('button', { name: /Привет/ }))
+        expect(onClick).toHaveBeenCalled()
+    })
+
     it('draws an icon', () => {
         render(<Notification title="Готово" icon="check" />)
         expect(screen.getByRole('status').querySelector('svg')).not.toBeNull()

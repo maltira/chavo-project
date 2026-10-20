@@ -21,7 +21,7 @@ export function readBoundary(
     return boundary
 }
 
-// самое старое из непрочитанных: unread - сколько чужих неудалённых сообщений не прочитано
+// самое старое из непрочитанных: unread - сколько чужих неудалённых обычных сообщений не прочитано
 // (так считает сервер); если загружено меньше, разделитель встаёт над самым старым из них
 export function firstUnreadId(
     messages: Message[],
@@ -34,7 +34,8 @@ export function firstUnreadId(
     let found: string | null = null
     let counted = 0
     for (const message of messages) {
-        if (message.sender_id === myId || message.is_deleted) {
+        // системные сообщения сервер в непрочитанные не считает
+        if (message.sender_id === myId || message.is_deleted || message.kind === 'system') {
             continue
         }
         found = message.id

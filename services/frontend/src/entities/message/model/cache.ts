@@ -25,23 +25,30 @@ const mapMessages = (pages: MessagesPage[], fn: (m: Message) => Message) =>
 // новое сообщение - в начало первой страницы (свежие сверху); повтор по id не добавляется
 export function addMessage(queryClient: QueryClient, message: Message) {
     updatePages(queryClient, message.conversation_id, (pages) => {
+        // уже есть (своё сообщение после ответа сервера): данные обновляются, ключ строки остаётся прежним
         if (pages.some((page) => page.items.some((m) => m.id === message.id))) {
-            return mapMessages(pages, (m) => (m.id === message.id ? message : m))
+            return mapMessages(pages, (m) =>
+                m.id === message.id ? { ...message, local_key: m.local_key } : m,
+            )
         }
         const [first, ...rest] = pages
         return first ? [{ ...first, items: [message, ...first.items] }, ...rest] : pages
     })
 }
 
-// замена временного сообщения ответом сервера; если событие успело раньше, временное просто убирается
+// замена временного сообщения ответом сервера; у настоящего остаётся ключ временного (local_key),
+// чтобы строка в истории не пересоздавалась. Если событие успело раньше, временное убирается,
+// а его ключ переходит к пришедшему по событию
 export function replaceMessage(queryClient: QueryClient, tempId: string, message: Message) {
     updatePages(queryClient, message.conversation_id, (pages) => {
         const exists = pages.some((page) => page.items.some((m) => m.id === message.id))
         return pages.map((page) => ({
             ...page,
             items: exists
-                ? page.items.filter((m) => m.id !== tempId)
-                : page.items.map((m) => (m.id === tempId ? message : m)),
+                ? page.items
+                      .filter((m) => m.id !== tempId)
+                      .map((m) => (m.id === message.id ? { ...m, local_key: tempId } : m))
+                : page.items.map((m) => (m.id === tempId ? { ...message, local_key: tempId } : m)),
         }))
     })
 }
@@ -71,6 +78,9 @@ interface MessageEventData {
     content?: string | null
     created_at?: string
     updated_at?: string
+    kind?: Message['kind']
+    system_event?: Message['system_event']
+    target_id?: string | null
 }
 
 // события сообщений дописывают историю открытых чатов
@@ -95,6 +105,9 @@ export function applyMessageEvent(queryClient: QueryClient, event: ServerEvent) 
                     is_deleted: false,
                     created_at: data.created_at,
                     updated_at: null,
+                    kind: data.kind ?? 'user',
+                    system_event: data.system_event ?? null,
+                    target_id: data.target_id ?? null,
                 })
             }
             break

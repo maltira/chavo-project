@@ -51,6 +51,13 @@ describe('notifyNewMessage', () => {
         expect(notices()[0]).toMatchObject({ title: 'Команда', description: 'Давыд: Привет!' })
     })
 
+    it('opens the chat when the notice is clicked', async () => {
+        const open = { chat: vi.fn() }
+        await notifyNewMessage(created(), setup('direct'), 'me', open)
+        notices()[0]!.onClick!()
+        expect(open.chat).toHaveBeenCalledWith('c1')
+    })
+
     it('stays silent for my own messages and for the chat that is open', async () => {
         const client = setup('direct')
         await notifyNewMessage(created('me'), client, 'me')

@@ -20,6 +20,7 @@ interface Props {
     canEdit: boolean
     canDelete: boolean
     highlighted: boolean // подсветка после перехода по цитате
+    appear: boolean // пришло при открытом чате: въезжает снизу
     onReply: (message: Message) => void
     onEdit: (message: Message) => void
     onDelete: (message: Message) => void
@@ -63,6 +64,7 @@ export function MessageBubble({
     canEdit,
     canDelete,
     highlighted,
+    appear,
     onReply,
     onEdit,
     onDelete,
@@ -123,6 +125,7 @@ export function MessageBubble({
                 mine && styles.mine,
                 continued && styles.continued,
                 message.pending && styles.pending,
+                appear && styles.appear,
             )}
             data-message-id={message.id}
         >

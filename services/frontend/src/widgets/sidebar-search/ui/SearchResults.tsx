@@ -2,7 +2,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 
-import { useConversations, useGroupCard, useGroupSearch } from '@/entities/conversation'
+import {
+    previewFromSearch,
+    useConversations,
+    useGroupCard,
+    useGroupSearch,
+} from '@/entities/conversation'
 import type { Profile } from '@/entities/user'
 import {
     useMe,
@@ -40,7 +45,7 @@ export function SearchResults({ query, close }: Props) {
     const recent = useRecentUsers((state) => state.ids)
     const clearRecent = useRecentUsers((state) => state.clear)
     const openProfile = useProfileCard((state) => state.open)
-    const openGroup = useGroupCard((state) => state.open)
+    const openGroup = useGroupCard((state) => state.openPreview)
     const queryClient = useQueryClient()
     const navigate = useNavigate()
 
@@ -109,8 +114,8 @@ export function SearchResults({ query, close }: Props) {
                                         />
                                     }
                                     title={group.name}
-                                    subtitle={`${group.members_count ?? 0} ${plural(group.members_count ?? 0, ['участник', 'участника', 'участников'])}`}
-                                    onClick={() => openGroup(group)}
+                                    subtitle={`${group.members_count} ${plural(group.members_count, ['участник', 'участника', 'участников'])}`}
+                                    onClick={() => openGroup(previewFromSearch(group))}
                                 />
                             ))}
                         </section>

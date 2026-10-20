@@ -53,7 +53,7 @@ describe('SearchResults', () => {
         )
         useRecentUsers.setState({ ids: [] })
         useProfileCard.setState({ userId: null })
-        useGroupCard.setState({ group: null })
+        useGroupCard.setState({ target: null })
     })
     afterEach(() => {
         vi.useRealTimers()
@@ -81,7 +81,10 @@ describe('SearchResults', () => {
         expect(useRecentUsers.getState().ids).toEqual(['u1'])
 
         fireEvent.click(screen.getByRole('button', { name: /Arrenoas fans/ }))
-        expect(useGroupCard.getState().group?.id).toBe('g1')
+        expect(useGroupCard.getState().target).toMatchObject({
+            kind: 'preview',
+            group: { id: 'g1' },
+        })
     })
 
     it('shows recent profiles and clears them', () => {

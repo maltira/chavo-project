@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 
 import { useSession } from '@/entities/session'
 import { presenceKey } from '@/entities/user'
@@ -51,7 +52,9 @@ describe('RealtimeBridge', () => {
     function mount(client = new QueryClient()) {
         const view = render(
             <QueryClientProvider client={client}>
-                <RealtimeBridge />
+                <MemoryRouter>
+                    <RealtimeBridge />
+                </MemoryRouter>
             </QueryClientProvider>,
         )
         const socket = () => FakeSocket.instances[FakeSocket.instances.length - 1]!

@@ -1,12 +1,15 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import type { ConversationSummary } from '@/entities/conversation'
+import { isSystem } from '@/entities/message'
 import type { Message } from '@/entities/message'
 import { dayKey, formatDay, notify } from '@/shared/lib'
 import { IconButton } from '@/shared/ui'
 
 import styles from './MessageList.module.scss'
+import { AppearRow } from './AppearRow'
 import { MessageBubble } from './MessageBubble'
+import { SystemMessage } from './SystemMessage'
 
 interface Props {
     chat: ConversationSummary
@@ -27,6 +30,10 @@ interface Props {
     onEdit: (message: Message) => void
     onDelete: (message: Message) => void
 }
+
+// одна серия - подряд идущие сообщения одного автора; системное серию прерывает
+const sameAuthor = (a: Message | undefined, b: Message) =>
+    !!a && !isSystem(a) && !isSystem(b) && a.sender_id === b.sender_id
 
 // насколько надо уйти от низа истории, чтобы появилась кнопка «вниз»
 const SCROLL_DOWN_THRESHOLD = 300
@@ -70,6 +77,10 @@ export function MessageList({
             scrollerRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' })
         }
     }, [newest, myId])
+    // сообщения новее самого свежего на момент открытия пришли при открытом чате - они въезжают снизу;
+    // история при открытии и подгрузка старых страниц появляются без анимации
+    const [openedAt] = useState(() => newest?.created_at ?? '')
+    const appears = (message: Message) => message.created_at > openedAt
     const isGroup = chat.conversation_type === 'group'
     const isAdmin = chat.my_role === 'admin'
     const byId = new Map(messages.map((m) => [m.id, m]))
@@ -185,45 +196,49 @@ export function MessageList({
                     const mine = message.sender_id === myId
                     const newDay = !older || dayKey(older.created_at) !== dayKey(message.created_at)
                     // имя автора - у первого сообщения из серии подряд идущих чужих в группе
-                    const showAuthor =
-                        isGroup && !mine && (newDay || older?.sender_id !== message.sender_id)
+                    const showAuthor = isGroup && !mine && (newDay || !sameAuthor(older, message))
                     // аватар - у нижнего (самого свежего) сообщения серии; у остальных - пустое место
                     // той же ширины, чтобы пузыри серии стояли ровно
                     const newer = messages[index - 1]
                     const lastInSeries =
-                        !newer ||
-                        newer.sender_id !== message.sender_id ||
-                        dayKey(newer.created_at) !== dayKey(message.created_at)
+                        !sameAuthor(newer, message) ||
+                        dayKey(newer!.created_at) !== dayKey(message.created_at)
                     const avatar = isGroup && !mine ? (lastInSeries ? 'show' : 'space') : 'none'
                     // продолжение серии: сверху сообщение того же автора за тот же день без разделителя -
                     // между ними отступ меньше обычного
                     const continued =
-                        !newDay &&
-                        older?.sender_id === message.sender_id &&
-                        message.id !== firstUnreadId
+                        !newDay && sameAuthor(older, message) && message.id !== firstUnreadId
 
                     return (
-                        <Fragment key={message.id}>
-                            <MessageBubble
-                                message={message}
-                                mine={mine}
-                                read={readBoundary !== undefined && index >= readBoundary}
-                                showAuthor={showAuthor}
-                                avatar={avatar}
-                                continued={continued}
-                                replyTo={
-                                    message.reply_to_message_id
-                                        ? byId.get(message.reply_to_message_id)
-                                        : undefined
-                                }
-                                canEdit={mine}
-                                canDelete={mine || (isGroup && isAdmin)}
-                                highlighted={highlighted === message.id}
-                                onReply={onReply}
-                                onEdit={onEdit}
-                                onDelete={onDelete}
-                                onJump={(id) => void jumpTo(id)}
-                            />
+                        <Fragment key={message.local_key ?? message.id}>
+                            <AppearRow appear={appears(message)} continued={continued}>
+                                {isSystem(message) ? (
+                                    <SystemMessage message={message} appear={appears(message)} />
+                                ) : (
+                                    <MessageBubble
+                                        message={message}
+                                        mine={mine}
+                                        read={readBoundary !== undefined && index >= readBoundary}
+                                        showAuthor={showAuthor}
+                                        avatar={avatar}
+                                        // у раскрывающейся строки отступ серии задаёт AppearRow
+                                        continued={continued && !appears(message)}
+                                        replyTo={
+                                            message.reply_to_message_id
+                                                ? byId.get(message.reply_to_message_id)
+                                                : undefined
+                                        }
+                                        canEdit={mine}
+                                        canDelete={mine || (isGroup && isAdmin)}
+                                        highlighted={highlighted === message.id}
+                                        appear={appears(message)}
+                                        onReply={onReply}
+                                        onEdit={onEdit}
+                                        onDelete={onDelete}
+                                        onJump={(id) => void jumpTo(id)}
+                                    />
+                                )}
+                            </AppearRow>
                             {message.id === firstUnreadId && (
                                 <p ref={dividerRef} className={styles.unread}>
                                     Непрочитанные сообщения

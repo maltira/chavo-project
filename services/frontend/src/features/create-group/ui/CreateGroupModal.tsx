@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
-import { useConversations } from '@/entities/conversation'
-import { UserAvatar, useUser } from '@/entities/user'
+import { slugSchema, SlugField, useDirectPeers } from '@/entities/conversation'
+import { UserRow } from '@/entities/user'
+import { ApiError, errorMessage } from '@/shared/api'
 import {
     Avatar,
     Button,
@@ -54,14 +55,13 @@ function CreateGroupForm({ open, onClose }: Props) {
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
     const [visibility, setVisibility] = useState<Visibility>('public')
+    const [slug, setSlug] = useState('')
+    const [slugError, setSlugError] = useState<string>()
     const [selected, setSelected] = useState<string[]>([])
     const create = useCreateGroup(onClose)
 
     // кого можно позвать: собеседники из моих личных чатов
-    const chats = useConversations()
-    const peers = (chats.data ?? [])
-        .filter((chat) => chat.conversation_type === 'direct' && chat.peer_id)
-        .map((chat) => chat.peer_id!)
+    const peers = useDirectPeers()
 
     const toggle = (userId: string) =>
         setSelected((ids) =>
@@ -69,12 +69,38 @@ function CreateGroupForm({ open, onClose }: Props) {
         )
 
     function submit() {
-        create.mutate({
-            name: name.trim(),
-            description: description.trim() || undefined,
-            visibility,
-            member_ids: selected,
-        })
+        create.mutate(
+            {
+                name: name.trim(),
+                description: description.trim() || undefined,
+                visibility,
+                slug: visibility === 'public' ? slug.trim() : undefined,
+                member_ids: selected,
+            },
+            {
+                onError: (error) => {
+                    // ссылка занята - вернуться к полю ссылки
+                    if (error instanceof ApiError && error.reason?.startsWith('SLUG_')) {
+                        setSlugError(errorMessage(error))
+                        setStep('details')
+                    }
+                },
+            },
+        )
+    }
+
+    function next() {
+        if (!name.trim()) {
+            return
+        }
+        if (visibility === 'public') {
+            const checked = slugSchema.safeParse(slug)
+            if (!checked.success) {
+                setSlugError(checked.error.issues[0]?.message)
+                return
+            }
+        }
+        setStep('members')
     }
 
     if (step === 'members') {
@@ -99,14 +125,25 @@ function CreateGroupForm({ open, onClose }: Props) {
                     <p className={styles.label}>Выберите участников (опционально):</p>
                     {peers.length > 0 ? (
                         <div className={styles.list}>
-                            {peers.map((userId) => (
-                                <PeerCard
-                                    key={userId}
-                                    userId={userId}
-                                    selected={selected.includes(userId)}
-                                    onToggle={() => toggle(userId)}
-                                />
-                            ))}
+                            {peers.map((userId) => {
+                                const chosen = selected.includes(userId)
+                                return (
+                                    <UserRow
+                                        key={userId}
+                                        userId={userId}
+                                        aside={(profile) => (
+                                            <IconButton
+                                                icon={chosen ? 'check' : 'add'}
+                                                size={40}
+                                                aria-label={`${chosen ? 'Убрать' : 'Добавить'} ${profile?.display_name ?? ''}`.trim()}
+                                                aria-pressed={chosen}
+                                                className={styles.toggle}
+                                                onClick={() => toggle(userId)}
+                                            />
+                                        )}
+                                    />
+                                )
+                            })}
                         </div>
                     ) : (
                         <p className={styles.hint}>
@@ -138,9 +175,7 @@ function CreateGroupForm({ open, onClose }: Props) {
                 className={styles.fields}
                 onSubmit={(event) => {
                     event.preventDefault()
-                    if (name.trim()) {
-                        setStep('members')
-                    }
+                    next()
                 }}
             >
                 <Field label="Название">
@@ -170,6 +205,17 @@ function CreateGroupForm({ open, onClose }: Props) {
                     <p className={styles.hint}>{VISIBILITY_HINT[visibility]}</p>
                 </div>
 
+                {visibility === 'public' && (
+                    <SlugField
+                        value={slug}
+                        error={slugError}
+                        onChange={(value) => {
+                            setSlug(value)
+                            setSlugError(undefined)
+                        }}
+                    />
+                )}
+
                 <Field label="Описание">
                     {(props) => (
                         <Textarea
@@ -188,38 +234,5 @@ function CreateGroupForm({ open, onClose }: Props) {
                 </Button>
             </form>
         </Modal>
-    )
-}
-
-interface PeerCardProps {
-    userId: string
-    selected: boolean
-    onToggle: () => void
-}
-
-function PeerCard({ userId, selected, onToggle }: PeerCardProps) {
-    const user = useUser(userId)
-    const profile = user.data
-    if (!profile) {
-        return null
-    }
-    return (
-        <div className={styles.card}>
-            <UserAvatar src={profile.avatar_url} shape={profile.avatar_shape} size={40} />
-            <span className={styles.texts}>
-                <span className={styles.name}>{profile.display_name}</span>
-                <span className={styles.username}>@{profile.username}</span>
-            </span>
-            <IconButton
-                icon={selected ? 'check' : 'add'}
-                size={40}
-                aria-label={
-                    selected ? `Убрать ${profile.display_name}` : `Добавить ${profile.display_name}`
-                }
-                aria-pressed={selected}
-                className={styles.toggle}
-                onClick={onToggle}
-            />
-        </div>
     )
 }

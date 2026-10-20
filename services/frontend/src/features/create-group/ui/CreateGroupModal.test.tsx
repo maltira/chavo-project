@@ -78,9 +78,51 @@ describe('CreateGroupModal', () => {
         })
     })
 
+    it('a public group needs a valid chat link and sends it', async () => {
+        renderModal()
+        fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Клуб' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
+        // без ссылки дальше не пускает
+        expect(screen.getByText(/От 3 до 32 символов/)).toBeInTheDocument()
+        expect(screen.queryByRole('dialog', { name: 'Участники' })).toBeNull()
+
+        // недопустимые символы не вводятся
+        fireEvent.change(screen.getByLabelText('Ссылка на чат'), {
+            target: { value: 'book club!' },
+        })
+        expect(screen.getByLabelText('Ссылка на чат')).toHaveValue('bookclub')
+        expect(screen.getByText(/\/chat\/bookclub$/)).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Создать чат' }))
+        expect(await screen.findByText('новая группа')).toBeInTheDocument()
+        const [, init] = fetchMock.mock.calls[0]!
+        expect(JSON.parse(init.body as string)).toMatchObject({
+            visibility: 'public',
+            slug: 'bookclub',
+        })
+    })
+
+    it('returns to the link field when the link is taken', async () => {
+        fetchMock.mockResolvedValue(
+            new Response(
+                JSON.stringify({ error: 'Эта ссылка на чат уже занята', reason: 'SLUG_TAKEN' }),
+                { status: 409 },
+            ),
+        )
+        renderModal()
+        fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Клуб' } })
+        fireEvent.change(screen.getByLabelText('Ссылка на чат'), { target: { value: 'club' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Создать чат' }))
+        expect(await screen.findByText('Эта ссылка на чат уже занята')).toBeInTheDocument()
+        expect(screen.getByLabelText('Ссылка на чат')).toHaveAttribute('aria-invalid', 'true')
+    })
+
     it('goes back to the details keeping what was typed', () => {
         renderModal()
         fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Клуб' } })
+        fireEvent.change(screen.getByLabelText('Ссылка на чат'), { target: { value: 'club' } })
         fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
         fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
         expect(screen.getByLabelText('Название')).toHaveValue('Клуб')

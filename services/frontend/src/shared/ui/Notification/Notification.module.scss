@@ -52,6 +52,23 @@
     }
 }
 
+// уведомление с действием: вся область текста - кнопка
+.clickable {
+    padding: 0;
+
+    border: none;
+    border-radius: $radius-sm;
+    background: none;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 4px;
+    }
+}
+
 .close {
     display: flex;
     flex-shrink: 0;

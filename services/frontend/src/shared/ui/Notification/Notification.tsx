@@ -1,3 +1,5 @@
+import { cn } from '@/shared/lib'
+
 import { Icon } from '../Icon'
 import { IconButton } from '../IconButton'
 import styles from './Notification.module.scss'
@@ -7,12 +9,18 @@ interface Props {
     description?: string
     icon?: string
     onClose?: () => void
+    // клик по тексту уведомления; без него уведомление не кликабельно
+    onClick?: () => void
 }
 
-export function Notification({ title, description, icon = 'warn', onClose }: Props) {
+export function Notification({ title, description, icon = 'warn', onClose, onClick }: Props) {
+    const Content = onClick ? 'button' : 'div'
     return (
         <div role="status" className={styles.root}>
-            <div className={styles.content}>
+            <Content
+                className={cn(styles.content, onClick && styles.clickable)}
+                {...(onClick ? { type: 'button' as const, onClick } : {})}
+            >
                 <IconButton
                     icon={icon}
                     aria-label={title}
@@ -24,7 +32,7 @@ export function Notification({ title, description, icon = 'warn', onClose }: Pro
                     <p className={styles.title}>{title}</p>
                     {description && <p className={styles.description}>{description}</p>}
                 </div>
-            </div>
+            </Content>
 
             {onClose && (
                 <button

@@ -50,6 +50,28 @@ describe('message cache', () => {
         expect(ids()).toEqual(['m2', 'm1'])
     })
 
+    it('keeps the row key of my message in both orders of reply and event', () => {
+        const items = (client: QueryClient) =>
+            client.getQueryData<InfiniteData<MessagesPage>>(messagesKey('c1'))!.pages[0]!.items
+
+        // ответ сервера, потом событие о том же сообщении
+        const first = setup([msg('temp-1', { pending: true })])
+        replaceMessage(first.client, 'temp-1', msg('m2'))
+        addMessage(first.client, msg('m2', { content: 'из события' }))
+        expect(items(first.client)[0]).toMatchObject({
+            id: 'm2',
+            content: 'из события',
+            local_key: 'temp-1',
+        })
+
+        // событие раньше ответа: ключ временного переходит к пришедшему
+        const second = setup([msg('m2'), msg('temp-1', { pending: true })])
+        replaceMessage(second.client, 'temp-1', msg('m2'))
+        expect(items(second.client)).toEqual([
+            expect.objectContaining({ id: 'm2', local_key: 'temp-1' }),
+        ])
+    })
+
     it('applies created, updated and deleted events', () => {
         const { client, ids } = setup([msg('m1')])
         applyMessageEvent(client, {

@@ -7,7 +7,7 @@ import type { ConversationSummary } from '../model/types'
 // размер страницы списка; сервер отдаёт не больше 30 за запрос
 export const CONVERSATIONS_PAGE = 30
 
-interface Page<T> {
+export interface Page<T> {
     items: T[]
     limit: number
     offset: number
@@ -46,10 +46,10 @@ export async function getMembers(id: string): Promise<Member[]> {
 export interface PublicGroup {
     id: string
     name: string
+    slug: string
     description: string | null
     avatar_url: string | null
-    // null - число неизвестно (сведения о своей группе открыты из списка чатов)
-    members_count: number | null
+    members_count: number
     is_member: boolean
     status: Status | null
     avatar_shape: AvatarShape | null
@@ -75,6 +75,8 @@ export interface CreateGroupInput {
     name: string
     description?: string
     visibility: 'public' | 'private'
+    // код ссылки на чат, обязателен для открытой группы
+    slug?: string
     member_ids: string[]
 }
 

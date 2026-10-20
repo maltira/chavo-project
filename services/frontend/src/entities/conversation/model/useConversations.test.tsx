@@ -24,6 +24,8 @@ function chat(id: string): ConversationSummary {
         last_message: null,
         unread_count: 0,
         last_message_read: false,
+        members_count: 2,
+        slug: null,
     }
 }
 

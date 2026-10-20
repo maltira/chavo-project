@@ -16,6 +16,14 @@ export function NotificationsHost() {
                     description={item.description}
                     icon={item.icon}
                     onClose={() => dismiss(item.id)}
+                    onClick={
+                        item.onClick
+                            ? () => {
+                                  dismiss(item.id)
+                                  item.onClick?.()
+                              }
+                            : undefined
+                    }
                 />
             ))}
         </div>

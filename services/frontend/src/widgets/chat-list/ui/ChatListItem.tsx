@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router'
 
 import type { ConversationSummary } from '@/entities/conversation'
+import { isSystem, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { ChatActionsMenu } from '@/features/chat-actions'
 import { chatPath } from '@/shared/config'
@@ -20,10 +21,14 @@ interface Props {
 // больше двух цифр бейдж не показывает
 const unreadLabel = (count: number) => (count > 99 ? '99+' : String(count))
 
-function preview(chat: ConversationSummary, myId: string | undefined) {
+// systemText - текст системного последнего сообщения (вступил, покинул): без «Вы:»
+function preview(chat: ConversationSummary, myId: string | undefined, systemText: string) {
     const message = chat.last_message
     if (!message) {
         return chat.conversation_type === 'group' ? 'Группа создана' : 'Нет сообщений'
+    }
+    if (isSystem(message)) {
+        return systemText
     }
     const text = message.is_deleted ? 'Сообщение удалено' : (message.content ?? '')
     return message.sender_id === myId ? `Вы: ${text}` : text
@@ -40,7 +45,10 @@ export function ChatListItem({ chat, myId, compact }: Props) {
     const avatarUrl = isDirect ? peer.data?.avatar_url : chat.avatar_url
     const online = isDirect && (presence?.online ?? peer.data?.online ?? false)
 
-    const mine = !!chat.last_message && chat.last_message.sender_id === myId
+    const systemText = useSystemText(chat.last_message)
+    // галочки - только у моих обычных сообщений
+    const mine =
+        !!chat.last_message && chat.last_message.sender_id === myId && !isSystem(chat.last_message)
     const unread = chat.unread_count > 0
     const time = formatChatTime(chat.last_message?.created_at ?? chat.created_at)
 
@@ -72,7 +80,9 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                     <>
                         <span className={cn(styles.texts, unread && styles.unread)}>
                             <span className={styles.name}>{name || ' '}</span>
-                            <span className={styles.preview}>{preview(chat, myId)}</span>
+                            <span className={styles.preview}>
+                                {preview(chat, myId, systemText)}
+                            </span>
                         </span>
 
                         <span className={styles.meta}>

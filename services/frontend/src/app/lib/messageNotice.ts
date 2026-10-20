@@ -12,10 +12,11 @@ interface CreatedData {
     conversation_id?: string
     sender_id?: string
     content?: string | null
+    kind?: string
 }
 
 // чат из кеша (список или карточка), иначе с сервера
-async function findChat(queryClient: QueryClient, id: string) {
+export async function findChat(queryClient: QueryClient, id: string) {
     const fromList = queryClient
         .getQueryData<InfiniteData<ConversationSummary[]>>(conversationsKey)
         ?.pages.flat()
@@ -29,7 +30,7 @@ async function findChat(queryClient: QueryClient, id: string) {
     )
 }
 
-function findUser(queryClient: QueryClient, id: string) {
+export function findUser(queryClient: QueryClient, id: string) {
     return queryClient.fetchQuery<Profile>({
         queryKey: userKey(id),
         queryFn: () => getUser(id),
@@ -44,13 +45,16 @@ export async function notifyNewMessage(
     event: ServerEvent,
     queryClient: QueryClient,
     myId: string | undefined,
+    // что делает клик по уведомлению
+    open?: { chat: (chatId: string) => void },
 ) {
     if (event.type !== 'message.created') {
         return
     }
     const data = (event.data ?? {}) as CreatedData
     const { conversation_id: chatId, sender_id: senderId } = data
-    if (!chatId || !senderId || senderId === myId) {
+    // о вступлениях и выходах не уведомляем: они видны в истории
+    if (!chatId || !senderId || senderId === myId || data.kind === 'system') {
         return
     }
     const watching =
@@ -73,6 +77,7 @@ export async function notifyNewMessage(
             title: isGroup ? (chat.name ?? 'Группа') : sender.display_name,
             // в группе видно, кто написал
             description: isGroup ? `${sender.display_name}: ${text}` : text,
+            onClick: open ? () => open.chat(chatId) : undefined,
         })
     } catch {
         // не узнали имя (сеть, нет доступа) - без уведомления, сообщение всё равно в списке чатов

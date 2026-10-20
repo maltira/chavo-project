@@ -24,7 +24,7 @@ TEST_PG_PORT     ?= 15432
         init-dbs \
         migrate-up migrate-down \
         migrate-auth-down migrate-user-down migrate-conversation-down \
-        psql db-tables clean-db clean-redis clean-kafka clean-data \
+        psql db-tables clean-db clean-redis clean-kafka clean-media clean-data \
         kafka-topics kafka-ui \
         proto proto-tools \
         test test-integration e2e \
@@ -148,7 +148,15 @@ kafka-ui:
 	@xdg-open http://localhost:$(KAFKA_UI_PORT) 2>/dev/null || \
 		echo "Открой в браузере: http://localhost:$(KAFKA_UI_PORT)"
 
-clean-data: clean-db clean-kafka clean-redis
+# загруженные файлы (аватарки) в бакете MinIO
+clean-media:
+	@$(COMPOSE) up -d --wait minio
+	@echo "Очистка бакета $(S3_BUCKET)..."
+	@docker exec chavo-minio sh -c 'mc alias set local http://localhost:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null && \
+		mc rm --recursive --force "local/$(or $(S3_BUCKET),chavo-media)" >/dev/null 2>&1; true'
+	@echo "Бакет очищен."
+
+clean-data: clean-db clean-kafka clean-redis clean-media
 
 
 # ──────────────────────────────────────────────

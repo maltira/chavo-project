@@ -182,6 +182,26 @@ services:
     networks:
       - chavo-network
 
+  minio:
+    image: cgr.dev/chainguard/minio:latest-dev@sha256:9044eb78c8519301ccc99f35fa752bebd1c61519fd6a4e056b8005391f624eae
+    container_name: chavo-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/live" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - chavo-network
+
   # Локальный SMTP: письма никуда не уходят, видны в UI. auth-service: SMTP_HOST=mailpit, SMTP_PORT=1025.
   mailpit:
     image: axllent/mailpit:v1.31.4
@@ -324,6 +344,11 @@ services:
       - RATE_LIMIT_API=${RATE_LIMIT_API:-300/1m}
       - RATE_LIMIT_MESSAGES=${RATE_LIMIT_MESSAGES:-30/10s}
       - RATE_LIMIT_WS=${RATE_LIMIT_WS:-20/1s}
+      - RATE_LIMIT_UPLOAD=${RATE_LIMIT_UPLOAD:-10/1m}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=${S3_BUCKET:-chavo-media}
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
     healthcheck:
       test: [ "CMD", "./gateway", "healthcheck" ]
       interval: 10s
@@ -340,6 +365,8 @@ services:
       user-service:
         condition: service_healthy
       conversation-service:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks:
       - chavo-network
@@ -379,6 +406,7 @@ networks:
           ip_range: 172.28.10.128/25
 
 volumes:
+  minio_data:
   postgres_data:
   kafka_data:
   redis_data:

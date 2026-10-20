@@ -32,6 +32,14 @@ type Config struct {
 	RateLimitAPI      string
 	RateLimitMessages string
 	RateLimitWS       string
+	RateLimitUpload   string
+
+	// S3 (MinIO) - хранилище загруженных файлов
+	S3Endpoint  string
+	S3Bucket    string
+	S3Region    string
+	S3AccessKey string
+	S3SecretKey string
 }
 
 func Load() (*Config, error) {
@@ -50,6 +58,13 @@ func Load() (*Config, error) {
 		RateLimitAPI:      getEnv("RATE_LIMIT_API", "300/1m"),
 		RateLimitMessages: getEnv("RATE_LIMIT_MESSAGES", "30/10s"),
 		RateLimitWS:       getEnv("RATE_LIMIT_WS", "20/1s"),
+		RateLimitUpload:   getEnv("RATE_LIMIT_UPLOAD", "10/1m"),
+
+		S3Endpoint:  os.Getenv("S3_ENDPOINT"),
+		S3Bucket:    getEnv("S3_BUCKET", "chavo-media"),
+		S3Region:    getEnv("S3_REGION", "us-east-1"),
+		S3AccessKey: os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
 	timeout, err := time.ParseDuration(getEnv("GRPC_TIMEOUT", "5s"))
@@ -65,6 +80,9 @@ func Load() (*Config, error) {
 		"USER_SERVICE_ADDR":         cfg.UserAddr,
 		"CONVERSATION_SERVICE_ADDR": cfg.ConversationAddr,
 		"FRONTEND_ORIGIN":           cfg.FrontendOrigin,
+		"S3_ENDPOINT":               cfg.S3Endpoint,
+		"S3_ACCESS_KEY":             cfg.S3AccessKey,
+		"S3_SECRET_KEY":             cfg.S3SecretKey,
 	}
 	for name, v := range required {
 		if v == "" {

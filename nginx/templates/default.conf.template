@@ -17,6 +17,9 @@ map $http_x_request_id $chavo_request_id {
     default                    $request_id;
 }
 
+# Кеш загруженных файлов (/media/): имена случайные и не переиспользуются, поэтому файл можно хранить долго.
+proxy_cache_path /var/cache/nginx/media levels=1:2 keys_zone=media:10m max_size=512m inactive=30d use_temp_path=off;
+
 # Лимиты по IP. Лимиты по пользователю считает Gateway.
 limit_req_zone  $binary_remote_addr zone=auth_ip:10m rate=10r/m;
 limit_req_zone  $binary_remote_addr zone=api_ip:10m  rate=20r/s;
@@ -44,6 +47,21 @@ server {
         limit_req zone=auth_ip burst=10 nodelay;
         limit_req zone=api_ip burst=40 nodelay;
         include /etc/nginx/chavo/proxy_params.conf;
+        proxy_pass http://gateway;
+    }
+
+    # Загруженные фото: отдаёт Gateway из приватного хранилища, здесь - кеш и лимит по IP.
+    # Заголовки nosniff и CSP ставит Gateway, они кешируются вместе с файлом.
+    location /media/ {
+        limit_except GET HEAD { deny all; }
+        limit_req zone=api_ip burst=100 nodelay;
+        include /etc/nginx/chavo/proxy_params.conf;
+        proxy_cache media;
+        proxy_cache_valid 200 30d;
+        proxy_cache_valid 404 1m;
+        proxy_cache_lock on;
+        proxy_ignore_headers Set-Cookie;
+        add_header X-Cache-Status $upstream_cache_status always;
         proxy_pass http://gateway;
     }
 

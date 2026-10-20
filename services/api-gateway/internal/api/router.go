@@ -16,6 +16,7 @@ import (
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/media"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/middleware"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ratelimit"
@@ -42,6 +43,8 @@ type Deps struct {
 	// Limits.Messages — дополнительно на отправку сообщений.
 	Limiter *ratelimit.Limiter
 	Limits  Limits
+	// Media - хранилище загруженных файлов (nil - без загрузки аватарок и без /media)
+	Media media.Store
 	// TrustedProxies — IP или CIDR; пусто = не доверять никому.
 	TrustedProxies []string
 	Log            *zap.Logger
@@ -50,6 +53,8 @@ type Deps struct {
 type Limits struct {
 	API      ratelimit.Rule
 	Messages ratelimit.Rule
+	// Upload - дополнительно на загрузку фото
+	Upload ratelimit.Rule
 }
 
 type Handler struct {
@@ -59,6 +64,7 @@ type Handler struct {
 	profiles      *profile.Gate
 	health        []HealthCheck
 	proxies       proxies
+	media         media.Store
 	log           *zap.Logger
 }
 
@@ -90,7 +96,7 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	}
 	h := &Handler{
 		auth: d.Auth, users: d.Users, conversations: d.Conversations,
-		profiles: d.Profiles, health: d.Health, proxies: px, log: d.Log,
+		profiles: d.Profiles, health: d.Health, proxies: px, media: d.Media, log: d.Log,
 	}
 
 	r := gin.New()
@@ -109,6 +115,10 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	r.GET("/health", h.healthCheck)
 	if d.WS != nil {
 		r.GET("/ws", d.WS)
+	}
+	// загруженные файлы: публичная отдача по неугадываемому имени, nginx кеширует
+	if d.Media != nil {
+		r.GET("/media/avatars/:name", h.serveAvatar)
 	}
 
 	api := r.Group("/api")
@@ -131,9 +141,13 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	// Авторизованные, профиль не нужен: управление аккаунтом и создание профиля.
 	authed := api.Group("", middleware.Authenticate(d.Verifier, d.Log))
 	sendLimit := []gin.HandlerFunc{}
+	uploadLimit := []gin.HandlerFunc{}
 	if d.Limiter != nil {
 		authed.Use(middleware.RateLimit(d.Limiter, d.Limits.API, d.Log))
 		sendLimit = append(sendLimit, middleware.RateLimit(d.Limiter, d.Limits.Messages, d.Log))
+		if d.Limits.Upload.Limit > 0 {
+			uploadLimit = append(uploadLimit, middleware.RateLimit(d.Limiter, d.Limits.Upload, d.Log))
+		}
 	}
 	authed.POST("/auth/change-password", h.changePassword)
 	authed.GET("/auth/sessions", h.listSessions)
@@ -153,6 +167,10 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	p.DELETE("/users/me/status", h.clearMyStatus)
 	p.POST("/users/me/avatar-shape", h.setMyAvatarShape)
 	p.DELETE("/users/me/avatar-shape", h.clearMyAvatarShape)
+	if d.Media != nil {
+		p.POST("/users/me/avatar", append(uploadLimit, h.uploadMyAvatar)...)
+		p.DELETE("/users/me/avatar", h.deleteMyAvatar)
+	}
 	p.GET("/users/:user_id", h.getProfile)
 	p.GET("/users/:user_id/block-status", h.blockStatus)
 	p.POST("/users/:user_id/block", h.block)
@@ -169,6 +187,10 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/status", h.clearGroupStatus)
 	conv.POST("/:id/avatar-shape", h.setGroupAvatarShape)
 	conv.DELETE("/:id/avatar-shape", h.clearGroupAvatarShape)
+	if d.Media != nil {
+		conv.POST("/:id/avatar", append(uploadLimit, h.uploadGroupAvatar)...)
+		conv.DELETE("/:id/avatar", h.deleteGroupAvatar)
+	}
 	conv.POST("/:id/join", h.joinGroup)
 	conv.POST("/:id/invite-link/regenerate", h.regenerateInvite)
 	conv.POST("/:id/join-requests", h.requestJoin)

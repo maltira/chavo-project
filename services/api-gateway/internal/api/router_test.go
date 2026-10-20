@@ -137,6 +137,7 @@ type fakeUsers struct {
 	seen        *seenMD
 	mu          sync.Mutex
 	profiles    map[string]bool
+	avatars     map[string]string
 	existsCalls atomic.Int32
 }
 
@@ -159,7 +160,24 @@ func (u *fakeUsers) GetMe(ctx context.Context, _ *userv1.GetMeRequest) (*userv1.
 	if !u.has(id) {
 		return nil, grpcx.Error(codes.NotFound, "PROFILE_NOT_FOUND", "Профиль не найден")
 	}
-	return &userv1.GetMeResponse{Profile: &userv1.Profile{UserId: id, Username: "me"}}, nil
+	u.mu.Lock()
+	avatar := u.avatars[id]
+	u.mu.Unlock()
+	p := &userv1.Profile{UserId: id, Username: "me"}
+	if avatar != "" {
+		p.AvatarUrl = &avatar
+	}
+	return &userv1.GetMeResponse{Profile: p}, nil
+}
+
+// UpdateMe запоминает только аватарку: проверку пути делает user-service, здесь важен порядок вызовов Gateway
+func (u *fakeUsers) UpdateMe(ctx context.Context, req *userv1.UpdateMeRequest) (*userv1.UpdateMeResponse, error) {
+	if req.AvatarUrl != nil {
+		u.mu.Lock()
+		u.avatars[grpcx.IncomingUserID(ctx)] = req.GetAvatarUrl()
+		u.mu.Unlock()
+	}
+	return &userv1.UpdateMeResponse{}, nil
 }
 
 // SetStatus проверяет только иконку (полная проверка — в user-service) и возвращает статус как есть.
@@ -200,13 +218,41 @@ func (u *fakeUsers) UserExists(_ context.Context, req *userv1.UserExistsRequest)
 type fakeConversations struct {
 	conversationv1.UnimplementedConversationServiceServer
 	sendErr error
+	mu      sync.Mutex
+	avatars map[string]string // группа -> путь аватарки
+	admins  map[string]string // группа -> её админ
 }
 
-func (fakeConversations) ListConversations(context.Context, *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+func (f *fakeConversations) GetConversation(_ context.Context, req *conversationv1.GetConversationRequest) (*conversationv1.GetConversationResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.admins[req.GetConversationId()]; !ok {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	c := &conversationv1.Conversation{Id: req.GetConversationId(), ConversationType: "group"}
+	if a := f.avatars[req.GetConversationId()]; a != "" {
+		c.AvatarUrl = &a
+	}
+	return &conversationv1.GetConversationResponse{Conversation: &conversationv1.ConversationSummary{Conversation: c}}, nil
+}
+
+func (f *fakeConversations) UpdateGroup(ctx context.Context, req *conversationv1.UpdateGroupRequest) (*conversationv1.UpdateGroupResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.admins[req.GetConversationId()] != grpcx.IncomingUserID(ctx) {
+		return nil, grpcx.Error(codes.PermissionDenied, "", "Недостаточно прав")
+	}
+	if req.AvatarUrl != nil {
+		f.avatars[req.GetConversationId()] = req.GetAvatarUrl()
+	}
+	return &conversationv1.UpdateGroupResponse{Conversation: &conversationv1.Conversation{Id: req.GetConversationId()}}, nil
+}
+
+func (*fakeConversations) ListConversations(context.Context, *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
 	return &conversationv1.ListConversationsResponse{Limit: 30}, nil
 }
 
-func (f fakeConversations) SendMessage(_ context.Context, req *conversationv1.SendMessageRequest) (*conversationv1.SendMessageResponse, error) {
+func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.SendMessageRequest) (*conversationv1.SendMessageResponse, error) {
 	if f.sendErr != nil {
 		return nil, f.sendErr
 	}
@@ -224,6 +270,7 @@ type env struct {
 	users    *fakeUsers
 	seen     *seenMD
 	convs    *fakeConversations
+	media    *memStore
 }
 
 type memCounter struct {
@@ -253,9 +300,10 @@ func newEnvWithLimits(t *testing.T, limits api.Limits) *env {
 		sessions: &fakeSessions{owners: map[string]string{}},
 		cache:    &fakeCache{set: map[string]bool{}},
 		seen:     &seenMD{},
-		convs:    &fakeConversations{},
+		convs:    &fakeConversations{avatars: map[string]string{}, admins: map[string]string{}},
+		media:    &memStore{objects: map[string][]byte{}},
 	}
-	e.users = &fakeUsers{seen: e.seen, profiles: map[string]bool{}}
+	e.users = &fakeUsers{seen: e.seen, profiles: map[string]bool{}, avatars: map[string]string{}}
 
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
@@ -285,6 +333,7 @@ func newEnvWithLimits(t *testing.T, limits api.Limits) *env {
 		Profiles:       profile.NewGate(e.cache, userv1.NewUserInternalServiceClient(conn), log),
 		Limiter:        ratelimit.New(&memCounter{counts: map[string]int64{}}),
 		Limits:         limits,
+		Media:          e.media,
 		TrustedProxies: []string{"10.0.0.0/8"},
 		Log:            log,
 	})

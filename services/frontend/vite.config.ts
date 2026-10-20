@@ -27,6 +27,8 @@ export default defineConfig(({ mode }) => {
             proxy: {
                 '/api': { target, changeOrigin: false },
                 '/ws': { target, changeOrigin: false, ws: true },
+                // загруженные фото (аватарки) отдаёт nginx -> Gateway
+                '/media': { target, changeOrigin: false },
             },
         },
         test: {

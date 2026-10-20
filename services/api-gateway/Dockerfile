@@ -18,7 +18,11 @@ FROM alpine:3.22.4
 
 RUN apk add --no-cache ca-certificates tzdata
 
+# без root: Gateway ничего не пишет на диск (файлы лежат в MinIO)
+RUN addgroup -S gateway && adduser -S -G gateway gateway
+
 WORKDIR /app
 COPY --from=builder /out/gateway .
 
+USER gateway
 CMD ["./gateway"]

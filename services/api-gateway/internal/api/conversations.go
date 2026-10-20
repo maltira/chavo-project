@@ -50,7 +50,6 @@ func (h *Handler) createGroup(c *gin.Context) {
 	var body struct {
 		Name        string   `json:"name"`
 		Description *string  `json:"description"`
-		AvatarURL   *string  `json:"avatar_url"`
 		Visibility  string   `json:"visibility"`
 		Slug        *string  `json:"slug"`
 		MemberIDs   []string `json:"member_ids"`
@@ -59,7 +58,7 @@ func (h *Handler) createGroup(c *gin.Context) {
 		return
 	}
 	resp, err := h.conversations.CreateGroup(c.Request.Context(), &conversationv1.CreateGroupRequest{
-		Name: body.Name, Description: body.Description, AvatarUrl: body.AvatarURL,
+		Name: body.Name, Description: body.Description,
 		Visibility: body.Visibility, Slug: body.Slug, MemberIds: body.MemberIDs,
 	})
 	if err != nil {
@@ -73,7 +72,6 @@ func (h *Handler) updateGroup(c *gin.Context) {
 	var body struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
-		AvatarURL   *string `json:"avatar_url"`
 		Visibility  *string `json:"visibility"`
 		Slug        *string `json:"slug"`
 	}
@@ -82,7 +80,7 @@ func (h *Handler) updateGroup(c *gin.Context) {
 	}
 	resp, err := h.conversations.UpdateGroup(c.Request.Context(), &conversationv1.UpdateGroupRequest{
 		ConversationId: c.Param("id"),
-		Name:           body.Name, Description: body.Description, AvatarUrl: body.AvatarURL, Visibility: body.Visibility,
+		Name:           body.Name, Description: body.Description, Visibility: body.Visibility,
 		Slug: body.Slug,
 	})
 	if err != nil {

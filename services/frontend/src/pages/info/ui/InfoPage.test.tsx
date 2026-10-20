@@ -44,10 +44,4 @@ describe('info pages', () => {
             screen.getByRole('heading', { level: 1, name: 'Политика конфиденциальности' }),
         ).toBeInTheDocument()
     })
-
-    it('goes back to the app', () => {
-        renderAt('/privacy')
-        fireEvent.click(screen.getByRole('button', { name: 'В приложение' }))
-        expect(screen.getByText('приложение')).toBeInTheDocument()
-    })
 })

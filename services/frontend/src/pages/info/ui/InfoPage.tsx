@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 
 import { ROUTES, TELEGRAM_URL } from '@/shared/config'
-import { Button, Segmented, TextLink } from '@/shared/ui'
+import { Segmented, TextLink } from '@/shared/ui'
 import { AuthLayout } from '@/widgets/auth-layout'
 
 import { PRIVACY, TERMS, UPDATED_AT } from '../model/content'

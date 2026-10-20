@@ -27,8 +27,18 @@
     gap: 20px;
 }
 
-.photoButton {
+.photoActions {
+    display: flex;
+    gap: 16px;
+}
+
+.photoButton,
+.photoRemove {
     @include type(main-regular);
+}
+
+.photoRemove {
+    color: var(--color-danger);
 }
 
 .fields {

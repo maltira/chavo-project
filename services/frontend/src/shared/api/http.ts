@@ -96,7 +96,10 @@ function networkError() {
 function send(path: string, { method = 'GET', body }: RequestOptions) {
     const headers: Record<string, string> = {}
     const token = getAccessToken()
-    if (body !== undefined) {
+    // FormData (загрузка файла) уходит как есть: Content-Type с boundary ставит браузер.
+    // Её можно отправить повторно, поэтому повтор после обновления токена тоже работает
+    const isForm = body instanceof FormData
+    if (body !== undefined && !isForm) {
         headers['Content-Type'] = 'application/json'
     }
     if (token) {
@@ -105,7 +108,7 @@ function send(path: string, { method = 'GET', body }: RequestOptions) {
     return fetch(`${BASE_URL}${path}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
         credentials: 'same-origin',
     })
 }

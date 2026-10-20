@@ -1,10 +1,32 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { CreateGroupModal } from './CreateGroupModal'
 
 const fetchMock = vi.fn()
+
+// чтение и кодирование фото в jsdom недоступны (нет canvas): подменяются
+const { loadImage, encodeSquare } = vi.hoisted(() => ({
+    loadImage: vi.fn(),
+    encodeSquare: vi.fn(),
+}))
+vi.mock('@/shared/lib', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/shared/lib')>()),
+    loadImage,
+    encodeSquare,
+}))
+
+// выбрать фото и подтвердить кроп
+async function pickPhoto() {
+    loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+    encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
+    const file = new File([new Uint8Array(10)], 'me.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('photo-input'), { target: { files: [file] } })
+    const save = await screen.findByRole('button', { name: 'Сохранить' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await act(async () => fireEvent.click(save))
+}
 
 function renderModal() {
     const client = new QueryClient({
@@ -126,5 +148,39 @@ describe('CreateGroupModal', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
         fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
         expect(screen.getByLabelText('Название')).toHaveValue('Клуб')
+    })
+
+    it('uploads the chosen photo to the new group after it is created', async () => {
+        URL.createObjectURL = vi.fn(() => 'blob:preview')
+        URL.revokeObjectURL = vi.fn()
+        fetchMock.mockImplementation((url: string, init: RequestInit) => {
+            if (init.method !== 'POST') {
+                // после создания список чатов перечитывается
+                return Promise.resolve(
+                    new Response(JSON.stringify({ items: [], limit: 30, offset: 0 })),
+                )
+            }
+            return Promise.resolve(
+                url === '/api/conversations'
+                    ? new Response(JSON.stringify({ id: 'g-new' }), { status: 201 })
+                    : new Response(JSON.stringify({ avatar_url: '/media/avatars/g.jpg' })),
+            )
+        })
+        renderModal()
+        await pickPhoto()
+        expect(document.querySelector('img[src="blob:preview"]')).not.toBeNull()
+
+        fireEvent.change(screen.getByLabelText('Название'), { target: { value: 'Клуб' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Закрытый' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Создать чат' }))
+
+        expect(await screen.findByText('новая группа')).toBeInTheDocument()
+        const posts = fetchMock.mock.calls.filter(([, init]) => init.method === 'POST')
+        expect(posts.map(([u]) => u)).toEqual([
+            '/api/conversations',
+            '/api/conversations/g-new/avatar',
+        ])
+        expect(posts[1]![1].body).toBeInstanceOf(FormData)
     })
 })

@@ -34,6 +34,20 @@ describe('request', () => {
         expect(init.credentials).toBe('same-origin')
     })
 
+    it('sends FormData as is, without the JSON content type', async () => {
+        setAccessToken('token-1')
+        fetchMock.mockResolvedValueOnce(reply(200, { avatar_url: '/media/avatars/x.jpg' }))
+        const form = new FormData()
+        form.append('file', new Blob(['jpeg'], { type: 'image/jpeg' }), 'avatar.jpg')
+
+        await request('/users/me/avatar', { method: 'POST', body: form })
+
+        const [, init] = fetchMock.mock.calls[0]!
+        expect(init.body).toBe(form)
+        expect(init.headers['Content-Type']).toBeUndefined()
+        expect(init.headers.Authorization).toBe('Bearer token-1')
+    })
+
     it('throws ApiError with status, reason and message', async () => {
         fetchMock.mockResolvedValueOnce(
             reply(401, { error: 'Неверная почта или пароль', reason: 'INVALID_CREDENTIALS' }),

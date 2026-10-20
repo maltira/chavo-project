@@ -2,13 +2,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 
-import { profileSchema } from '@/entities/user'
+import { profileSchema, uploadMyAvatar } from '@/entities/user'
 import type { ProfileInput, ProfileValues } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
-import { notify } from '@/shared/lib'
-import { Avatar, Button, Field, Input, Textarea, TextLink } from '@/shared/ui'
+import { notify, usePhotoDraft } from '@/shared/lib'
+import { Avatar, Button, Field, Input, PhotoPicker, Textarea, TextLink } from '@/shared/ui'
 
 import { createProfile } from '../api/createProfile'
+import type { CreateProfileBody } from '../api/createProfile'
 import styles from './ProfileForm.module.scss'
 
 const ERRORS: Record<string, string> = {
@@ -30,9 +31,25 @@ export function ProfileForm() {
         defaultValues: { display_name: '', username: '', bio: '' },
     })
     const [displayName, username] = useWatch({ control, name: ['display_name', 'username'] })
+    // фото можно загрузить только когда профиль уже есть: до этого оно ждёт здесь
+    const draft = usePhotoDraft()
 
     const mutation = useMutation({
-        mutationFn: createProfile,
+        mutationFn: async (body: CreateProfileBody) => {
+            await createProfile(body)
+            if (draft.photo) {
+                try {
+                    await uploadMyAvatar(draft.photo)
+                } catch (error) {
+                    // профиль уже создан - не блокируем вход из-за фото
+                    notify({
+                        icon: 'warn',
+                        title: 'Фото не загрузилось',
+                        description: `${errorMessage(error)}. Добавьте его позже в профиле`,
+                    })
+                }
+            }
+        },
         onError: (error) =>
             notify({
                 id: 'profile-error',
@@ -56,12 +73,23 @@ export function ProfileForm() {
                 }),
             )}
         >
-            {/* загрузки фото на сервере пока нет: кнопка неактивна */}
+            {/* фото уйдёт на сервер сразу после создания профиля */}
             <div className={styles.photo}>
-                <Avatar size={96} />
-                <TextLink as="button" className={styles.photoButton} disabled>
-                    Выбрать фото
-                </TextLink>
+                <Avatar src={draft.preview} size={96} />
+                <div className={styles.photoActions}>
+                    <PhotoPicker onPick={draft.set}>
+                        {(open) => (
+                            <TextLink as="button" className={styles.photoButton} onClick={open}>
+                                {draft.photo ? 'Сменить фото' : 'Выбрать фото'}
+                            </TextLink>
+                        )}
+                    </PhotoPicker>
+                    {draft.photo && (
+                        <TextLink as="button" className={styles.photoRemove} onClick={draft.clear}>
+                            Убрать
+                        </TextLink>
+                    )}
+                </div>
             </div>
 
             <div className={styles.fields}>

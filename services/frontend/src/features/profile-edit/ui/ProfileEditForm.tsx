@@ -3,11 +3,20 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
-import { profileSchema, updateMe } from '@/entities/user'
+import { profileSchema, updateMe, useMyAvatar } from '@/entities/user'
 import type { Profile, ProfileInput, ProfileUpdate, ProfileValues } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
-import { Avatar, Button, Field, Input, Textarea, TextLink } from '@/shared/ui'
+import {
+    Avatar,
+    Button,
+    ConfirmModal,
+    Field,
+    Input,
+    PhotoPicker,
+    Textarea,
+    TextLink,
+} from '@/shared/ui'
 
 import styles from './ProfileEditForm.module.scss'
 
@@ -25,6 +34,9 @@ export function ProfileEditForm({ profile: current, onDone }: Props) {
     // сравниваем с профилем на момент открытия формы: проп может обновиться, пока форма открыта
     const [profile] = useState(current)
     const queryClient = useQueryClient()
+    // фото сохраняется сразу после кропа, отдельно от полей формы
+    const avatar = useMyAvatar()
+    const [confirmRemove, setConfirmRemove] = useState(false)
     const {
         register,
         handleSubmit,
@@ -72,13 +84,48 @@ export function ProfileEditForm({ profile: current, onDone }: Props) {
 
     return (
         <form className={styles.form} noValidate onSubmit={handleSubmit(submit)}>
-            {/* загрузки фото на сервере пока нет: кнопка неактивна */}
+            {/* фото - живое значение профиля: после загрузки оно сразу обновляется */}
             <div className={styles.photo}>
-                <Avatar src={profile.avatar_url} size={96} />
-                <TextLink as="button" className={styles.photoButton} disabled>
-                    Выбрать фото
-                </TextLink>
+                <Avatar src={current.avatar_url} size={96} />
+                <div className={styles.photoActions}>
+                    <PhotoPicker onPick={(photo) => avatar.upload.mutate(photo)}>
+                        {(open) => (
+                            <TextLink
+                                as="button"
+                                className={styles.photoButton}
+                                disabled={avatar.pending}
+                                onClick={open}
+                            >
+                                {current.avatar_url ? 'Сменить фото' : 'Выбрать фото'}
+                            </TextLink>
+                        )}
+                    </PhotoPicker>
+                    {current.avatar_url && (
+                        <TextLink
+                            as="button"
+                            className={styles.photoRemove}
+                            disabled={avatar.pending}
+                            onClick={() => setConfirmRemove(true)}
+                        >
+                            Удалить фото
+                        </TextLink>
+                    )}
+                </div>
             </div>
+
+            <ConfirmModal
+                open={confirmRemove}
+                onClose={() => setConfirmRemove(false)}
+                onConfirm={() => {
+                    setConfirmRemove(false)
+                    avatar.remove.mutate()
+                }}
+                confirmLabel="Удалить"
+                danger
+                pending={avatar.remove.isPending}
+            >
+                Фото профиля будет удалено, вместо него появится заглушка
+            </ConfirmModal>
 
             <div className={styles.fields}>
                 <Field label="Ваше имя" error={errors.display_name?.message}>

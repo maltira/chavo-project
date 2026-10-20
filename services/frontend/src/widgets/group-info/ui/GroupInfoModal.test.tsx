@@ -7,6 +7,17 @@ import type { ConversationSummary, GroupPreview } from '@/entities/conversation'
 
 import { GroupInfoModal } from './GroupInfoModal'
 
+// чтение и кодирование фото в jsdom недоступны (нет canvas): подменяются
+const { loadImage, encodeSquare } = vi.hoisted(() => ({
+    loadImage: vi.fn(),
+    encodeSquare: vi.fn(),
+}))
+vi.mock('@/shared/lib', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/shared/lib')>()),
+    loadImage,
+    encodeSquare,
+}))
+
 const chat: ConversationSummary = {
     id: 'g1',
     conversation_type: 'group',
@@ -237,6 +248,27 @@ describe('GroupInfoModal', () => {
         expect(screen.getByRole('dialog', { name: 'Фигура' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
         expect(screen.getByRole('dialog', { name: /Настройки группы/ })).toBeInTheDocument()
+    })
+
+    it('an admin uploads and removes the group photo from the settings', async () => {
+        loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+        encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
+        renderModal({ ...chat, avatar_url: '/media/avatars/old.jpg' })
+        act(() => useGroupCard.getState().openChat('g1'))
+        fireEvent.click(screen.getByRole('button', { name: 'Настройки группы' }))
+
+        const file = new File([new Uint8Array(10)], 'g.png', { type: 'image/png' })
+        fireEvent.change(screen.getByTestId('photo-input'), { target: { files: [file] } })
+        const save = await screen.findByRole('button', { name: 'Сохранить' })
+        await waitFor(() => expect(save).toBeEnabled())
+        await act(async () => fireEvent.click(save))
+        await waitFor(() => expect(calls('POST', '/api/conversations/g1/avatar')).toHaveLength(1))
+        expect(calls('POST', '/api/conversations/g1/avatar')[0]![1]!.body).toBeInstanceOf(FormData)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить фото' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await waitFor(() => expect(calls('DELETE', '/api/conversations/g1/avatar')).toHaveLength(1))
     })
 
     it('switching to open requires a link and saves both', async () => {

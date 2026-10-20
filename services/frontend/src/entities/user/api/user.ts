@@ -1,4 +1,4 @@
-import { request } from '@/shared/api'
+import { photoForm, request } from '@/shared/api'
 
 import type { AvatarShape, Profile, Status } from '../model/types'
 
@@ -62,6 +62,18 @@ export function setMyAvatarShape(shape: AvatarShape): Promise<AvatarShape> {
 
 export function clearMyAvatarShape(): Promise<void> {
     return request<void>('/users/me/avatar-shape', { method: 'DELETE' })
+}
+
+// фото профиля: сервер проверяет и перекодирует файл и возвращает путь нового фото
+export function uploadMyAvatar(photo: Blob): Promise<{ avatar_url: string }> {
+    return request<{ avatar_url: string }>('/users/me/avatar', {
+        method: 'POST',
+        body: photoForm(photo),
+    })
+}
+
+export function deleteMyAvatar(): Promise<void> {
+    return request<void>('/users/me/avatar', { method: 'DELETE' })
 }
 
 export interface Settings {

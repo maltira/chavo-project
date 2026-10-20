@@ -7,4 +7,18 @@ export { dayKey, formatChatTime, formatDate, formatDay, formatLastSeen, formatTi
 export { useDebouncedValue } from './useDebounce'
 export { settleAll } from './settle'
 export { useLoadMore } from './useLoadMore'
+export {
+    AVATAR_UPLOAD_SIZE,
+    checkImageFile,
+    clampCrop,
+    coverScale,
+    encodeSquare,
+    IMAGE_ACCEPT,
+    loadImage,
+    MAX_ZOOM,
+    MIN_ZOOM,
+    sourceRect,
+    usePhotoDraft,
+} from './image'
+export type { CropState, LoadedImage } from './image'
 export type { SettleResult } from './settle'

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { slugSchema, SlugField, useDirectPeers } from '@/entities/conversation'
 import { UserRow } from '@/entities/user'
 import { ApiError, errorMessage } from '@/shared/api'
+import { usePhotoDraft } from '@/shared/lib'
 import {
     Avatar,
     Button,
@@ -11,6 +12,7 @@ import {
     IconButton,
     Input,
     Modal,
+    PhotoPicker,
     Segmented,
     Textarea,
     TextLink,
@@ -59,6 +61,8 @@ function CreateGroupForm({ open, onClose }: Props) {
     const [slugError, setSlugError] = useState<string>()
     const [selected, setSelected] = useState<string[]>([])
     const create = useCreateGroup(onClose)
+    // фото ждёт создания группы; при следующем открытии окна форма с чистого листа
+    const draft = usePhotoDraft()
 
     // кого можно позвать: собеседники из моих личных чатов
     const peers = useDirectPeers()
@@ -71,11 +75,14 @@ function CreateGroupForm({ open, onClose }: Props) {
     function submit() {
         create.mutate(
             {
-                name: name.trim(),
-                description: description.trim() || undefined,
-                visibility,
-                slug: visibility === 'public' ? slug.trim() : undefined,
-                member_ids: selected,
+                input: {
+                    name: name.trim(),
+                    description: description.trim() || undefined,
+                    visibility,
+                    slug: visibility === 'public' ? slug.trim() : undefined,
+                    member_ids: selected,
+                },
+                photo: draft.photo,
             },
             {
                 onError: (error) => {
@@ -164,11 +171,23 @@ function CreateGroupForm({ open, onClose }: Props) {
 
     return (
         <Modal open={open} onClose={onClose} aria-label="Новый групповой чат">
+            {/* фото уйдёт на сервер сразу после создания группы */}
             <div className={styles.photo}>
-                <Avatar size={96} />
-                <TextLink as="button" className={styles.photoButton} disabled>
-                    Выбрать фото
-                </TextLink>
+                <Avatar src={draft.preview} size={96} />
+                <div className={styles.photoActions}>
+                    <PhotoPicker onPick={draft.set}>
+                        {(open) => (
+                            <TextLink as="button" className={styles.photoButton} onClick={open}>
+                                {draft.photo ? 'Сменить фото' : 'Выбрать фото'}
+                            </TextLink>
+                        )}
+                    </PhotoPicker>
+                    {draft.photo && (
+                        <TextLink as="button" className={styles.photoRemove} onClick={draft.clear}>
+                            Убрать
+                        </TextLink>
+                    )}
+                </div>
             </div>
 
             <form

@@ -1,10 +1,19 @@
 import { useState } from 'react'
 
-import { slugSchema, SlugField } from '@/entities/conversation'
+import { slugSchema, SlugField, useGroupAvatar } from '@/entities/conversation'
 import type { ConversationSummary, GroupUpdate } from '@/entities/conversation'
 import { UserAvatar } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
-import { Button, ConfirmModal, Field, Input, Segmented, Textarea, TextLink } from '@/shared/ui'
+import {
+    Button,
+    ConfirmModal,
+    Field,
+    Input,
+    PhotoPicker,
+    Segmented,
+    Textarea,
+    TextLink,
+} from '@/shared/ui'
 
 import { isSlugError, useDeleteGroup, useUpdateGroup } from '../model/useGroupSettings'
 import styles from './GroupSettingsForm.module.scss'
@@ -41,6 +50,8 @@ export function GroupSettingsForm({ chat, onPickShape, onSaved, onDeleted }: Pro
     const [description, setDescription] = useState(initial.description ?? '')
     const [slugError, setSlugError] = useState<string>()
     const [confirmDelete, setConfirmDelete] = useState(false)
+    const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false)
+    const avatar = useGroupAvatar(chat.id)
 
     const update = useUpdateGroup(chat.id, onSaved)
     const remove = useDeleteGroup(chat.id, onDeleted)
@@ -96,10 +107,46 @@ export function GroupSettingsForm({ chat, onPickShape, onSaved, onDeleted }: Pro
                 >
                     <UserAvatar src={chat.avatar_url} shape={chat.avatar_shape} size={96} />
                 </button>
-                <TextLink as="button" className={styles.photoButton} disabled>
-                    Выбрать фото
-                </TextLink>
+                {/* фото сохраняется сразу после кропа, отдельно от «Сохранить изменения» */}
+                <div className={styles.photoActions}>
+                    <PhotoPicker onPick={(photo) => avatar.upload.mutate(photo)}>
+                        {(open) => (
+                            <TextLink
+                                as="button"
+                                className={styles.photoButton}
+                                disabled={avatar.pending}
+                                onClick={open}
+                            >
+                                {chat.avatar_url ? 'Сменить фото' : 'Выбрать фото'}
+                            </TextLink>
+                        )}
+                    </PhotoPicker>
+                    {chat.avatar_url && (
+                        <TextLink
+                            as="button"
+                            className={styles.photoRemove}
+                            disabled={avatar.pending}
+                            onClick={() => setConfirmRemovePhoto(true)}
+                        >
+                            Удалить фото
+                        </TextLink>
+                    )}
+                </div>
             </div>
+
+            <ConfirmModal
+                open={confirmRemovePhoto}
+                onClose={() => setConfirmRemovePhoto(false)}
+                onConfirm={() => {
+                    setConfirmRemovePhoto(false)
+                    avatar.remove.mutate()
+                }}
+                confirmLabel="Удалить"
+                danger
+                pending={avatar.remove.isPending}
+            >
+                Фото группы будет удалено у всех участников
+            </ConfirmModal>
 
             <form
                 className={styles.fields}

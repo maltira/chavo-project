@@ -11,9 +11,19 @@
     align-items: center;
     gap: 16px;
 
-    & .photoButton {
+    & .photoButton,
+    & .photoRemove {
         @include type(main-regular);
     }
+
+    & .photoRemove {
+        color: var(--color-danger);
+    }
+}
+
+.photoActions {
+    display: flex;
+    gap: 16px;
 }
 
 .fields {

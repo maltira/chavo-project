@@ -1,4 +1,4 @@
-import { request } from '@/shared/api'
+import { photoForm, request } from '@/shared/api'
 
 import type { AvatarShape, Status, StatusInput } from '@/entities/user/@x/conversation'
 
@@ -143,4 +143,16 @@ export function setGroupAvatarShape(id: string, shape: AvatarShape): Promise<Ava
 
 export function clearGroupAvatarShape(id: string): Promise<void> {
     return request<void>(`${base(id)}/avatar-shape`, { method: 'DELETE' })
+}
+
+// фото группы (только админ)
+export function uploadGroupAvatar(id: string, photo: Blob): Promise<{ avatar_url: string }> {
+    return request<{ avatar_url: string }>(`${base(id)}/avatar`, {
+        method: 'POST',
+        body: photoForm(photo),
+    })
+}
+
+export function deleteGroupAvatar(id: string): Promise<void> {
+    return request<void>(`${base(id)}/avatar`, { method: 'DELETE' })
 }

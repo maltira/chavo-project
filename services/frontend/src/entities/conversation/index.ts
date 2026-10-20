@@ -13,6 +13,7 @@ export {
     approveJoinRequest,
     clearGroupAvatarShape,
     clearGroupStatus,
+    deleteGroupAvatar,
     getInviteInfo,
     regenerateInvite,
     rejectJoinRequest,
@@ -23,9 +24,11 @@ export {
     setMemberRole,
     unban,
     updateGroup,
+    uploadGroupAvatar,
 } from './api/groups'
 export type { Ban, GroupUpdate, InviteInfo, JoinRequest } from './api/groups'
 export { useGroupSearch } from './model/useGroupSearch'
+export { useGroupAvatar } from './model/useGroupAvatar'
 export { previewFromInvite, previewFromSearch, useGroupCard } from './model/groupCard'
 export type { GroupCardTarget, GroupPreview } from './model/groupCard'
 export {

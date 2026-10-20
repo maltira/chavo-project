@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import type { Profile } from '@/entities/user'
 import { renderWithProviders } from '@/shared/lib/testing'
@@ -14,6 +14,28 @@ const profile = {
 } as Profile
 
 const fetchMock = vi.fn()
+
+// чтение и кодирование фото в jsdom недоступны (нет canvas): подменяются
+const { loadImage, encodeSquare } = vi.hoisted(() => ({
+    loadImage: vi.fn(),
+    encodeSquare: vi.fn(),
+}))
+vi.mock('@/shared/lib', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/shared/lib')>()),
+    loadImage,
+    encodeSquare,
+}))
+
+// выбрать фото и подтвердить кроп
+async function pickPhoto() {
+    loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+    encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
+    const file = new File([new Uint8Array(10)], 'me.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('photo-input'), { target: { files: [file] } })
+    const save = await screen.findByRole('button', { name: 'Сохранить' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await act(async () => fireEvent.click(save))
+}
 
 describe('ProfileEditForm', () => {
     beforeEach(() => {
@@ -70,5 +92,38 @@ describe('ProfileEditForm', () => {
         expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
             bio: 'Уже другое',
         })
+    })
+
+    it('uploads a new photo at once and removes it after confirmation', async () => {
+        fetchMock.mockImplementation((_url: string, init: RequestInit) =>
+            Promise.resolve(
+                init.method === 'POST'
+                    ? new Response(JSON.stringify({ avatar_url: '/media/avatars/new.jpg' }))
+                    : new Response('{"message":"ok"}'),
+            ),
+        )
+        renderWithProviders(
+            <ProfileEditForm
+                profile={{ ...profile, avatar_url: '/media/avatars/old.jpg' }}
+                onDone={vi.fn()}
+            />,
+        )
+        await pickPhoto()
+        await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+        const [url, init] = fetchMock.mock.calls[0]!
+        expect(url).toBe('/api/users/me/avatar')
+        expect(init.method).toBe('POST')
+        expect(init.body).toBeInstanceOf(FormData)
+        expect((init.body as FormData).get('file')).toBeInstanceOf(Blob)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить фото' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить' }))
+        await waitFor(() =>
+            expect(
+                fetchMock.mock.calls.some(
+                    ([u, i]) => u === '/api/users/me/avatar' && i.method === 'DELETE',
+                ),
+            ).toBe(true),
+        )
     })
 })

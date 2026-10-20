@@ -11,6 +11,13 @@ describe('Splash', () => {
         vi.useRealTimers()
     })
 
+    it('explains the missing connection instead of the waiting texts', () => {
+        const { rerender } = render(<Splash since={Date.now()} unreachable="offline" />)
+        expect(screen.getByTestId('splash-text')).toHaveTextContent('Нет подключения к интернету')
+        rerender(<Splash since={Date.now()} unreachable="server" />)
+        expect(screen.getByTestId('splash-text')).toHaveTextContent('Сервер не отвечает')
+    })
+
     it('starts with the friendly text under the loader', () => {
         render(<Splash since={Date.now()} />)
         expect(screen.getByTestId('splash-text')).toHaveTextContent('Подготавливаем ваши чаты')

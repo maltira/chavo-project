@@ -13,6 +13,12 @@ const STAGES = [
 
 const LAST_STAGE = STAGES.length - 1
 
+// причина, по которой ждём: вместо текстов по времени - объяснение, что повторим сами
+const UNREACHABLE_TEXT = {
+    offline: 'Нет подключения к интернету. Подключимся, как только оно появится',
+    server: 'Сервер не отвечает. Пробуем подключиться снова',
+} as const
+
 // отсчёт от запуска приложения
 const APP_START = Date.now()
 
@@ -33,10 +39,17 @@ interface Props {
     failed?: boolean
     // точка отсчёта, мс; по умолчанию запуск приложения
     since?: number
+    // связи нет: показываем причину, приложение повторяет попытку само
+    unreachable?: keyof typeof UNREACHABLE_TEXT | null
 }
 
 // экран ожидания: лоадер и пояснение, которое меняется по мере ожидания
-export function Splash({ retrying = false, failed = false, since = APP_START }: Props) {
+export function Splash({
+    retrying = false,
+    failed = false,
+    since = APP_START,
+    unreachable = null,
+}: Props) {
     const [now, setNow] = useState(() => Date.now())
 
     useEffect(() => {
@@ -59,7 +72,7 @@ export function Splash({ retrying = false, failed = false, since = APP_START }: 
         <div className={styles.root}>
             <Loader />
             <p className={styles.text} aria-live="polite" data-testid="splash-text">
-                {STAGES[stage]?.text}
+                {unreachable ? UNREACHABLE_TEXT[unreachable] : STAGES[stage]?.text}
             </p>
         </div>
     )

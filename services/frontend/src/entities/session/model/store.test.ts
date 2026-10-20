@@ -5,10 +5,11 @@ import { bootstrapSession, useSession } from './store'
 describe('session', () => {
     beforeEach(() => {
         setAccessToken(null)
-        useSession.setState({ status: 'unknown' })
+        useSession.setState({ status: 'unknown', unreachable: null })
     })
 
     afterEach(() => {
+        vi.useRealTimers()
         vi.unstubAllGlobals()
     })
 
@@ -42,9 +43,39 @@ describe('session', () => {
         expect(useSession.getState().status).toBe('guest')
     })
 
-    it('shows the login without dropping the cookie when the network is down', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    it('waits on the splash and retries instead of signing out when the server is unreachable', async () => {
+        vi.useFakeTimers()
+        const fetchMock = vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'back' })))
+        vi.stubGlobal('fetch', fetchMock)
+
         await bootstrapSession()
-        expect(useSession.getState().status).toBe('guest')
+        // не выход: сессия может быть жива, просто нет связи
+        expect(useSession.getState()).toMatchObject({ status: 'unknown', unreachable: 'server' })
+
+        await vi.advanceTimersByTimeAsync(2_000)
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(useSession.getState()).toMatchObject({ status: 'authenticated', unreachable: null })
+    })
+
+    it('says there is no internet and retries as soon as it is back', async () => {
+        vi.useFakeTimers()
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+        const fetchMock = vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+        vi.stubGlobal('fetch', fetchMock)
+
+        await bootstrapSession()
+        expect(useSession.getState().unreachable).toBe('offline')
+
+        // событие online - повтор сразу, без ожидания таймера
+        window.dispatchEvent(new Event('online'))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(useSession.getState()).toMatchObject({ status: 'guest', unreachable: null })
     })
 })

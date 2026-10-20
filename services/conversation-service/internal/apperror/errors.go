@@ -6,6 +6,7 @@ import (
 
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/media"
 	"github.com/maltira/chavo-project-backend/proto/status"
 )
 
@@ -68,7 +69,8 @@ func HTTPCode(err error) int {
 		errors.Is(err, status.ErrInvalidText),
 		errors.Is(err, status.ErrInvalidColor),
 		errors.Is(err, avatarshape.ErrUnknownShape),
-		errors.Is(err, avatarshape.ErrInvalidColor):
+		errors.Is(err, avatarshape.ErrInvalidColor),
+		errors.Is(err, media.ErrInvalidAvatarURL):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrUserServiceError):
 		return http.StatusServiceUnavailable
@@ -83,6 +85,8 @@ func Reason(err error) string {
 		return "AVATAR_SHAPE_INVALID"
 	case errors.Is(err, avatarshape.ErrInvalidColor):
 		return "AVATAR_SHAPE_COLOR_INVALID"
+	case errors.Is(err, media.ErrInvalidAvatarURL):
+		return "AVATAR_INVALID"
 	case errors.Is(err, status.ErrUnknownIcon):
 		return "STATUS_ICON_INVALID"
 	case errors.Is(err, status.ErrInvalidColor):
@@ -128,6 +132,8 @@ func UserMessage(err error) string {
 		return "Неизвестная фигура"
 	case errors.Is(err, avatarshape.ErrInvalidColor):
 		return "Цвет фигуры задаётся в формате #RRGGBB"
+	case errors.Is(err, media.ErrInvalidAvatarURL):
+		return "Фото группы можно только загрузить"
 	case errors.Is(err, status.ErrUnknownIcon):
 		return "Неизвестная иконка статуса"
 	case errors.Is(err, status.ErrInvalidColor):

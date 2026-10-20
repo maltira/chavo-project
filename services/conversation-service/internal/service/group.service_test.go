@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/maltira/chavo-project-backend/proto/media"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
 )
@@ -371,15 +373,19 @@ func TestAvatarURLValidation(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	admin := uuid.New()
-	bad := []string{"javascript:alert(1)", "ftp://host/a.png", "http:///no-host", "not a url", "//host/a.png"}
+	// принимается только путь, который выдал Gateway после загрузки; любой внешний URL - нет
+	bad := []string{
+		"javascript:alert(1)", "ftp://host/a.png", "not a url", "//host/a.png",
+		"https://cdn.example.com/a.png", "/media/avatars/../../secret.jpg", "/media/avatars/x.jpg",
+	}
 
 	for _, u := range bad {
 		u := u
-		if _, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &u}); !errors.Is(err, apperror.ErrIncorrectData) {
+		if _, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &u}); !errors.Is(err, media.ErrInvalidAvatarURL) {
 			t.Errorf("create with %q: %v", u, err)
 		}
 	}
-	good := "https://cdn.example.com/a.png"
+	good := media.AvatarURL(strings.Repeat("f", 32) + ".jpg")
 	res, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &good})
 	if err != nil || res.Conversation.AvatarURL == nil || *res.Conversation.AvatarURL != good {
 		t.Fatalf("create with valid url: %+v %v", res, err)
@@ -387,7 +393,7 @@ func TestAvatarURLValidation(t *testing.T) {
 	id := res.Conversation.ID
 	for _, u := range bad {
 		u := u
-		if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{AvatarURL: &u}); !errors.Is(err, apperror.ErrIncorrectData) {
+		if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{AvatarURL: &u}); !errors.Is(err, media.ErrInvalidAvatarURL) {
 			t.Errorf("update with %q: %v", u, err)
 		}
 	}

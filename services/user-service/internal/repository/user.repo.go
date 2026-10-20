@@ -18,7 +18,8 @@ import (
 
 type ProfileRepository interface {
 	Create(ctx context.Context, profile *models.Profile, settings *models.Settings) error
-	Update(ctx context.Context, userID uuid.UUID, updates map[string]string) error
+	// Update меняет перечисленные колонки; nil записывается как NULL (например, убранная аватарка)
+	Update(ctx context.Context, userID uuid.UUID, updates map[string]any) error
 	GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error)
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
 	UsernameExists(ctx context.Context, username string) (bool, error)
@@ -76,7 +77,7 @@ var allowedProfileColumns = map[string]bool{
 	"username": true, "display_name": true, "bio": true, "avatar_url": true,
 }
 
-func (r *profileRepository) Update(ctx context.Context, userID uuid.UUID, updates map[string]string) error {
+func (r *profileRepository) Update(ctx context.Context, userID uuid.UUID, updates map[string]any) error {
 	for col := range updates {
 		if !allowedProfileColumns[col] {
 			return fmt.Errorf("update profile: unknown column %q", col)

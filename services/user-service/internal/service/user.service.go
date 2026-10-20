@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/maltira/chavo-project-backend/proto/media"
+
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
@@ -63,18 +65,28 @@ func (s *profileService) Create(ctx context.Context, userID uuid.UUID, input Cre
 		return apperror.ErrUsernameExists
 	}
 
+	// аватарку ставит только Gateway после загрузки: принимается лишь выданный им путь
+	var avatar *string
+	if input.AvatarURL != nil {
+		v, err := media.NormalizeAvatarURL(*input.AvatarURL)
+		if err != nil {
+			return err
+		}
+		avatar = v
+	}
+
 	profile := &models.Profile{
 		UserID:      userID,
 		Username:    input.Username,
 		DisplayName: input.DisplayName,
 		Bio:         input.Bio,
-		AvatarURL:   input.AvatarURL,
+		AvatarURL:   avatar,
 	}
 	return s.repo.Create(ctx, profile, &models.Settings{UserID: userID})
 }
 
 func (s *profileService) Update(ctx context.Context, userID uuid.UUID, data map[string]string) error {
-	updates := make(map[string]string)
+	updates := make(map[string]any)
 
 	if v, ok := data["username"]; ok {
 		n := utf8.RuneCountInString(v)
@@ -106,8 +118,13 @@ func (s *profileService) Update(ctx context.Context, userID uuid.UUID, data map[
 		updates["bio"] = v
 	}
 
+	// пустая строка убирает аватарку (NULL), иначе - только путь, который выдал Gateway после загрузки
 	if v, ok := data["avatar_url"]; ok {
-		updates["avatar_url"] = v
+		avatar, err := media.NormalizeAvatarURL(v)
+		if err != nil {
+			return err
+		}
+		updates["avatar_url"] = avatar
 	}
 
 	if len(updates) == 0 {

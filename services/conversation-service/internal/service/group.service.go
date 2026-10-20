@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
+	"github.com/maltira/chavo-project-backend/proto/media"
 	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/client/userclient"
@@ -23,7 +23,6 @@ import (
 const (
 	maxGroupNameLength   = 100
 	maxDescriptionLength = 255
-	maxAvatarURLLength   = 2048
 	maxUsersPerRequest   = 100
 	maxGroupMembers      = 5000
 )
@@ -124,17 +123,13 @@ func optionalText(v *string, maxLen int) (*string, error) {
 	return &t, nil
 }
 
-// optionalAvatarURL: как optionalText, но допускает только http(s)-ссылки с host.
+// optionalAvatarURL: пустая строка убирает аватарку (nil), иначе принимается только путь,
+// который выдал Gateway после загрузки - чужую картинку (например, трекер) поставить нельзя
 func optionalAvatarURL(v *string) (*string, error) {
-	t, err := optionalText(v, maxAvatarURLLength)
-	if err != nil || t == nil {
-		return t, err
+	if v == nil {
+		return nil, nil
 	}
-	u, err := url.Parse(*t)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, apperror.ErrIncorrectData
-	}
-	return t, nil
+	return media.NormalizeAvatarURL(strings.TrimSpace(*v))
 }
 
 // ensureCapacity требует, чтобы строка conversation была заблокирована в этой транзакции:

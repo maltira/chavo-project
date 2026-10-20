@@ -3,6 +3,7 @@ package repository_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,24 +74,40 @@ func TestProfiles(t *testing.T) {
 		t.Fatalf("search page: %+v", page)
 	}
 
-	if err := repo.Update(ctx, id, map[string]string{"display_name": "Alice A.", "bio": "hi"}); err != nil {
+	if err := repo.Update(ctx, id, map[string]any{"display_name": "Alice A.", "bio": "hi"}); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ := repo.FindByID(ctx, id); p.DisplayName != "Alice A." || p.Bio == nil || *p.Bio != "hi" {
 		t.Fatalf("updated: %+v", p)
 	}
-	if err := repo.Update(ctx, id, map[string]string{"username": "bob"}); !errors.Is(err, apperror.ErrUsernameExists) {
+	if err := repo.Update(ctx, id, map[string]any{"username": "bob"}); !errors.Is(err, apperror.ErrUsernameExists) {
 		t.Fatalf("rename to taken: %v", err)
 	}
-	if err := repo.Update(ctx, id, map[string]string{"password": "x"}); err == nil {
+	if err := repo.Update(ctx, id, map[string]any{"password": "x"}); err == nil {
 		t.Fatal("unknown column accepted")
 	}
-	if err := repo.Update(ctx, uuid.New(), map[string]string{"bio": "x"}); !errors.Is(err, apperror.ErrNotFound) {
+	if err := repo.Update(ctx, uuid.New(), map[string]any{"bio": "x"}); !errors.Is(err, apperror.ErrNotFound) {
 		t.Fatalf("update unknown: %v", err)
 	}
 	// Формат username проверяет БД.
-	if err := repo.Update(ctx, id, map[string]string{"username": "bad name!"}); err == nil {
+	if err := repo.Update(ctx, id, map[string]any{"username": "bad name!"}); err == nil {
 		t.Fatal("invalid username accepted")
+	}
+
+	// аватарка ставится путём и убирается nil - в БД NULL, а не пустая строка
+	avatar := "/media/avatars/" + strings.Repeat("a", 32) + ".jpg"
+	if err := repo.Update(ctx, id, map[string]any{"avatar_url": &avatar}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := repo.FindByID(ctx, id); p.AvatarURL == nil || *p.AvatarURL != avatar {
+		t.Fatalf("avatar set: %+v", p.AvatarURL)
+	}
+	var none *string
+	if err := repo.Update(ctx, id, map[string]any{"avatar_url": none}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := repo.FindByID(ctx, id); p.AvatarURL != nil {
+		t.Fatalf("avatar must be NULL after clearing, got %q", *p.AvatarURL)
 	}
 }
 

@@ -1,54 +1,48 @@
-<!DOCTYPE html>
-<html lang="ru">
+{{define "title"}}Код подтверждения{{end}}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Код подтверждения</title>
-</head>
+{{define "preheader"}}Ваш код для входа в Chavo: {{.Code}}{{end}}
 
-<body style="margin: 0; padding: 0; background-color: #f4f7fa; font-family: 'Segoe UI', Arial, sans-serif;">
-    <div
-        style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+{{define "heading"}}Код для входа{{end}}
 
-        <!-- Шапка -->
-        <div style="background: linear-gradient(135deg, #0078D4, #00A1F1); padding: 30px 40px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">Подтверждение email</h1>
-        </div>
+{{define "content"}}
+<p
+    style="margin: 0 0 28px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; text-align: center; color: #cdccc9;">
+    Введите этот одноразовый код на странице входа.
+</p>
 
-        <!-- Основное содержимое -->
-        <div style="padding: 40px 50px; text-align: center;">
-            <p style="color: #555555; font-size: 16px; line-height: 1.5;">
-                Для завершения введите этот одноразовый код:
+<!-- Код: по ячейке на цифру, как поле ввода в приложении -->
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 28px;">
+    <tr>
+        {{range .Digits}}
+        <td style="padding: 0 3px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td class="digit" width="44" height="52" align="center" valign="middle" bgcolor="#222222"
+                        style="width: 44px; height: 52px; background-color: #222222; border: 1px solid #2a2a2a; border-radius: 12px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 24px; font-weight: 500; line-height: 52px; color: #faf9f5;">{{.}}</td>
+                </tr>
+            </table>
+        </td>
+        {{end}}
+    </tr>
+</table>
+
+<p
+    style="margin: 0 0 24px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; text-align: center; color: #a1a09d;">
+    Код действителен в течение <strong style="font-weight: 500; color: #faf9f5;">{{.ExpiresIn}}</strong>.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td style="border-top: 1px solid #2a2a2a; padding-top: 24px;">
+            <p
+                style="margin: 0 0 8px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; color: #a1a09d;">
+                Никому не сообщайте этот код, даже если просят от имени Chavo.
             </p>
-
-            <!-- OTP код -->
-            <div
-                style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 10px; border: 2px dashed #0078D4;">
-                <div
-                    style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #0078D4; font-family: monospace;">
-                    {{.Code}}
-                </div>
-            </div>
-
-            <p style="color: #666666; font-size: 15px;">
-                Код действителен до <strong>{{.ExpiresIn}}</strong>.<br>
-                Не передавайте его никому.
+            <p
+                style="margin: 0; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; color: #a1a09d;">
+                Если вы не пытались войти, проигнорируйте письмо и при желании смените пароль.
             </p>
-
-            <p style="color: #999999; font-size: 13px; margin-top: 40px;">
-                Если вы не запрашивали этот код — просто проигнорируйте письмо.
-            </p>
-        </div>
-
-        <!-- Футер -->
-        <div style="background-color: #f8f9fa; padding: 25px; text-align: center; border-top: 1px solid #eeeeee;">
-            <p style="margin: 0; color: #888888; font-size: 13px;">
-                С уважением,<br>
-                <strong>Команда Chavo</strong>
-            </p>
-        </div>
-    </div>
-</body>
-
-</html>
+        </td>
+    </tr>
+</table>
+{{end}}

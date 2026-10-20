@@ -1,0 +1,28 @@
+.root {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+// точка в правом нижнем углу; обводка цвета фона отделяет её от аватара
+.online {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+
+    border: 2px solid var(--color-bg-secondary);
+    border-radius: $radius-full;
+    background-color: var(--color-accent);
+
+    opacity: 0;
+    transform: scale(0.6);
+    transition: $transition-fast;
+    pointer-events: none;
+
+    &[data-online='true'] {
+        opacity: 1;
+        transform: none;
+    }
+}

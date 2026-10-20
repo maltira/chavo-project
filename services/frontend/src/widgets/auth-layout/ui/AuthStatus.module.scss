@@ -1,0 +1,28 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+}
+
+.text {
+    @include type(main-regular);
+
+    text-align: center;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+
+    // кнопки действий на всю ширину карточки, как основная кнопка форм
+    > * {
+        justify-content: center;
+        width: 100%;
+    }
+}

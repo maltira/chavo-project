@@ -1,0 +1,47 @@
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.texts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.name,
+.username {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.name {
+    @include type(button-medium);
+
+    color: var(--color-text);
+}
+
+.username {
+    @include type(tag-regular);
+
+    color: alpha(var(--color-text), 0.6);
+}
+
+// кнопка-крестик на подложке без рамки
+.row .remove {
+    flex-shrink: 0;
+    border-color: transparent;
+    background-color: var(--color-bg-muted);
+}
+
+// метка для подгрузки следующей страницы
+// метка подгрузки в конце списка: не добавляет отступа к gap карточки
+.sentinel {
+    flex-shrink: 0;
+    height: 1px;
+    margin-top: -13px;
+}

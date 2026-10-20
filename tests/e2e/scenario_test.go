@@ -5,10 +5,12 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -220,8 +222,25 @@ func TestScenario(t *testing.T) {
 		shapes, _ := r.body["avatar_shapes"].([]any)
 		check(t, r.status == 200 && len(icons) == 6 && len(shapes) == 27, "customization catalog: %d %s", r.status, r.raw)
 
-		r = a.dev.do(t, "PATCH", "/api/users/me", map[string]string{"avatar_url": "https://example.com/e2e.png"})
-		check(t, r.status == 200, "set avatar: %d %s", r.status, r.raw)
+		// аватарка - только загрузкой: исполняемый файл под видом фото отклоняется, фото перекодируется
+		elf := append([]byte("\x7fELF\x02\x01\x01\x00"), bytes.Repeat([]byte{0}, 128)...)
+		r = a.dev.upload(t, "/api/users/me/avatar", "photo.jpg", "image/jpeg", elf)
+		check(t, r.status == 415 && r.body["reason"] == "AVATAR_TYPE_UNSUPPORTED", "executable as avatar: %d %s", r.status, r.raw)
+		// полиглот: настоящая картинка с дописанным хвостом - хвост не сохраняется
+		marker := "E2E-PAYLOAD-" + w.run
+		r = a.dev.upload(t, "/api/users/me/avatar", "me.png", "image/png", append(pngPhoto(t), []byte("\x7fELF"+marker)...))
+		avatarURL, _ := r.body["avatar_url"].(string)
+		check(t, r.status == 200 && regexp.MustCompile(`^/media/avatars/[0-9a-f]{32}\.jpg$`).MatchString(avatarURL),
+			"upload avatar: %d %s", r.status, r.raw)
+		img := a.dev.do(t, "GET", avatarURL, nil)
+		check(t, img.status == 200 && img.header.Get("Content-Type") == "image/jpeg" &&
+			img.header.Get("X-Content-Type-Options") == "nosniff" && strings.HasPrefix(img.raw, "\xff\xd8") &&
+			!strings.Contains(img.raw, marker), "served avatar: %d %v", img.status, img.header)
+		// внешний URL через PATCH больше не ставится: поле игнорируется
+		r = a.dev.do(t, "PATCH", "/api/users/me", map[string]string{"avatar_url": "https://example.com/e2e.png", "bio": "e2e"})
+		check(t, r.status == 200, "patch profile: %d %s", r.status, r.raw)
+		me0 := a.dev.do(t, "GET", "/api/users/me", nil)
+		check(t, me0.body["avatar_url"] == avatarURL, "avatar must stay the uploaded one: %s", me0.raw)
 
 		for _, ws := range []*wsConn{bw, cw, tab2} {
 			ws.drain()

@@ -17,6 +17,7 @@
 
 - Docker с Compose и `make` - для запуска
 - Go 1.26 и gcc - для тестов (`-race` требует cgo)
+- Node.js 24 и npm - для фронтенда (`services/frontend`)
 
 ## Запуск
 
@@ -42,6 +43,19 @@ make down    # остановить
 - **порт занят:** 8080, 8025 и 8090 меняются в `.env` (`NGINX_PORT`, `MAILPIT_UI_PORT`, `KAFKA_UI_PORT`); 5432 (PostgreSQL), 6379 (Redis) и 9092 (Kafka) зашиты в compose - остановите то, что их занимает (например, локальный PostgreSQL);
 - **нет базы данных:** (`database "…" does not exist`) том PostgreSQL создан до появления этой БД: `make init-dbs`, затем `make up`.
 
+## Фронтенд
+
+`services/frontend` - React + TypeScript + Vite, архитектура FSD, стили на SCSS (CSS Modules и токены в `src/app/styles`).
+
+```bash
+make frontend-install   # npm ci
+make frontend-dev       # http://localhost:3000, /api и /ws проксируются в nginx (нужен make up)
+make frontend-test      # typecheck + eslint + steiger (FSD) + vitest
+make frontend-build     # сборка в services/frontend/dist
+```
+
+`FRONTEND_URL` в `.env` должен совпадать с адресом dev-сервера (`http://localhost:3000`): по нему Gateway проверяет Origin у WebSocket. Чтобы nginx отдавал сборку вместо заглушки, укажите `FRONTEND_DIST=./services/frontend/dist`.
+
 ## Тесты
 
 | Команда | Что запускает |
@@ -66,7 +80,7 @@ TEST_DATABASE_URL="postgres://postgres:x@localhost:15432/postgres?sslmode=disabl
 ## Структура
 
 ```text
-services/      микросервисы (у каждого свой Go-модуль)
+services/      микросервисы (у каждого свой Go-модуль) и фронтенд (frontend)
 proto/         gRPC-контракты и сгенерированный код (make proto)
 migrations/    SQL-миграции по сервисам
 nginx/         конфигурация nginx

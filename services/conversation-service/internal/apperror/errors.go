@@ -6,6 +6,7 @@ import (
 
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/media"
 	"github.com/maltira/chavo-project-backend/proto/status"
 )
 
@@ -30,6 +31,9 @@ var (
 	ErrBanned                = errors.New("user is banned in this group")
 	ErrGroupFull             = errors.New("group member limit reached")
 	ErrJoinRequestsLimit     = errors.New("too many pending join requests")
+	ErrSlugInvalid           = errors.New("invalid chat link code")
+	ErrSlugRequired          = errors.New("public group requires a chat link code")
+	ErrSlugTaken             = errors.New("chat link code is taken")
 )
 
 func HTTPCode(err error) int {
@@ -52,17 +56,21 @@ func HTTPCode(err error) int {
 		errors.Is(err, ErrJoinRequestNotPending),
 		errors.Is(err, ErrGroupFull),
 		errors.Is(err, ErrJoinRequestsLimit),
+		errors.Is(err, ErrSlugTaken),
 		errors.Is(err, ErrMessageDeleted):
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidUUID),
 		errors.Is(err, ErrIncorrectData),
 		errors.Is(err, ErrInvalidReply),
+		errors.Is(err, ErrSlugInvalid),
+		errors.Is(err, ErrSlugRequired),
 		errors.Is(err, status.ErrUnknownIcon),
 		errors.Is(err, status.ErrUnknownDuration),
 		errors.Is(err, status.ErrInvalidText),
 		errors.Is(err, status.ErrInvalidColor),
 		errors.Is(err, avatarshape.ErrUnknownShape),
-		errors.Is(err, avatarshape.ErrInvalidColor):
+		errors.Is(err, avatarshape.ErrInvalidColor),
+		errors.Is(err, media.ErrInvalidAvatarURL):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrUserServiceError):
 		return http.StatusServiceUnavailable
@@ -77,6 +85,8 @@ func Reason(err error) string {
 		return "AVATAR_SHAPE_INVALID"
 	case errors.Is(err, avatarshape.ErrInvalidColor):
 		return "AVATAR_SHAPE_COLOR_INVALID"
+	case errors.Is(err, media.ErrInvalidAvatarURL):
+		return "AVATAR_INVALID"
 	case errors.Is(err, status.ErrUnknownIcon):
 		return "STATUS_ICON_INVALID"
 	case errors.Is(err, status.ErrInvalidColor):
@@ -105,6 +115,12 @@ func Reason(err error) string {
 		return "JOIN_REQUEST_EXISTS"
 	case errors.Is(err, ErrJoinRequestNotPending):
 		return "JOIN_REQUEST_NOT_PENDING"
+	case errors.Is(err, ErrSlugInvalid):
+		return "SLUG_INVALID"
+	case errors.Is(err, ErrSlugRequired):
+		return "SLUG_REQUIRED"
+	case errors.Is(err, ErrSlugTaken):
+		return "SLUG_TAKEN"
 	default:
 		return ""
 	}
@@ -116,6 +132,8 @@ func UserMessage(err error) string {
 		return "Неизвестная фигура"
 	case errors.Is(err, avatarshape.ErrInvalidColor):
 		return "Цвет фигуры задаётся в формате #RRGGBB"
+	case errors.Is(err, media.ErrInvalidAvatarURL):
+		return "Фото группы можно только загрузить"
 	case errors.Is(err, status.ErrUnknownIcon):
 		return "Неизвестная иконка статуса"
 	case errors.Is(err, status.ErrInvalidColor):
@@ -162,6 +180,12 @@ func UserMessage(err error) string {
 		return "Достигнут максимальный размер группы"
 	case errors.Is(err, ErrJoinRequestsLimit):
 		return "Слишком много заявок на рассмотрении"
+	case errors.Is(err, ErrSlugInvalid):
+		return "Ссылка на чат - от 3 до 32 латинских букв, цифр и _"
+	case errors.Is(err, ErrSlugRequired):
+		return "У открытой группы должна быть ссылка на чат"
+	case errors.Is(err, ErrSlugTaken):
+		return "Эта ссылка на чат уже занята"
 	case errors.Is(err, ErrUserServiceError):
 		return "Сервис временно недоступен"
 	default:

@@ -1,0 +1,6 @@
+.avatar {
+    flex-shrink: 0;
+    border-radius: $radius-full;
+    object-fit: cover;
+    user-select: none;
+}

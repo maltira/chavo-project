@@ -24,6 +24,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/events"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/media"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/ratelimit"
@@ -113,6 +114,10 @@ func New() (*App, error) {
 		a.Close()
 		return nil, err
 	}
+	if limits.Upload, err = ratelimit.ParseRule("upload", cfg.RateLimitUpload); err != nil {
+		a.Close()
+		return nil, err
+	}
 	wsRule, err := ratelimit.ParseRule("ws", cfg.RateLimitWS)
 	if err != nil {
 		a.Close()
@@ -148,6 +153,19 @@ func New() (*App, error) {
 	}
 	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log), log)
 
+	store, err := media.NewS3(media.S3Config{
+		Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
+		AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey,
+	})
+	if err != nil {
+		a.Close()
+		return nil, err
+	}
+	if err = ensureBucket(store, log); err != nil {
+		a.Close()
+		return nil, err
+	}
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -161,6 +179,7 @@ func New() (*App, error) {
 		Limiter:        ratelimit.New(ratelimit.NewRedisCounter(rdb)),
 		Limits:         limits,
 		WS:             wsHandler.Handle,
+		Media:          store,
 		TrustedProxies: cfg.TrustedProxies,
 		Log:            log,
 	})
@@ -246,4 +265,21 @@ func (a *App) Close() {
 		appredis.Close(a.rdb, a.log)
 	}
 	logger.Sync()
+}
+
+// ensureBucket создаёт бакет для загруженных файлов; хранилище могло подняться позже Gateway - повторяем
+func ensureBucket(store *media.S3, log *zap.Logger) error {
+	const attempts = 10
+	var err error
+	for i := 1; i <= attempts; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err = store.EnsureBucket(ctx)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		log.Warn("Media storage is not ready", zap.Int("attempt", i), zap.Error(err))
+		time.Sleep(time.Duration(i) * time.Second)
+	}
+	return fmt.Errorf("media storage: %w", err)
 }

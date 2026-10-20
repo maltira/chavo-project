@@ -9,7 +9,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -193,6 +197,64 @@ func (d *device) do(t testing.TB, method, path string, body any, hdr ...string) 
 	}
 }
 
+// upload - multipart-загрузка файла в поле file; имя и тип части - как прислал бы клиент (Gateway их не использует)
+func (d *device) upload(t testing.TB, path, filename, contentType string, data []byte) resp {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	part, _ := mw.CreatePart(map[string][]string{
+		"Content-Disposition": {`form-data; name="file"; filename="` + filename + `"`},
+		"Content-Type":        {contentType},
+	})
+	_, _ = part.Write(data)
+	_ = mw.Close()
+	req, _ := http.NewRequest(http.MethodPost, cfg.base+path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+d.access)
+	r, err := d.http.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(r.Body)
+	r.Body.Close()
+	res := resp{status: r.StatusCode, raw: string(raw), header: r.Header}
+	_ = json.Unmarshal(raw, &res.body)
+	return res
+}
+
+// pngPhoto - простая картинка для загрузки аватарки
+func pngPhoto(t testing.TB) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 160, 120))
+	for y := 0; y < 120; y++ {
+		for x := 0; x < 160; x++ {
+			img.Set(x, y, color.RGBA{217, 119, 87, 255})
+		}
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// minioRemove удаляет объекты из бакета загруженных файлов (уборка за тестом)
+func minioRemove(t testing.TB, keys []string) {
+	if len(keys) == 0 {
+		return
+	}
+	bucket := env("S3_BUCKET", "chavo-media")
+	targets := make([]string, len(keys))
+	for i, k := range keys {
+		targets[i] = "local/" + bucket + "/" + k
+	}
+	script := `mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc rm --force "$@" >/dev/null 2>&1; true`
+	cmd := exec.Command("docker", append([]string{"exec", "chavo-minio", "sh", "-c", script, "sh"}, targets...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("minio cleanup: %v %s", err, out)
+	}
+}
+
 func (d *device) refreshCookie() string {
 	u, _ := url.Parse(cfg.base)
 	for _, c := range d.http.Jar.Cookies(u) {
@@ -290,6 +352,19 @@ func (w *world) cleanup(t testing.TB) {
 	quoted := "'" + strings.Join(ids, "','") + "'"
 	sids := strings.Fields(psql(t, cfg.authDB, fmt.Sprintf(
 		`SELECT id FROM refresh_tokens WHERE user_id::text IN (%s)`, quoted)))
+
+	// загруженные фото тестовых пользователей и их групп - до удаления строк, где записаны пути
+	var objects []string
+	for _, p := range strings.Fields(psql(t, cfg.userDB, fmt.Sprintf(
+		`SELECT avatar_url FROM profiles WHERE user_id::text IN (%s) AND avatar_url LIKE '/media/avatars/%%'`, quoted))) {
+		objects = append(objects, strings.TrimPrefix(p, "/media/"))
+	}
+	for _, p := range strings.Fields(psql(t, cfg.convDB, fmt.Sprintf(
+		`SELECT c.avatar_url FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id
+		 WHERE m.user_id::text IN (%s) AND c.avatar_url LIKE '/media/avatars/%%'`, quoted))) {
+		objects = append(objects, strings.TrimPrefix(p, "/media/"))
+	}
+	minioRemove(t, objects)
 
 	// Диалоги, где все участники — тестовые; их события в outbox связаны через event_key.
 	psql(t, cfg.convDB, fmt.Sprintf(`BEGIN;

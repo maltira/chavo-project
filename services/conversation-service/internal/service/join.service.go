@@ -10,6 +10,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/events"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/repository"
+	"github.com/maltira/chavo-project-backend/services/conversation-service/pkg/crypto"
 )
 
 const maxPendingJoinRequests = 1000
@@ -29,6 +30,8 @@ type joinService struct {
 	requests repository.JoinRequestRepository
 	outbox   repository.OutboxRepository
 	bans     repository.BanRepository
+	cipher   *crypto.Cipher
+	system   systemPoster
 }
 
 func NewJoinService(
@@ -37,17 +40,26 @@ func NewJoinService(
 	requests repository.JoinRequestRepository,
 	outbox repository.OutboxRepository,
 	bans repository.BanRepository,
+	cipher *crypto.Cipher,
+	msgs repository.MessageRepository,
 ) JoinService {
-	return &joinService{db: db, convs: convs, requests: requests, outbox: outbox, bans: bans}
+	return &joinService{
+		db: db, convs: convs, requests: requests, outbox: outbox, bans: bans, cipher: cipher,
+		system: systemPoster{msgs: msgs, convs: convs, outbox: outbox},
+	}
 }
 
 func (s *joinService) publish(ctx context.Context, q repository.DBTX, convID uuid.UUID, eventType string, payload any) error {
 	return s.outbox.Insert(ctx, q, events.TopicConversationEvents, convID.String(), events.NewEvent(eventType, payload))
 }
 
+// InviteInfo ищет группу по коду из ссылки на чат: сначала открытую по slug, затем закрытую по коду
 func (s *joinService) InviteInfo(ctx context.Context, userID uuid.UUID, token string) (*models.InviteInfo, error) {
 	q := s.db.Q()
-	conv, err := s.convs.FindByInviteHash(ctx, q, hashInviteToken(token))
+	conv, err := s.convs.FindBySlug(ctx, q, token)
+	if errors.Is(err, apperror.ErrNotFound) {
+		conv, err = s.convs.FindByInviteHash(ctx, q, hashInviteToken(token))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +79,8 @@ func (s *joinService) InviteInfo(ctx context.Context, userID uuid.UUID, token st
 	}
 	return &models.InviteInfo{
 		ConversationID: conv.ID,
+		Visibility:     conv.Visibility,
+		Slug:           conv.Slug,
 		Name:           conv.Name,
 		Description:    conv.Description,
 		AvatarURL:      conv.AvatarURL,
@@ -78,7 +92,7 @@ func (s *joinService) InviteInfo(ctx context.Context, userID uuid.UUID, token st
 	}, nil
 }
 
-// RegenerateInvite выпускает новый токен для приватной группы; старая ссылка перестаёт работать.
+// RegenerateInvite выпускает новый код для закрытой группы; старая ссылка перестаёт работать.
 func (s *joinService) RegenerateInvite(ctx context.Context, adminID, convID uuid.UUID) (string, error) {
 	var token string
 	err := s.db.WithTx(ctx, func(tx repository.DBTX) error {
@@ -92,12 +106,12 @@ func (s *joinService) RegenerateInvite(ctx context.Context, adminID, convID uuid
 		if conv.Visibility != models.VisibilityPrivate {
 			return apperror.ErrForbidden
 		}
-		t, hash, err := newInviteToken()
+		code, err := issueInviteCode(ctx, s.convs, tx, s.cipher)
 		if err != nil {
 			return err
 		}
-		token = t
-		return s.convs.UpdateGroup(ctx, tx, convID, map[string]any{"invite_token_hash": hash})
+		token = code.code
+		return s.convs.UpdateGroup(ctx, tx, convID, map[string]any{"invite_token_hash": code.hash, "invite_token_enc": code.enc})
 	})
 	return token, err
 }
@@ -210,6 +224,10 @@ func (s *joinService) resolve(ctx context.Context, adminID, convID, requestID uu
 			return err
 		}
 		if err = s.convs.AddMember(ctx, tx, convID, req.UserID, models.RoleMember); err != nil {
+			return err
+		}
+		// одобренная заявка в истории - такое же вступление
+		if err = s.system.post(ctx, tx, convID, req.UserID, req.UserID, models.SystemJoined); err != nil {
 			return err
 		}
 		if err = s.requests.SetStatus(ctx, tx, requestID, models.JoinApproved); err != nil {

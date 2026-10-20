@@ -1,0 +1,14 @@
+.placeholder {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.text {
+    @include type(main-regular);
+
+    color: alpha(var(--color-text), 0.6);
+}

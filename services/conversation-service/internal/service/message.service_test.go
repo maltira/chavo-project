@@ -69,8 +69,8 @@ func setup(t *testing.T) *env {
 		pool:   pool,
 		msgs:   service.NewMessageService(db, cr, mr, or, users, cipher, zap.NewNop()),
 		convs:  service.NewConversationService(db, cr, cipher),
-		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository()),
-		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository()),
+		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), cipher, mr),
+		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository(), cipher, mr),
 		users:  users,
 	}
 }
@@ -254,7 +254,7 @@ func TestGroupAdminCanDeleteForeignMessage(t *testing.T) {
 	admin, member := uuid.New(), uuid.New()
 
 	var convID uuid.UUID
-	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, name) VALUES ('group','g') RETURNING id`).Scan(&convID); err != nil {
+	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, visibility, name, public_slug) VALUES ('group','public','g', md5(random()::text)) RETURNING id`).Scan(&convID); err != nil {
 		t.Fatal(err)
 	}
 	for u, role := range map[uuid.UUID]string{admin: "admin", member: "member"} {
@@ -338,6 +338,29 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 	if len(list) != 1 || list[0].UnreadCount != 0 {
 		t.Fatalf("list for a: %+v", list)
 	}
+
+	// галочки у автора: последнее сообщение ids[4] b ещё не дочитал
+	if list[0].LastMessageRead {
+		t.Fatal("last message must be unread before b reaches it")
+	}
+	if err = e.msgs.MarkRead(ctx, b, conv, ids[4]); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = e.convs.List(ctx, a, 10, 0)
+	if !list[0].LastMessageRead {
+		t.Fatal("last message must be read after b's cursor reaches it")
+	}
+	// собственный курсор автора не считается: у b последнее сообщение чужое, его прочитал только сам b
+	reply, err := e.msgs.Send(ctx, b, service.SendMessageInput{RecipientID: &a, Content: "ответ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.msgs.MarkRead(ctx, b, conv, reply.ID); err != nil {
+		t.Fatal(err)
+	}
+	if summary, _ = e.convs.Get(ctx, b, conv); summary.LastMessageRead {
+		t.Fatal("author's own cursor must not mark the message as read")
+	}
 }
 
 func mustConv(t *testing.T, e *env, user uuid.UUID) uuid.UUID {
@@ -384,7 +407,7 @@ func TestReadEventNotifiesAuthorsOfAllCoveredMessages(t *testing.T) {
 	a, b, c := uuid.New(), uuid.New(), uuid.New()
 
 	var convID uuid.UUID
-	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, name) VALUES ('group','g') RETURNING id`).Scan(&convID); err != nil {
+	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, visibility, name, public_slug) VALUES ('group','public','g', md5(random()::text)) RETURNING id`).Scan(&convID); err != nil {
 		t.Fatal(err)
 	}
 	for _, u := range []uuid.UUID{a, b, c} {

@@ -1,0 +1,26 @@
+// размер фигуры относительно аватара; выступ в размер блока не входит
+$shape-scale: 150%;
+
+// размер блока равен размеру аватара внутри
+.root {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    line-height: 0;
+}
+
+// фигура стоит по центру под аватаром и выходит за границы блока
+.shape {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: $shape-scale;
+    height: $shape-scale;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.content {
+    position: relative;
+    display: block;
+}

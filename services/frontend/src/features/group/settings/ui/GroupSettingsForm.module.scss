@@ -1,0 +1,73 @@
+.photo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.avatar {
+    display: inline-flex;
+    padding: 0;
+
+    border: none;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 4px;
+    }
+}
+
+.photoActions {
+    display: flex;
+    gap: 16px;
+}
+
+.photoButton,
+.photoRemove {
+    @include type(main-regular);
+}
+
+.photoRemove {
+    color: var(--color-danger);
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    @include type(tag-medium);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.hint {
+    @include type(tag-medium);
+
+    margin: 0;
+    padding: 0 4px;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.description {
+    height: 108px;
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+}

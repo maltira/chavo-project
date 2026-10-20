@@ -2,18 +2,22 @@ package email
 
 import (
 	"bytes"
-
-	"github.com/go-gomail/gomail"
 )
 
 type OtpData struct {
 	Code      string
+	Digits    []string
 	ExpiresIn string
 }
 
 func (s *Sender) SendOTP(to, code, expiresAt string) error {
+	digits := make([]string, 0, len(code))
+	for _, r := range code {
+		digits = append(digits, string(r))
+	}
 	data := OtpData{
 		Code:      code,
+		Digits:    digits,
 		ExpiresIn: expiresAt,
 	}
 
@@ -22,11 +26,10 @@ func (s *Sender) SendOTP(to, code, expiresAt string) error {
 		return err
 	}
 
-	m := gomail.NewMessage()
-	m.SetHeader("From", s.user)
-	m.SetHeader("To", to)
-	m.SetHeader("Subject", code)
-	m.SetBody("text/html", body.String())
+	m, err := s.compose(to, code, body.String())
+	if err != nil {
+		return err
+	}
 
 	d := s.dial()
 

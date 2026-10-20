@@ -89,10 +89,17 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 		ReplyToMessageID: rec.ReplyToMessageID,
 		IsEdited:         rec.IsEdited,
 		IsDeleted:        rec.DeletedAt != nil,
+		Kind:             rec.Kind,
+		SystemEvent:      rec.SystemEvent,
+		TargetID:         rec.TargetID,
 		CreatedAt:        rec.CreatedAt,
 		UpdatedAt:        rec.UpdatedAt,
 	}
-	if rec.DeletedAt == nil {
+	if m.Kind == "" {
+		m.Kind = models.MessageUser
+	}
+	// у системного сообщения текста нет: его собирает клиент
+	if rec.DeletedAt == nil && rec.Kind != models.MessageSystem {
 		plain, err := c.Decrypt(rec.ContentEnc)
 		if err != nil {
 			return nil, err
@@ -158,7 +165,8 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 
 		if in.ReplyToMessageID != nil {
 			reply, err := s.msgs.FindByID(ctx, tx, *in.ReplyToMessageID)
-			if err != nil || reply.ConversationID != convID {
+			// на системное сообщение не отвечают
+			if err != nil || reply.ConversationID != convID || reply.Kind == models.MessageSystem {
 				return apperror.ErrInvalidReply
 			}
 		}
@@ -188,13 +196,14 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			CreatedAt:        rec.CreatedAt,
 			MemberIDs:        memberIDs,
 			ContentEnc:       enc,
+			Kind:             models.MessageUser,
 		}); err != nil {
 			return err
 		}
 
 		content := in.Content
 		result = &models.Message{
-			ID: rec.ID, ConversationID: convID, SenderID: senderID, Content: &content,
+			ID: rec.ID, ConversationID: convID, SenderID: senderID, Content: &content, Kind: models.MessageUser,
 			ReplyToMessageID: in.ReplyToMessageID, CreatedAt: rec.CreatedAt,
 		}
 		return nil
@@ -285,7 +294,8 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 		if _, err = s.msgs.FindVisible(ctx, tx, messageID, userID); err != nil {
 			return err
 		}
-		if rec.SenderID != userID {
+		// системное сообщение не правится: у него нет текста
+		if rec.SenderID != userID || rec.Kind == models.MessageSystem {
 			return apperror.ErrForbidden
 		}
 		if rec.DeletedAt != nil {
@@ -349,7 +359,7 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 		// Чужие сообщения удалять может только admin группы; в direct — только автор.
 		isAuthor := rec.SenderID == userID
 		isGroupAdmin := access.Type == models.ConversationGroup && access.Role == models.RoleAdmin
-		if !isAuthor && !isGroupAdmin {
+		if (!isAuthor && !isGroupAdmin) || rec.Kind == models.MessageSystem {
 			return apperror.ErrForbidden
 		}
 

@@ -1,0 +1,94 @@
+// отступ элементов страницы от краёв окна
+$edge: 40px;
+
+.page {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: 100px $edge;
+
+    background-color: var(--color-bg-primary);
+}
+
+.logo {
+    position: absolute;
+    top: 42px;
+    left: $edge;
+}
+
+.controls {
+    position: absolute;
+    top: $edge;
+    right: $edge;
+
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.content {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.card {
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    // ширина одна для всех экранов auth
+    width: 420px;
+    max-width: 100%;
+    padding: 32px 24px;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-xl;
+    background-color: var(--color-bg-secondary);
+}
+
+// кнопка «назад» стоит слева от карточки на 16px
+.back {
+    position: absolute;
+    top: 0;
+    left: -56px;
+}
+
+.footer {
+    position: absolute;
+    bottom: $edge;
+    left: $edge;
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.telegram {
+    display: flex;
+    border-radius: $radius-md;
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
+.credits {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    color: alpha(var(--color-text), 0.6);
+}
+
+.author {
+    @include type(button-medium);
+}
+
+.copyright {
+    @include type(tag-regular);
+}

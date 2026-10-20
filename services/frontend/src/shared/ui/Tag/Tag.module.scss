@@ -1,0 +1,20 @@
+.tag {
+    @include type(xs-regular);
+
+    display: inline-flex;
+    align-items: center;
+
+    height: 20px;
+    padding: 0 8px;
+    border-radius: $radius-full;
+
+    background-color: var(--color-text);
+    color: var(--color-bg-primary);
+
+    white-space: nowrap;
+
+    &.muted {
+        background-color: var(--color-bg-tertiary);
+        color: alpha(var(--color-text), 0.6);
+    }
+}

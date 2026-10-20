@@ -1,0 +1,12 @@
+// $-переменные без вывода css: подключаются в каждый scss-модуль через additionalData
+$radius-sm: 4px;
+$radius-md: 12px;
+$radius-lg: 16px;
+$radius-xl: 24px;
+$radius-full: 9999px;
+
+$drop-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.1);
+
+$transition-fast: 200ms;
+
+$button-height: 44px;

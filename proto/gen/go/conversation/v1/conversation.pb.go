@@ -38,7 +38,9 @@ type Conversation struct {
 	// Только у групп; не задан — статуса нет или он истёк.
 	Status *v1.Status `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
 	// только у групп; не задана - фигуры нет
-	AvatarShape   *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	AvatarShape *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	// код ссылки открытой группы (/chat/<slug>)
+	Slug          *string `protobuf:"bytes,12,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -150,6 +152,13 @@ func (x *Conversation) GetAvatarShape() *v11.AvatarShape {
 	return nil
 }
 
+func (x *Conversation) GetSlug() string {
+	if x != nil && x.Slug != nil {
+		return *x.Slug
+	}
+	return ""
+}
+
 // Message — расшифрованное сообщение; content отсутствует у удалённых.
 type Message struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -162,8 +171,12 @@ type Message struct {
 	IsDeleted        bool                   `protobuf:"varint,7,opt,name=is_deleted,json=isDeleted,proto3" json:"is_deleted,omitempty"`
 	CreatedAt        *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// user или system; у системного (событие состава группы) нет content, есть system_event и target_id
+	Kind          string  `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
+	SystemEvent   *string `protobuf:"bytes,11,opt,name=system_event,json=systemEvent,proto3,oneof" json:"system_event,omitempty"`
+	TargetId      *string `protobuf:"bytes,12,opt,name=target_id,json=targetId,proto3,oneof" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
@@ -259,13 +272,39 @@ func (x *Message) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Message) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Message) GetSystemEvent() string {
+	if x != nil && x.SystemEvent != nil {
+		return *x.SystemEvent
+	}
+	return ""
+}
+
+func (x *Message) GetTargetId() string {
+	if x != nil && x.TargetId != nil {
+		return *x.TargetId
+	}
+	return ""
+}
+
 type ConversationSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Conversation  *Conversation          `protobuf:"bytes,1,opt,name=conversation,proto3" json:"conversation,omitempty"`
-	MyRole        string                 `protobuf:"bytes,2,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"`
-	PeerId        *string                `protobuf:"bytes,3,opt,name=peer_id,json=peerId,proto3,oneof" json:"peer_id,omitempty"`
-	LastMessage   *Message               `protobuf:"bytes,4,opt,name=last_message,json=lastMessage,proto3" json:"last_message,omitempty"`
-	UnreadCount   int32                  `protobuf:"varint,5,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Conversation *Conversation          `protobuf:"bytes,1,opt,name=conversation,proto3" json:"conversation,omitempty"`
+	MyRole       string                 `protobuf:"bytes,2,opt,name=my_role,json=myRole,proto3" json:"my_role,omitempty"`
+	PeerId       *string                `protobuf:"bytes,3,opt,name=peer_id,json=peerId,proto3,oneof" json:"peer_id,omitempty"`
+	LastMessage  *Message               `protobuf:"bytes,4,opt,name=last_message,json=lastMessage,proto3" json:"last_message,omitempty"`
+	UnreadCount  int32                  `protobuf:"varint,5,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	// последнее сообщение прочитал кто-то кроме его автора (галочки у своего сообщения)
+	LastMessageRead bool  `protobuf:"varint,6,opt,name=last_message_read,json=lastMessageRead,proto3" json:"last_message_read,omitempty"`
+	MembersCount    int32 `protobuf:"varint,7,opt,name=members_count,json=membersCount,proto3" json:"members_count,omitempty"`
+	// код ссылки закрытой группы: только админам и только в GetConversation
+	InviteCode    *string `protobuf:"bytes,8,opt,name=invite_code,json=inviteCode,proto3,oneof" json:"invite_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -333,6 +372,27 @@ func (x *ConversationSummary) GetUnreadCount() int32 {
 		return x.UnreadCount
 	}
 	return 0
+}
+
+func (x *ConversationSummary) GetLastMessageRead() bool {
+	if x != nil {
+		return x.LastMessageRead
+	}
+	return false
+}
+
+func (x *ConversationSummary) GetMembersCount() int32 {
+	if x != nil {
+		return x.MembersCount
+	}
+	return 0
+}
+
+func (x *ConversationSummary) GetInviteCode() string {
+	if x != nil && x.InviteCode != nil {
+		return *x.InviteCode
+	}
+	return ""
 }
 
 type Member struct {
@@ -566,6 +626,8 @@ type InviteInfo struct {
 	RequestStatus  *string                `protobuf:"bytes,7,opt,name=request_status,json=requestStatus,proto3,oneof" json:"request_status,omitempty"`
 	Status         *v1.Status             `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
 	AvatarShape    *v11.AvatarShape       `protobuf:"bytes,9,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	Visibility     string                 `protobuf:"bytes,10,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	Slug           *string                `protobuf:"bytes,11,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -663,6 +725,20 @@ func (x *InviteInfo) GetAvatarShape() *v11.AvatarShape {
 	return nil
 }
 
+func (x *InviteInfo) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
+	}
+	return ""
+}
+
+func (x *InviteInfo) GetSlug() string {
+	if x != nil && x.Slug != nil {
+		return *x.Slug
+	}
+	return ""
+}
+
 type PublicGroup struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -673,6 +749,7 @@ type PublicGroup struct {
 	IsMember      bool                   `protobuf:"varint,6,opt,name=is_member,json=isMember,proto3" json:"is_member,omitempty"`
 	Status        *v1.Status             `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`
 	AvatarShape   *v11.AvatarShape       `protobuf:"bytes,8,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	Slug          string                 `protobuf:"bytes,9,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -761,6 +838,13 @@ func (x *PublicGroup) GetAvatarShape() *v11.AvatarShape {
 		return x.AvatarShape
 	}
 	return nil
+}
+
+func (x *PublicGroup) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
 }
 
 type ListConversationsRequest struct {
@@ -1084,12 +1168,14 @@ func (x *SearchPublicGroupsResponse) GetOffset() int32 {
 }
 
 type CreateGroupRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   *string                `protobuf:"bytes,2,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	AvatarUrl     *string                `protobuf:"bytes,3,opt,name=avatar_url,json=avatarUrl,proto3,oneof" json:"avatar_url,omitempty"`
-	Visibility    string                 `protobuf:"bytes,4,opt,name=visibility,proto3" json:"visibility,omitempty"`
-	MemberIds     []string               `protobuf:"bytes,5,rep,name=member_ids,json=memberIds,proto3" json:"member_ids,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description *string                `protobuf:"bytes,2,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	AvatarUrl   *string                `protobuf:"bytes,3,opt,name=avatar_url,json=avatarUrl,proto3,oneof" json:"avatar_url,omitempty"`
+	Visibility  string                 `protobuf:"bytes,4,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	MemberIds   []string               `protobuf:"bytes,5,rep,name=member_ids,json=memberIds,proto3" json:"member_ids,omitempty"`
+	// код ссылки, обязателен для открытой группы
+	Slug          *string `protobuf:"bytes,6,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1159,10 +1245,17 @@ func (x *CreateGroupRequest) GetMemberIds() []string {
 	return nil
 }
 
+func (x *CreateGroupRequest) GetSlug() string {
+	if x != nil && x.Slug != nil {
+		return *x.Slug
+	}
+	return ""
+}
+
 type CreateGroupResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Conversation *Conversation          `protobuf:"bytes,1,opt,name=conversation,proto3" json:"conversation,omitempty"`
-	// invite_token возвращается только в момент создания токена.
+	// invite_token - код ссылки закрытой группы в момент его выпуска
 	InviteToken   *string `protobuf:"bytes,2,opt,name=invite_token,json=inviteToken,proto3,oneof" json:"invite_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1219,6 +1312,7 @@ type UpdateGroupRequest struct {
 	Description    *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
 	AvatarUrl      *string                `protobuf:"bytes,4,opt,name=avatar_url,json=avatarUrl,proto3,oneof" json:"avatar_url,omitempty"`
 	Visibility     *string                `protobuf:"bytes,5,opt,name=visibility,proto3,oneof" json:"visibility,omitempty"`
+	Slug           *string                `protobuf:"bytes,6,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1284,6 +1378,13 @@ func (x *UpdateGroupRequest) GetAvatarUrl() string {
 func (x *UpdateGroupRequest) GetVisibility() string {
 	if x != nil && x.Visibility != nil {
 		return *x.Visibility
+	}
+	return ""
+}
+
+func (x *UpdateGroupRequest) GetSlug() string {
+	if x != nil && x.Slug != nil {
+		return *x.Slug
 	}
 	return ""
 }
@@ -3852,7 +3953,7 @@ var File_conversation_v1_conversation_proto protoreflect.FileDescriptor
 
 const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\n" +
-	"\"conversation/v1/conversation.proto\x12\x0fconversation.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\x9c\x04\n" +
+	"\"conversation/v1/conversation.proto\x12\x0fconversation.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\xbe\x04\n" +
 	"\fConversation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11conversation_type\x18\x02 \x01(\tR\x10conversationType\x12\x1e\n" +
@@ -3870,10 +3971,12 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12)\n" +
 	"\x06status\x18\n" +
 	" \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
-	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShapeB\a\n" +
+	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x17\n" +
+	"\x04slug\x18\f \x01(\tH\x03R\x04slug\x88\x01\x01B\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_descriptionB\r\n" +
-	"\v_avatar_url\"\x88\x03\n" +
+	"\v_avatar_urlB\a\n" +
+	"\x05_slug\"\x85\x04\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\x1b\n" +
@@ -3886,18 +3989,30 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x12\n" +
+	"\x04kind\x18\n" +
+	" \x01(\tR\x04kind\x12&\n" +
+	"\fsystem_event\x18\v \x01(\tH\x02R\vsystemEvent\x88\x01\x01\x12 \n" +
+	"\ttarget_id\x18\f \x01(\tH\x03R\btargetId\x88\x01\x01B\n" +
 	"\n" +
 	"\b_contentB\x16\n" +
-	"\x14_reply_to_message_id\"\xfb\x01\n" +
+	"\x14_reply_to_message_idB\x0f\n" +
+	"\r_system_eventB\f\n" +
+	"\n" +
+	"_target_id\"\x82\x03\n" +
 	"\x13ConversationSummary\x12A\n" +
 	"\fconversation\x18\x01 \x01(\v2\x1d.conversation.v1.ConversationR\fconversation\x12\x17\n" +
 	"\amy_role\x18\x02 \x01(\tR\x06myRole\x12\x1c\n" +
 	"\apeer_id\x18\x03 \x01(\tH\x00R\x06peerId\x88\x01\x01\x12;\n" +
 	"\flast_message\x18\x04 \x01(\v2\x18.conversation.v1.MessageR\vlastMessage\x12!\n" +
-	"\funread_count\x18\x05 \x01(\x05R\vunreadCountB\n" +
+	"\funread_count\x18\x05 \x01(\x05R\vunreadCount\x12*\n" +
+	"\x11last_message_read\x18\x06 \x01(\bR\x0flastMessageRead\x12#\n" +
+	"\rmembers_count\x18\a \x01(\x05R\fmembersCount\x12$\n" +
+	"\vinvite_code\x18\b \x01(\tH\x01R\n" +
+	"inviteCode\x88\x01\x01B\n" +
 	"\n" +
-	"\b_peer_id\"\xe6\x01\n" +
+	"\b_peer_idB\x0e\n" +
+	"\f_invite_code\"\xe6\x01\n" +
 	"\x06Member\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -3918,7 +4033,7 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xad\x03\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xef\x03\n" +
 	"\n" +
 	"InviteInfo\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x17\n" +
@@ -3930,11 +4045,17 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\tis_member\x18\x06 \x01(\bR\bisMember\x12*\n" +
 	"\x0erequest_status\x18\a \x01(\tH\x03R\rrequestStatus\x88\x01\x01\x12)\n" +
 	"\x06status\x18\b \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
-	"\favatar_shape\x18\t \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShapeB\a\n" +
+	"\favatar_shape\x18\t \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\n" +
+	" \x01(\tR\n" +
+	"visibility\x12\x17\n" +
+	"\x04slug\x18\v \x01(\tH\x04R\x04slug\x88\x01\x01B\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_descriptionB\r\n" +
 	"\v_avatar_urlB\x11\n" +
-	"\x0f_request_status\"\xc8\x02\n" +
+	"\x0f_request_statusB\a\n" +
+	"\x05_slug\"\xdc\x02\n" +
 	"\vPublicGroup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
@@ -3944,7 +4065,8 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\rmembers_count\x18\x05 \x01(\x05R\fmembersCount\x12\x1b\n" +
 	"\tis_member\x18\x06 \x01(\bR\bisMember\x12)\n" +
 	"\x06status\x18\a \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
-	"\favatar_shape\x18\b \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShapeB\x0e\n" +
+	"\favatar_shape\x18\b \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x12\n" +
+	"\x04slug\x18\t \x01(\tR\x04slugB\x0e\n" +
 	"\f_descriptionB\r\n" +
 	"\v_avatar_url\"H\n" +
 	"\x18ListConversationsRequest\x12\x14\n" +
@@ -3965,7 +4087,7 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\x1aSearchPublicGroupsResponse\x122\n" +
 	"\x05items\x18\x01 \x03(\v2\x1c.conversation.v1.PublicGroupR\x05items\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x03 \x01(\x05R\x06offset\"\xd1\x01\n" +
+	"\x06offset\x18\x03 \x01(\x05R\x06offset\"\xf3\x01\n" +
 	"\x12CreateGroupRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
 	"\vdescription\x18\x02 \x01(\tH\x00R\vdescription\x88\x01\x01\x12\"\n" +
@@ -3975,13 +4097,15 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"visibility\x18\x04 \x01(\tR\n" +
 	"visibility\x12\x1d\n" +
 	"\n" +
-	"member_ids\x18\x05 \x03(\tR\tmemberIdsB\x0e\n" +
+	"member_ids\x18\x05 \x03(\tR\tmemberIds\x12\x17\n" +
+	"\x04slug\x18\x06 \x01(\tH\x02R\x04slug\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\r\n" +
-	"\v_avatar_url\"\x91\x01\n" +
+	"\v_avatar_urlB\a\n" +
+	"\x05_slug\"\x91\x01\n" +
 	"\x13CreateGroupResponse\x12A\n" +
 	"\fconversation\x18\x01 \x01(\v2\x1d.conversation.v1.ConversationR\fconversation\x12&\n" +
 	"\finvite_token\x18\x02 \x01(\tH\x00R\vinviteToken\x88\x01\x01B\x0f\n" +
-	"\r_invite_token\"\xfd\x01\n" +
+	"\r_invite_token\"\x9f\x02\n" +
 	"\x12UpdateGroupRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
@@ -3990,11 +4114,13 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"avatar_url\x18\x04 \x01(\tH\x02R\tavatarUrl\x88\x01\x01\x12#\n" +
 	"\n" +
 	"visibility\x18\x05 \x01(\tH\x03R\n" +
-	"visibility\x88\x01\x01B\a\n" +
+	"visibility\x88\x01\x01\x12\x17\n" +
+	"\x04slug\x18\x06 \x01(\tH\x04R\x04slug\x88\x01\x01B\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_descriptionB\r\n" +
 	"\v_avatar_urlB\r\n" +
-	"\v_visibility\"\x91\x01\n" +
+	"\v_visibilityB\a\n" +
+	"\x05_slug\"\x91\x01\n" +
 	"\x13UpdateGroupResponse\x12A\n" +
 	"\fconversation\x18\x01 \x01(\v2\x1d.conversation.v1.ConversationR\fconversation\x12&\n" +
 	"\finvite_token\x18\x02 \x01(\tH\x00R\vinviteToken\x88\x01\x01B\x0f\n" +

@@ -1,0 +1,154 @@
+// экраны со списками выше: список растягивается, кнопка внизу
+.tall {
+    min-height: min(560px, 100%);
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.loading {
+    display: flex;
+    justify-content: center;
+    padding: 48px 0;
+}
+
+.back {
+    display: inline-flex;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: var(--color-text);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity $transition-fast;
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+}
+
+.headerStart {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding-top: 8px;
+}
+
+.names {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    text-align: center;
+}
+
+.name {
+    @include type(h5-lora-medium);
+
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.muted {
+    @include type(main-regular);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.hint {
+    @include type(tag-medium);
+
+    margin: 0;
+    padding: 0 4px;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}
+
+.actions {
+    display: flex;
+    gap: 12px;
+
+    & > * {
+        flex: 1;
+    }
+}
+
+.members {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.label {
+    @include type(tag-medium);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 420px;
+    padding: 12px;
+    overflow-y: auto;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+// метка подгрузки в конце списка: не добавляет отступа к gap
+.sentinel {
+    flex-shrink: 0;
+    height: 1px;
+    margin-top: -13px;
+}
+
+.tag {
+    @include type(tag-regular);
+
+    padding: 0 8px;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.list .rowButton {
+    border-color: transparent;
+    background-color: var(--color-bg-muted);
+}
+
+.empty {
+    @include type(main-regular);
+
+    margin: 0;
+    padding: 32px 0;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}
+
+.footerButton {
+    margin-top: auto;
+}

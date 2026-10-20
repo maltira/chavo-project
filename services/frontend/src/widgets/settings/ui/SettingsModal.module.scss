@@ -1,0 +1,80 @@
+// разделы одной высоты: кнопка «Сохранить изменения» прижата к низу
+.screen {
+    min-height: min(550px, 100%);
+}
+
+.back {
+    display: inline-flex;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: var(--color-text);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity $transition-fast;
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+}
+
+.body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+}
+
+// группа пунктов на светлой подложке
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+
+    // пункт с иконкой на подложке: при наведении фон ещё светлее
+    & > button:hover,
+    & > label:hover {
+        background-color: var(--color-bg-muted);
+    }
+}
+
+.hint {
+    @include type(tag-medium);
+
+    margin: 0;
+    padding: 0 4px;
+    color: alpha(var(--color-text), 0.6);
+}
+
+// пустое состояние раздела: текст по центру окна
+.empty {
+    @include type(tag-regular);
+
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}
+
+// кнопка внизу раздела
+.footer {
+    margin-top: auto;
+}
+
+.muted {
+    @include type(main-regular);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}

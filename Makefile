@@ -24,10 +24,11 @@ TEST_PG_PORT     ?= 15432
         init-dbs \
         migrate-up migrate-down \
         migrate-auth-down migrate-user-down migrate-conversation-down \
-        psql db-tables clean-db clean-redis clean-kafka clean-data \
+        psql db-tables clean-db clean-redis clean-kafka clean-media clean-data \
         kafka-topics kafka-ui \
         proto proto-tools \
-        test test-integration e2e
+        test test-integration e2e \
+        frontend-install frontend-dev frontend-build frontend-test frontend-lint
 
 
 # ──────────────────────────────────────────────
@@ -42,6 +43,9 @@ down:
 
 restart: down up
 
+logs:
+	@$(COMPOSE) logs -f
+	
 # ──────────────────────────────────────────────
 # База данных
 # ──────────────────────────────────────────────
@@ -144,7 +148,15 @@ kafka-ui:
 	@xdg-open http://localhost:$(KAFKA_UI_PORT) 2>/dev/null || \
 		echo "Открой в браузере: http://localhost:$(KAFKA_UI_PORT)"
 
-clean-data: clean-db clean-kafka clean-redis
+# загруженные файлы (аватарки) в бакете MinIO
+clean-media:
+	@$(COMPOSE) up -d --wait minio
+	@echo "Очистка бакета $(S3_BUCKET)..."
+	@docker exec chavo-minio sh -c 'mc alias set local http://localhost:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null && \
+		mc rm --recursive --force "local/$(or $(S3_BUCKET),chavo-media)" >/dev/null 2>&1; true'
+	@echo "Бакет очищен."
+
+clean-data: clean-db clean-kafka clean-redis clean-media
 
 
 # ──────────────────────────────────────────────
@@ -203,3 +215,22 @@ test-integration:
 # иначе тест не запустится. Перезапускает Gateway; после теста /api/auth/ с этого IP минуту под лимитом nginx.
 e2e:
 	@cd tests/e2e && go test -tags e2e -count=1 -timeout 10m -v ./...
+
+# ──────────────────────────────────────────────
+# Фронтенд
+# ──────────────────────────────────────────────
+
+frontend-dev:
+	@cd services/frontend && npm run dev
+
+frontend-install:
+	@cd services/frontend && npm ci
+
+frontend-build:
+	@cd services/frontend && npm run build
+
+frontend-test:
+	@cd services/frontend && npm run typecheck && npm run lint && npm run fsd && npm test
+
+frontend-lint:
+	@cd services/frontend && npm run lint && npm run fsd

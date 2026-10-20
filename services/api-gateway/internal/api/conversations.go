@@ -50,16 +50,16 @@ func (h *Handler) createGroup(c *gin.Context) {
 	var body struct {
 		Name        string   `json:"name"`
 		Description *string  `json:"description"`
-		AvatarURL   *string  `json:"avatar_url"`
 		Visibility  string   `json:"visibility"`
+		Slug        *string  `json:"slug"`
 		MemberIDs   []string `json:"member_ids"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.CreateGroup(c.Request.Context(), &conversationv1.CreateGroupRequest{
-		Name: body.Name, Description: body.Description, AvatarUrl: body.AvatarURL,
-		Visibility: body.Visibility, MemberIds: body.MemberIDs,
+		Name: body.Name, Description: body.Description,
+		Visibility: body.Visibility, Slug: body.Slug, MemberIds: body.MemberIDs,
 	})
 	if err != nil {
 		h.fail(c, err)
@@ -72,15 +72,16 @@ func (h *Handler) updateGroup(c *gin.Context) {
 	var body struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
-		AvatarURL   *string `json:"avatar_url"`
 		Visibility  *string `json:"visibility"`
+		Slug        *string `json:"slug"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.UpdateGroup(c.Request.Context(), &conversationv1.UpdateGroupRequest{
 		ConversationId: c.Param("id"),
-		Name:           body.Name, Description: body.Description, AvatarUrl: body.AvatarURL, Visibility: body.Visibility,
+		Name:           body.Name, Description: body.Description, Visibility: body.Visibility,
+		Slug: body.Slug,
 	})
 	if err != nil {
 		h.fail(c, err)

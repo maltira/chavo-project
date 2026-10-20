@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// AvatarShape - фигура позади аватара: shape - ключ из фиксированного набора (каталог proto/avatarshape, Go),
+// AvatarShape - фигура позади аватара: shape - ключ из фиксированного набора (каталог proto/avatarshape),
 // color - цвет фигуры, выбранный пользователем (#RRGGBB)
 type AvatarShape struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`

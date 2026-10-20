@@ -1,0 +1,65 @@
+.row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 48px;
+}
+
+.main {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+}
+
+.clickable {
+    cursor: pointer;
+
+    &:focus-visible {
+        border-radius: $radius-md;
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
+.texts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.name,
+.username {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.name {
+    @include type(button-medium);
+
+    color: var(--color-text);
+}
+
+.username {
+    @include type(tag-regular);
+
+    color: alpha(var(--color-text), 0.6);
+}
+
+.aside {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+}

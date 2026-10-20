@@ -55,7 +55,7 @@ func TestInviteInfoAndRegenerate(t *testing.T) {
 	}
 	// Переход в public убивает ссылку.
 	pubStr := "public"
-	if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{Visibility: &pubStr}); err != nil {
+	if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{Visibility: &pubStr, Slug: str(testSlug())}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.joins.InviteInfo(ctx, guest, fresh); !errors.Is(err, apperror.ErrNotFound) {
@@ -211,7 +211,11 @@ func TestSearchPublicGroups(t *testing.T) {
 	ctx := context.Background()
 	admin, viewer := uuid.New(), uuid.New()
 	mk := func(name, visibility string) uuid.UUID {
-		res, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: name, Visibility: visibility})
+		in := service.CreateGroupInput{Name: name, Visibility: visibility}
+		if visibility == "public" {
+			in.Slug = str(testSlug())
+		}
+		res, err := e.groups.Create(ctx, admin, in)
 		if err != nil {
 			t.Fatal(err)
 		}

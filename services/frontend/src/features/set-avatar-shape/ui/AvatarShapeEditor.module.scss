@@ -1,0 +1,79 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+// превью: фигура выступает за аватар, даём ей место
+.preview {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 8px;
+    max-height: 232px;
+    padding: 12px;
+    overflow-y: auto;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+.option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    padding: 0;
+
+    border: 1px solid transparent;
+    border-radius: $radius-md;
+    background: none;
+    cursor: pointer;
+    transition: $transition-fast;
+
+    &:hover {
+        background-color: var(--color-bg-muted);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    &.chosen {
+        border-color: var(--color-text);
+    }
+}
+
+// «аватар» в образце: кружок, за которым видна форма
+.dot {
+    display: block;
+    width: 24px;
+    height: 24px;
+    border-radius: $radius-full;
+    background-color: var(--color-bg-secondary);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    @include type(tag-medium);
+
+    color: alpha(var(--color-text), 0.6);
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}

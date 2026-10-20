@@ -1,0 +1,33 @@
+// type() и $-токены приходят в каждый модуль из additionalData (vite.config.ts)
+@use 'themes';
+@use 'fonts';
+@use 'reset';
+
+// базовые стили приложения: тема и типографика из токенов
+html,
+body {
+    @include type(main-regular);
+    height: 100%;
+    background: var(--color-bg-primary);
+    color: var(--color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+h1 {
+    @include type(h1-lora-regular);
+}
+
+h4 {
+    @include type(h4-lora-medium);
+}
+
+h5 {
+    @include type(h5-lora-medium);
+}

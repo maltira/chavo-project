@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+    <title>{{template "title" .}}</title>
+    <style>
+        /* письма только в тёмной теме сервиса: цвета заданы inline, здесь - адаптация под узкие экраны */
+        /* узкие экраны: карточка и ячейки кода уже, чтобы шесть цифр не вылезали */
+        @media only screen and (max-width: 480px) {
+            .card { padding: 32px 16px !important; }
+            .digit { width: 40px !important; height: 48px !important; font-size: 22px !important; line-height: 48px !important; }
+        }
+    </style>
+</head>
+
+<body bgcolor="#141413" style="margin: 0; padding: 0; background-color: #141413;">
+    <!-- скрытый текст для превью в списке писем -->
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; font-size: 1px; line-height: 1px; color: #141413;">
+        {{template "preheader" .}}
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#141413"
+        style="background-color: #141413;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="max-width: 520px;">
+
+                    <!-- Логотип -->
+                    <tr>
+                        <td align="center" style="padding: 0 0 24px;">
+                            <!-- логотип вложен в письмо (cid), см. assetFS в sender.go -->
+                            <img src="cid:logo-on-dark.png" alt="Chavo" width="140"
+                                style="display: block; width: 140px; height: auto; border: 0; font-family: 'Lora', Georgia, serif; font-size: 28px; color: #faf9f5;">
+                        </td>
+                    </tr>
+
+                    <!-- Карточка -->
+                    <tr>
+                        <td class="card" bgcolor="#1b1b1a"
+                            style="padding: 40px 32px; background-color: #1b1b1a; border: 1px solid #2a2a2a; border-radius: 24px;">
+
+                            <h1
+                                style="margin: 0 0 16px; font-family: 'Lora', Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 500; line-height: 1.2; text-align: center; color: #faf9f5;">
+                                {{template "heading" .}}
+                            </h1>
+
+                            {{template "content" .}}
+                        </td>
+                    </tr>
+
+                    <!-- Подвал -->
+                    <tr>
+                        <td align="center" style="padding: 24px 16px 0;">
+                            <p
+                                style="margin: 0 0 6px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.04em; color: #a1a09d;">
+                                ENEMYBYE</p>
+                            <p
+                                style="margin: 0; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 12px; line-height: 1.5; color: #a1a09d;">
+                                &copy; 2026 enemybye.dev<br>
+                                Это автоматическое письмо, отвечать на него не нужно.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

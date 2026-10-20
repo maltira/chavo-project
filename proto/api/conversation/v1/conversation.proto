@@ -70,6 +70,8 @@ message Conversation {
   status.v1.Status status = 10;
   // только у групп; не задана - фигуры нет
   avatarshape.v1.AvatarShape avatar_shape = 11;
+  // код ссылки открытой группы (/chat/<slug>)
+  optional string slug = 12;
 }
 
 // Message — расшифрованное сообщение; content отсутствует у удалённых.
@@ -83,6 +85,10 @@ message Message {
   bool is_deleted = 7;
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
+  // user или system; у системного (событие состава группы) нет content, есть system_event и target_id
+  string kind = 10;
+  optional string system_event = 11;
+  optional string target_id = 12;
 }
 
 message ConversationSummary {
@@ -91,6 +97,11 @@ message ConversationSummary {
   optional string peer_id = 3;
   Message last_message = 4;
   int32 unread_count = 5;
+  // последнее сообщение прочитал кто-то кроме его автора (галочки у своего сообщения)
+  bool last_message_read = 6;
+  int32 members_count = 7;
+  // код ссылки закрытой группы: только админам и только в GetConversation
+  optional string invite_code = 8;
 }
 
 message Member {
@@ -126,6 +137,8 @@ message InviteInfo {
   optional string request_status = 7;
   status.v1.Status status = 8;
   avatarshape.v1.AvatarShape avatar_shape = 9;
+  string visibility = 10;
+  optional string slug = 11;
 }
 
 message PublicGroup {
@@ -135,8 +148,9 @@ message PublicGroup {
   optional string avatar_url = 4;
   int32 members_count = 5;
   bool is_member = 6;
-  status.v1.Status status = 7; 
+  status.v1.Status status = 7;
   avatarshape.v1.AvatarShape avatar_shape = 8;
+  string slug = 9;
 }
 
 message ListConversationsRequest {
@@ -173,10 +187,12 @@ message CreateGroupRequest {
   optional string avatar_url = 3;
   string visibility = 4;
   repeated string member_ids = 5;
+  // код ссылки, обязателен для открытой группы
+  optional string slug = 6;
 }
 message CreateGroupResponse {
   Conversation conversation = 1;
-  // invite_token возвращается только в момент создания токена.
+  // invite_token - код ссылки закрытой группы в момент его выпуска
   optional string invite_token = 2;
 }
 
@@ -186,6 +202,7 @@ message UpdateGroupRequest {
   optional string description = 3;
   optional string avatar_url = 4;
   optional string visibility = 5;
+  optional string slug = 6;
 }
 message UpdateGroupResponse {
   Conversation conversation = 1;

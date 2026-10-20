@@ -1,0 +1,45 @@
+// gap ленты (MessageList.scroller): в начале анимации он гасится отрицательным margin-top,
+// чтобы занимаемое место росло с нуля, а не прыгало сразу на 12px
+$gap: 12px;
+
+.grow {
+    display: grid;
+    flex-shrink: 0;
+    grid-template-rows: 1fr;
+    animation: grow 250ms ease-out;
+
+    // между сообщениями одной серии 4px вместо обычных 12
+    &.continued {
+        margin-top: -8px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
+}
+
+// конечное состояние - обычное (1fr и штатный margin-top), поэтому в keyframes только начало
+@keyframes grow {
+    from {
+        grid-template-rows: 0fr;
+        margin-top: -$gap;
+    }
+}
+
+.inner {
+    min-height: 0;
+    animation: clip 250ms;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
+}
+
+// содержимое обрезается только пока строка раскрывается: потом меню действий и аватар
+// могут выходить за границы строки
+@keyframes clip {
+    from,
+    99% {
+        overflow: hidden;
+    }
+}

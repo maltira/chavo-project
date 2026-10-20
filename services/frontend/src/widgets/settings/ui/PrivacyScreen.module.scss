@@ -1,0 +1,39 @@
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 0 0 4px;
+}
+
+.question {
+    @include type(main-regular);
+
+    flex: 1;
+    min-width: 0;
+    color: var(--color-text);
+}
+
+.value {
+    @include type(button-medium);
+
+    flex-shrink: 0;
+    min-width: 72px;
+    height: 36px;
+    padding: 0 12px;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-md;
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text);
+    cursor: pointer;
+    transition: $transition-fast;
+
+    &:hover {
+        background-color: var(--color-bg-muted);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}

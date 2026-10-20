@@ -1,30 +1,45 @@
-<!DOCTYPE html>
-<html lang="ru">
+{{define "title"}}Подтверждение email{{end}}
 
-<head>
-    <meta charset="UTF-8">
-    <title>Подтверждение email</title>
-</head>
+{{define "preheader"}}Подтвердите почту, чтобы завершить регистрацию в Chavo{{end}}
 
-<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
-    <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;">
-        <h2>Добро пожаловать в Chavo</h2>
-        <p>Спасибо за регистрацию. Чтобы завершить создание аккаунта, подтвердите свой email по ссылке ниже:</p>
+{{define "heading"}}Добро пожаловать в Chavo{{end}}
 
-        <a href="{{.VerifyURL}}" style="display: inline-block; background-color: #0078D4; color: white; padding: 14px 28px; 
-                  text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0;">
-            Подтвердить email
-        </a>
+{{define "content"}}
+<p
+    style="margin: 0 0 28px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; text-align: center; color: #cdccc9;">
+    Спасибо за регистрацию. Чтобы завершить создание аккаунта, подтвердите свою почту.
+</p>
 
-        <p>Ссылка действительна в течение {{.ExpiresIn}}.</p>
-        <p>Если вы не регистрировались — просто проигнорируйте это письмо.</p>
+<!-- Кнопка -->
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 28px;">
+    <tr>
+        <td align="center" bgcolor="#faf9f5" height="48" style="height: 48px; border-radius: 12px; background-color: #faf9f5; font-size: 0; line-height: 0;">
+            <a href="{{.VerifyURL}}"
+                style="display: block; height: 48px; padding: 0 32px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 500; line-height: 48px; text-align: center; text-decoration: none; color: #141413; border-radius: 12px;">Подтвердить email</a>
+        </td>
+    </tr>
+</table>
 
-        <hr style="margin: 30px 0;">
-        <p style="color: #666; font-size: 14px;">
-            С уважением,<br>
-            Команда Chavo
-        </p>
-    </div>
-</body>
+<p
+    style="margin: 0 0 24px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; text-align: center; color: #a1a09d;">
+    Ссылка действительна в течение <strong style="font-weight: 500; color: #faf9f5;">{{.ExpiresIn}}</strong>.
+</p>
 
-</html>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td style="border-top: 1px solid #2a2a2a; padding-top: 24px;">
+            <p
+                style="margin: 0 0 8px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; color: #a1a09d;">
+                Если кнопка не нажимается, скопируйте ссылку в браузер:
+            </p>
+            <p style="margin: 0 0 16px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; word-break: break-all;">
+                <a href="{{.VerifyURL}}" style="color: #d97757; text-decoration: none;">{{.VerifyURL}}</a>
+            </p>
+            <p
+                style="margin: 0; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; color: #a1a09d;">
+                Если вы не регистрировались в Chavo, просто проигнорируйте это письмо.
+            </p>
+        </td>
+    </tr>
+</table>
+{{end}}

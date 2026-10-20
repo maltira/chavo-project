@@ -19,20 +19,32 @@ const (
 	JoinPending  = "pending"
 	JoinApproved = "approved"
 	JoinRejected = "rejected"
+
+	MessageUser   = "user"
+	MessageSystem = "system"
+
+	// события системных сообщений: sender - кто совершил, target - кого касается
+	SystemJoined  = "joined"  // вступил сам или по одобренной заявке (sender == target)
+	SystemAdded   = "added"   // админ добавил участника
+	SystemLeft    = "left"    // вышел сам (sender == target)
+	SystemRemoved = "removed" // админ исключил (в том числе с блокировкой)
 )
 
 type Conversation struct {
-	ID               uuid.UUID    `json:"id"`
-	ConversationType string       `json:"conversation_type"`
-	Visibility       string       `json:"visibility"`
-	Name             *string      `json:"name"`
-	Description      *string      `json:"description"`
-	AvatarURL        *string      `json:"avatar_url"`
-	LastMessageAt    time.Time    `json:"last_message_at"`
-	CreatedAt        time.Time    `json:"created_at"`
-	UpdatedAt        time.Time    `json:"updated_at"`
-	Status           *Status      `json:"status,omitempty"`
-	AvatarShape      *AvatarShape `json:"avatar_shape,omitempty"`
+	ID               uuid.UUID `json:"id"`
+	ConversationType string    `json:"conversation_type"`
+	Visibility       string    `json:"visibility"`
+	Name             *string   `json:"name"`
+	Description      *string   `json:"description"`
+	AvatarURL        *string   `json:"avatar_url"`
+	// Slug - код ссылки открытой группы; InviteCodeEnc - зашифрованный код закрытой
+	Slug          *string      `json:"slug"`
+	InviteCodeEnc []byte       `json:"-"`
+	LastMessageAt time.Time    `json:"last_message_at"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+	Status        *Status      `json:"status,omitempty"`
+	AvatarShape   *AvatarShape `json:"avatar_shape,omitempty"`
 }
 
 type AvatarShape struct {
@@ -71,6 +83,9 @@ type Message struct {
 	ReplyToMessageID *uuid.UUID `json:"reply_to_message_id"`
 	IsEdited         bool       `json:"is_edited"`
 	IsDeleted        bool       `json:"is_deleted"`
+	Kind             string     `json:"kind"`
+	SystemEvent      *string    `json:"system_event"`
+	TargetID         *uuid.UUID `json:"target_id"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        *time.Time `json:"updated_at"`
 }
@@ -90,11 +105,18 @@ type ConversationSummary struct {
 	PeerID      *uuid.UUID `json:"peer_id"`
 	LastMessage *Message   `json:"last_message"`
 	UnreadCount int        `json:"unread_count"`
+	// LastMessageRead - последнее сообщение прочитал кто-то кроме его автора
+	LastMessageRead bool `json:"last_message_read"`
+	MembersCount    int  `json:"members_count"`
+	// InviteCode - код ссылки закрытой группы, только для её админов и только в карточке чата
+	InviteCode *string `json:"invite_code,omitempty"`
 }
 
-// InviteInfo — краткая информация о приватной группе по invite-ссылке.
+// InviteInfo - краткая информация о группе по ссылке на чат
 type InviteInfo struct {
 	ConversationID uuid.UUID    `json:"conversation_id"`
+	Visibility     string       `json:"visibility"`
+	Slug           *string      `json:"slug"`
 	Name           *string      `json:"name"`
 	Description    *string      `json:"description"`
 	AvatarURL      *string      `json:"avatar_url"`
@@ -111,6 +133,7 @@ type PublicGroup struct {
 	Name         string       `json:"name"`
 	Description  *string      `json:"description"`
 	AvatarURL    *string      `json:"avatar_url"`
+	Slug         string       `json:"slug"`
 	MembersCount int          `json:"members_count"`
 	IsMember     bool         `json:"is_member"`
 	Status       *Status      `json:"status,omitempty"`

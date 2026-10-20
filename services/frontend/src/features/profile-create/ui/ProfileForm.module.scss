@@ -1,0 +1,38 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+}
+
+.photo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+
+    & .photoButton,
+    & .photoRemove {
+        @include type(main-regular);
+    }
+
+    & .photoRemove {
+        color: var(--color-danger);
+    }
+}
+
+.photoActions {
+    display: flex;
+    gap: 16px;
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.submit {
+    justify-content: center;
+    width: 100%;
+}

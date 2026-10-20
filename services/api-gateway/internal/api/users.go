@@ -14,13 +14,12 @@ func (h *Handler) createProfile(c *gin.Context) {
 		Username    string  `json:"username"`
 		DisplayName string  `json:"display_name"`
 		Bio         *string `json:"bio"`
-		AvatarURL   *string `json:"avatar_url"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	if _, err := h.users.CreateProfile(c.Request.Context(), &userv1.CreateProfileRequest{
-		Username: body.Username, DisplayName: body.DisplayName, Bio: body.Bio, AvatarUrl: body.AvatarURL,
+		Username: body.Username, DisplayName: body.DisplayName, Bio: body.Bio,
 	}); err != nil {
 		h.fail(c, err)
 		return
@@ -43,13 +42,12 @@ func (h *Handler) updateMe(c *gin.Context) {
 		Username    *string `json:"username"`
 		DisplayName *string `json:"display_name"`
 		Bio         *string `json:"bio"`
-		AvatarURL   *string `json:"avatar_url"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	if _, err := h.users.UpdateMe(c.Request.Context(), &userv1.UpdateMeRequest{
-		Username: body.Username, DisplayName: body.DisplayName, Bio: body.Bio, AvatarUrl: body.AvatarURL,
+		Username: body.Username, DisplayName: body.DisplayName, Bio: body.Bio,
 	}); err != nil {
 		h.fail(c, err)
 		return

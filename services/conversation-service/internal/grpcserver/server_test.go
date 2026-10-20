@@ -48,8 +48,8 @@ func start(t *testing.T) clients {
 
 	impl := grpcserver.New(
 		service.NewConversationService(db, cr, cipher),
-		service.NewGroupService(db, cr, or, users, br),
-		service.NewJoinService(db, cr, jr, or, br),
+		service.NewGroupService(db, cr, or, users, br, cipher, mr),
+		service.NewJoinService(db, cr, jr, or, br, cipher, mr),
 		service.NewMessageService(db, cr, mr, or, users, cipher, log),
 	)
 	lis := bufconn.Listen(1 << 20)
@@ -148,7 +148,7 @@ func TestGroupErrorsAndBan(t *testing.T) {
 	c := start(t)
 	admin, member := uuid.New(), uuid.New()
 
-	created, err := c.api.CreateGroup(as(admin), &conversationv1.CreateGroupRequest{Name: "g", Visibility: "public", MemberIds: []string{member.String()}})
+	created, err := c.api.CreateGroup(as(admin), &conversationv1.CreateGroupRequest{Name: "g", Visibility: "public", Slug: ptr("g_test"), MemberIds: []string{member.String()}})
 	if err != nil || created.InviteToken != nil {
 		t.Fatalf("create public group: %v %v", created, err)
 	}
@@ -183,3 +183,5 @@ func TestGroupErrorsAndBan(t *testing.T) {
 		t.Fatalf("private group must return invite token once: %v %v", private, err)
 	}
 }
+
+func ptr(s string) *string { return &s }

@@ -1,0 +1,112 @@
+// шаг с участниками выше: список растягивается, кнопка внизу
+.tall {
+    min-height: min(672px, 100%);
+}
+
+.back {
+    display: inline-flex;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: var(--color-text);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity $transition-fast;
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+}
+
+.photo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.photoActions {
+    display: flex;
+    gap: 16px;
+}
+
+.photoButton,
+.photoRemove {
+    @include type(main-regular);
+}
+
+.photoRemove {
+    color: var(--color-danger);
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    // кнопка отделена от полей сильнее, чем поля друг от друга
+    & > button:last-child {
+        margin-top: 8px;
+    }
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    @include type(tag-medium);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.hint {
+    @include type(tag-medium);
+
+    margin: 0;
+    padding: 0 4px;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.description {
+    height: 108px;
+}
+
+.members {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    overflow-y: auto;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+.list .toggle {
+    flex-shrink: 0;
+    border-color: transparent;
+    background-color: var(--color-bg-muted);
+}
+
+.footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-top: auto;
+}

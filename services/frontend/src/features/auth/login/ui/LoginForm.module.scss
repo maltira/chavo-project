@@ -1,0 +1,47 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+
+    & .header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+
+        & .caption {
+            @include type(main-regular);
+
+            text-align: center;
+            color: alpha(var(--color-text), 0.6);
+        }
+    }
+}
+
+.fields {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+
+    & .password {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    & .forgot {
+        align-self: flex-end;
+    }
+}
+
+.footer {
+    @include type(tag-regular);
+
+    text-align: center;
+}
+
+.muted {
+    color: var(--color-text);
+    opacity: 0.6;
+}

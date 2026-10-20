@@ -1,0 +1,70 @@
+.root {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 32px;
+
+    background-color: var(--color-bg-tertiary);
+}
+
+// аватар и имя - одна кнопка, открывающая сведения
+.who {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: default;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 4px;
+        border-radius: $radius-md;
+    }
+}
+
+.texts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+
+    & .name,
+    & .subtitle {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    & .name {
+        @include type(button-medium);
+
+        margin: 0;
+        color: var(--color-text);
+    }
+
+    & .subtitle {
+        @include type(tag-regular);
+
+        color: alpha(var(--color-text), 0.6);
+    }
+}
+
+// длинный статус не вытесняет имя
+.status {
+    flex-shrink: 1;
+    width: auto;
+    max-width: 40%;
+}

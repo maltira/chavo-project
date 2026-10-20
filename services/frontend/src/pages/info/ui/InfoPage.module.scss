@@ -1,0 +1,191 @@
+// карточка как у экранов входа, но шире: длинный текст читается удобнее
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 720px;
+    max-width: 100%;
+    padding: 32px 24px;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-xl;
+    background-color: var(--color-bg-secondary);
+}
+
+.header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.title {
+    @include type(h4-lora-medium);
+
+    margin: 0;
+    color: var(--color-text);
+}
+
+.muted {
+    @include type(tag-regular);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+// FAQ: тема - плитка с иконкой (как в карточке сведений) и заголовок
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.groupTitle {
+    @include type(h5-lora-medium);
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    color: var(--color-text);
+}
+
+.tile {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+
+    border-radius: $radius-md;
+    background-color: var(--color-bg-muted);
+    color: var(--color-text);
+}
+
+.questions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+.question {
+    border-radius: $radius-md;
+    transition: background-color $transition-fast;
+
+    &[open] {
+        background-color: var(--color-bg-muted);
+    }
+
+    &[open] .chevron {
+        transform: rotate(90deg);
+    }
+}
+
+.summary {
+    @include type(button-medium);
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+
+    border-radius: $radius-md;
+    color: var(--color-text);
+    cursor: pointer;
+    list-style: none;
+
+    // маркер браузера заменён стрелкой
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &:hover {
+        background-color: var(--color-bg-muted);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: -2px;
+    }
+}
+
+.chevron {
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: transform $transition-fast;
+}
+
+.answer {
+    @include type(main-regular);
+
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 12px 12px;
+    color: alpha(var(--color-text), 0.8);
+
+    & p {
+        margin: 0;
+    }
+}
+
+// условия и политика: нумерованные разделы
+.legal {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.legalTitle {
+    @include type(h5-lora-medium);
+
+    margin: 0;
+    color: var(--color-text);
+}
+
+.paragraph {
+    @include type(main-regular);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.8);
+}
+
+.list {
+    @include type(main-regular);
+
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding-left: 20px;
+    color: alpha(var(--color-text), 0.8);
+
+    & li::marker {
+        color: var(--color-accent);
+    }
+}
+
+.contact {
+    @include type(main-regular);
+
+    margin: 0;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}

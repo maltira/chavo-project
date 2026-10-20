@@ -5,20 +5,24 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/maltira/chavo-project-backend/proto/media"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
 )
 
 func createGroup(t *testing.T, e *env, creator uuid.UUID, visibility string, members ...uuid.UUID) *service.GroupResult {
 	t.Helper()
-	res, err := e.groups.Create(context.Background(), creator, service.CreateGroupInput{
-		Name: "Группа", Visibility: visibility, MemberIDs: members,
-	})
+	in := service.CreateGroupInput{Name: "Группа", Visibility: visibility, MemberIDs: members}
+	if visibility == "public" {
+		in.Slug = str(testSlug())
+	}
+	res, err := e.groups.Create(context.Background(), creator, in)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -105,7 +109,6 @@ func TestUpdateGroup(t *testing.T) {
 	admin, member := uuid.New(), uuid.New()
 	g := createGroup(t, e, admin, "private", member)
 	id := g.Conversation.ID
-	str := func(s string) *string { return &s }
 
 	if _, err := e.groups.Update(ctx, member, id, service.UpdateGroupInput{Name: str("hack")}); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("member update: %v", err)
@@ -130,7 +133,7 @@ func TestUpdateGroup(t *testing.T) {
 	}
 
 	// private -> public: ссылка перестаёт действовать; public -> private: новый токен.
-	res, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{Visibility: str("public")})
+	res, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{Visibility: str("public"), Slug: str(testSlug())})
 	if err != nil || res.Conversation.Visibility != "public" || res.InviteToken != nil {
 		t.Fatalf("to public: %+v %v", res, err)
 	}
@@ -370,15 +373,19 @@ func TestAvatarURLValidation(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	admin := uuid.New()
-	bad := []string{"javascript:alert(1)", "ftp://host/a.png", "http:///no-host", "not a url", "//host/a.png"}
+	// принимается только путь, который выдал Gateway после загрузки; любой внешний URL - нет
+	bad := []string{
+		"javascript:alert(1)", "ftp://host/a.png", "not a url", "//host/a.png",
+		"https://cdn.example.com/a.png", "/media/avatars/../../secret.jpg", "/media/avatars/x.jpg",
+	}
 
 	for _, u := range bad {
 		u := u
-		if _, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &u}); !errors.Is(err, apperror.ErrIncorrectData) {
+		if _, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &u}); !errors.Is(err, media.ErrInvalidAvatarURL) {
 			t.Errorf("create with %q: %v", u, err)
 		}
 	}
-	good := "https://cdn.example.com/a.png"
+	good := media.AvatarURL(strings.Repeat("f", 32) + ".jpg")
 	res, err := e.groups.Create(ctx, admin, service.CreateGroupInput{Name: "g", AvatarURL: &good})
 	if err != nil || res.Conversation.AvatarURL == nil || *res.Conversation.AvatarURL != good {
 		t.Fatalf("create with valid url: %+v %v", res, err)
@@ -386,7 +393,7 @@ func TestAvatarURLValidation(t *testing.T) {
 	id := res.Conversation.ID
 	for _, u := range bad {
 		u := u
-		if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{AvatarURL: &u}); !errors.Is(err, apperror.ErrIncorrectData) {
+		if _, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{AvatarURL: &u}); !errors.Is(err, media.ErrInvalidAvatarURL) {
 			t.Errorf("update with %q: %v", u, err)
 		}
 	}

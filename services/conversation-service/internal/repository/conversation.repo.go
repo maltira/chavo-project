@@ -28,14 +28,18 @@ type SummaryRecord struct {
 	PeerID       *uuid.UUID
 	LastMessage  *MessageRecord
 	UnreadCount  int
+	// LastMessageRead - кто-то кроме автора последнего сообщения дочитал до него (курсор прочтения)
+	LastMessageRead bool
+	MembersCount    int
 }
 
 // conversationColumns и customJoins - чтение разговора со статусом и фигурой за аватаром; истёкший статус не читается
 const (
-	customColumns       = `cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at, sh.shape, sh.color`
-	conversationColumns = `c.id, c.conversation_type, c.visibility, c.name, c.description, c.avatar_url,
-		c.last_message_at, c.created_at, c.updated_at, ` + customColumns
-	customJoins = `LEFT JOIN conversation_statuses cs ON cs.conversation_id = c.id AND (cs.expires_at IS NULL OR cs.expires_at > NOW())
+	customColumns = `cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at, sh.shape, sh.color`
+	baseColumns   = `c.id, c.conversation_type, c.visibility, c.name, c.description, c.avatar_url,
+		c.public_slug, c.invite_token_enc, c.last_message_at, c.created_at, c.updated_at`
+	conversationColumns = baseColumns + `, ` + customColumns
+	customJoins         = `LEFT JOIN conversation_statuses cs ON cs.conversation_id = c.id AND (cs.expires_at IS NULL OR cs.expires_at > NOW())
 		 LEFT JOIN conversation_avatar_shapes sh ON sh.conversation_id = c.id`
 )
 
@@ -65,13 +69,18 @@ func (s customCols) avatarShape() *models.AvatarShape {
 	return &models.AvatarShape{Shape: *s.shape, Color: *s.color}
 }
 
+// baseDest - поля для Scan в порядке baseColumns
+func baseDest(c *models.Conversation) []any {
+	return []any{&c.ID, &c.ConversationType, &c.Visibility, &c.Name, &c.Description, &c.AvatarURL,
+		&c.Slug, &c.InviteCodeEnc, &c.LastMessageAt, &c.CreatedAt, &c.UpdatedAt}
+}
+
 func scanConversation(row pgx.Row) (*models.Conversation, error) {
 	var (
 		c  models.Conversation
 		cu customCols
 	)
-	if err := row.Scan(append([]any{&c.ID, &c.ConversationType, &c.Visibility, &c.Name, &c.Description, &c.AvatarURL,
-		&c.LastMessageAt, &c.CreatedAt, &c.UpdatedAt}, cu.dest()...)...); err != nil {
+	if err := row.Scan(append(baseDest(&c), cu.dest()...)...); err != nil {
 		return nil, err
 	}
 	c.Status = cu.status()
@@ -108,6 +117,8 @@ type ConversationRepository interface {
 	CountMembers(ctx context.Context, q DBTX, convID uuid.UUID) (int, error)
 	AdminIDs(ctx context.Context, q DBTX, convID uuid.UUID) ([]uuid.UUID, error)
 	FindByInviteHash(ctx context.Context, q DBTX, hash string) (*models.Conversation, error)
+	// FindBySlug ищет открытую группу по коду ссылки без учёта регистра; ErrNotFound, если такой нет
+	FindBySlug(ctx context.Context, q DBTX, slug string) (*models.Conversation, error)
 	SearchPublicGroups(ctx context.Context, q DBTX, userID uuid.UUID, query string, limit, offset int) ([]models.PublicGroup, error)
 }
 
@@ -116,7 +127,9 @@ type NewGroup struct {
 	Description     *string
 	AvatarURL       *string
 	Visibility      string
+	Slug            *string
 	InviteTokenHash *string
+	InviteTokenEnc  []byte
 }
 
 type conversationRepository struct{}
@@ -222,16 +235,22 @@ func (r *conversationRepository) TouchLastMessage(ctx context.Context, q DBTX, c
 // ListSummaries возвращает чаты пользователя (или один, если задан convID), свежие сверху.
 func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, limit, offset int) ([]SummaryRecord, error) {
 	rows, err := q.Query(ctx,
-		`SELECT c.id, c.conversation_type, c.visibility, c.name, c.description, c.avatar_url,
-		        c.last_message_at, c.created_at, c.updated_at,
+		`SELECT `+baseColumns+`,
 		        `+customColumns+`,
 		        cm.member_role, peer.user_id,
 		        lm.id, lm.sender_id, lm.content_enc, lm.reply_to_message_id, lm.is_edited,
-		        lm.created_at, lm.updated_at, lm.deleted_at,
+		        lm.kind, lm.system_event, lm.target_id, lm.created_at, lm.updated_at, lm.deleted_at,
 		        (SELECT COUNT(*) FROM messages m
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
+		            AND m.kind = 'user'
 		            AND m.created_at >= cm.joined_at
-		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id)))
+		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))),
+		        COALESCE((SELECT TRUE FROM conversation_members om
+		          JOIN messages orm ON orm.id = om.last_read_message_id
+		          WHERE om.conversation_id = c.id AND om.user_id <> lm.sender_id
+		            AND (orm.created_at, orm.id) >= (lm.created_at, lm.id)
+		          LIMIT 1), FALSE),
+		        (SELECT COUNT(*) FROM conversation_members mc WHERE mc.conversation_id = c.id)
 		 FROM conversation_members cm
 		 JOIN conversations c ON c.id = cm.conversation_id
 		 `+customJoins+`
@@ -259,18 +278,16 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			lmID, lmSender, lmReply         *uuid.UUID
 			lmEnc                           []byte
 			lmEdited                        *bool
+			lmKind, lmEvent                 *string
+			lmTarget                        *uuid.UUID
 			lmCreated, lmUpdated, lmDeleted *time.Time
 			cu                              customCols
 		)
-		dest := []any{
-			&s.Conversation.ID, &s.Conversation.ConversationType, &s.Conversation.Visibility,
-			&s.Conversation.Name, &s.Conversation.Description, &s.Conversation.AvatarURL,
-			&s.Conversation.LastMessageAt, &s.Conversation.CreatedAt, &s.Conversation.UpdatedAt,
-		}
-		dest = append(dest, cu.dest()...)
+		dest := append(baseDest(&s.Conversation), cu.dest()...)
 		dest = append(dest, &s.MyRole, &s.PeerID,
-			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmCreated, &lmUpdated, &lmDeleted,
-			&s.UnreadCount)
+			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmKind, &lmEvent, &lmTarget,
+			&lmCreated, &lmUpdated, &lmDeleted,
+			&s.UnreadCount, &s.LastMessageRead, &s.MembersCount)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
@@ -280,6 +297,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			s.LastMessage = &MessageRecord{
 				ID: *lmID, ConversationID: s.Conversation.ID, SenderID: *lmSender,
 				ContentEnc: lmEnc, ReplyToMessageID: lmReply, IsEdited: *lmEdited,
+				Kind: *lmKind, SystemEvent: lmEvent, TargetID: lmTarget,
 				CreatedAt: *lmCreated, UpdatedAt: lmUpdated, DeletedAt: lmDeleted,
 			}
 		}
@@ -306,18 +324,23 @@ func (r *conversationRepository) Lock(ctx context.Context, q DBTX, convID uuid.U
 func (r *conversationRepository) CreateGroup(ctx context.Context, q DBTX, g NewGroup) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := q.QueryRow(ctx,
-		`INSERT INTO conversations (conversation_type, visibility, name, description, avatar_url, invite_token_hash)
-		 VALUES ('group', $1, $2, $3, $4, $5) RETURNING id`,
-		g.Visibility, g.Name, g.Description, g.AvatarURL, g.InviteTokenHash,
+		`INSERT INTO conversations (conversation_type, visibility, name, description, avatar_url,
+		                            public_slug, invite_token_hash, invite_token_enc)
+		 VALUES ('group', $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		g.Visibility, g.Name, g.Description, g.AvatarURL, g.Slug, g.InviteTokenHash, g.InviteTokenEnc,
 	).Scan(&id)
 	if err != nil {
+		if isUniqueViolation(err, "idx_conversations_public_slug") {
+			return uuid.Nil, apperror.ErrSlugTaken
+		}
 		return uuid.Nil, fmt.Errorf("create group: %w", err)
 	}
 	return id, nil
 }
 
 var allowedConversationColumns = map[string]bool{
-	"name": true, "description": true, "avatar_url": true, "visibility": true, "invite_token_hash": true,
+	"name": true, "description": true, "avatar_url": true, "visibility": true,
+	"public_slug": true, "invite_token_hash": true, "invite_token_enc": true,
 }
 
 // UpdateGroup обновляет перечисленные колонки; значение nil записывается как NULL.
@@ -337,6 +360,9 @@ func (r *conversationRepository) UpdateGroup(ctx context.Context, q DBTX, convID
 	ct, err := q.Exec(ctx,
 		fmt.Sprintf("UPDATE conversations SET %s WHERE id = $%d", strings.Join(setClauses, ", "), len(args)), args...)
 	if err != nil {
+		if isUniqueViolation(err, "idx_conversations_public_slug") {
+			return apperror.ErrSlugTaken
+		}
 		return fmt.Errorf("update group: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
@@ -460,17 +486,31 @@ func (r *conversationRepository) FindByInviteHash(ctx context.Context, q DBTX, h
 	return c, nil
 }
 
+func (r *conversationRepository) FindBySlug(ctx context.Context, q DBTX, slug string) (*models.Conversation, error) {
+	c, err := scanConversation(q.QueryRow(ctx,
+		`SELECT `+conversationColumns+`
+		 FROM conversations c `+customJoins+`
+		 WHERE LOWER(c.public_slug) = LOWER($1) AND c.conversation_type = 'group' AND c.visibility = 'public'`, slug))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotFound
+		}
+		return nil, fmt.Errorf("find by slug: %w", err)
+	}
+	return c, nil
+}
+
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // SearchPublicGroups ищет публичные группы по подстроке в названии (приватные не попадают в выдачу).
 func (r *conversationRepository) SearchPublicGroups(ctx context.Context, q DBTX, userID uuid.UUID, query string, limit, offset int) ([]models.PublicGroup, error) {
 	rows, err := q.Query(ctx,
-		`SELECT c.id, c.name, c.description, c.avatar_url,
+		`SELECT c.id, c.name, c.description, c.avatar_url, c.public_slug,
 		        (SELECT COUNT(*) FROM conversation_members m WHERE m.conversation_id = c.id),
 		        EXISTS (SELECT 1 FROM conversation_members m WHERE m.conversation_id = c.id AND m.user_id = $1),
 		        `+customColumns+`
 		 FROM conversations c `+customJoins+`
-		 WHERE c.conversation_type = 'group' AND c.visibility = 'public' AND c.name ILIKE $2
+		 WHERE c.conversation_type = 'group' AND c.visibility = 'public' AND (c.name ILIKE $2 OR c.public_slug ILIKE $2)
 		 ORDER BY c.name, c.id
 		 LIMIT $3 OFFSET $4`,
 		userID, "%"+likeEscaper.Replace(query)+"%", limit, offset,
@@ -486,7 +526,7 @@ func (r *conversationRepository) SearchPublicGroups(ctx context.Context, q DBTX,
 			g  models.PublicGroup
 			cu customCols
 		)
-		if err := rows.Scan(append([]any{&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.MembersCount, &g.IsMember},
+		if err := rows.Scan(append([]any{&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.Slug, &g.MembersCount, &g.IsMember},
 			cu.dest()...)...); err != nil {
 			return nil, fmt.Errorf("scan group: %w", err)
 		}

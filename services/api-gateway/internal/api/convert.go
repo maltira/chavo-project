@@ -127,6 +127,8 @@ type conversationJSON struct {
 	Status *statusJSON `json:"status"`
 	// AvatarShape - только у групп; null, если фигуры нет
 	AvatarShape *avatarShapeJSON `json:"avatar_shape"`
+	// Slug - код ссылки открытой группы; null у закрытых и личных
+	Slug *string `json:"slug"`
 }
 
 func toConversation(c *conversationv1.Conversation) conversationJSON {
@@ -142,10 +144,11 @@ func toConversation(c *conversationv1.Conversation) conversationJSON {
 		UpdatedAt:        c.GetUpdatedAt().AsTime(),
 		Status:           toStatus(c.GetStatus()),
 		AvatarShape:      toAvatarShape(c.GetAvatarShape()),
+		Slug:             c.Slug,
 	}
 }
 
-// groupJSON: invite_token есть только в момент создания токена.
+// groupJSON: invite_token - код ссылки закрытой группы в момент его выпуска
 type groupJSON struct {
 	conversationJSON
 	InviteToken *string `json:"invite_token,omitempty"`
@@ -161,6 +164,10 @@ type messageJSON struct {
 	IsDeleted        bool       `json:"is_deleted"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        *time.Time `json:"updated_at"`
+	// Kind - user или system; у системного вместо текста system_event (joined, added, left, removed) и target_id
+	Kind        string  `json:"kind"`
+	SystemEvent *string `json:"system_event"`
+	TargetID    *string `json:"target_id"`
 }
 
 func toMessage(m *conversationv1.Message) *messageJSON {
@@ -177,6 +184,9 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		IsDeleted:        m.GetIsDeleted(),
 		CreatedAt:        m.GetCreatedAt().AsTime(),
 		UpdatedAt:        tsPtr(m.GetUpdatedAt()),
+		Kind:             m.GetKind(),
+		SystemEvent:      m.SystemEvent,
+		TargetID:         m.TargetId,
 	}
 }
 
@@ -186,6 +196,11 @@ type summaryJSON struct {
 	PeerID      *string      `json:"peer_id"`
 	LastMessage *messageJSON `json:"last_message"`
 	UnreadCount int32        `json:"unread_count"`
+	// LastMessageRead - последнее сообщение прочитал кто-то кроме его автора
+	LastMessageRead bool  `json:"last_message_read"`
+	MembersCount    int32 `json:"members_count"`
+	// InviteCode - код ссылки закрытой группы; только у её админов в GET /conversations/:id
+	InviteCode *string `json:"invite_code"`
 }
 
 func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
@@ -195,6 +210,9 @@ func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 		PeerID:           s.PeerId,
 		LastMessage:      toMessage(s.GetLastMessage()),
 		UnreadCount:      s.GetUnreadCount(),
+		LastMessageRead:  s.GetLastMessageRead(),
+		MembersCount:     s.GetMembersCount(),
+		InviteCode:       s.InviteCode,
 	}
 }
 
@@ -248,6 +266,8 @@ func toJoinRequest(r *conversationv1.JoinRequest) joinRequestJSON {
 
 type inviteInfoJSON struct {
 	ConversationID string           `json:"conversation_id"`
+	Visibility     string           `json:"visibility"`
+	Slug           *string          `json:"slug"`
 	Name           *string          `json:"name"`
 	Description    *string          `json:"description"`
 	AvatarURL      *string          `json:"avatar_url"`
@@ -261,6 +281,8 @@ type inviteInfoJSON struct {
 func toInviteInfo(i *conversationv1.InviteInfo) inviteInfoJSON {
 	return inviteInfoJSON{
 		ConversationID: i.GetConversationId(),
+		Visibility:     i.GetVisibility(),
+		Slug:           i.Slug,
 		Name:           i.Name,
 		Description:    i.Description,
 		AvatarURL:      i.AvatarUrl,
@@ -277,6 +299,7 @@ type publicGroupJSON struct {
 	Name         string           `json:"name"`
 	Description  *string          `json:"description"`
 	AvatarURL    *string          `json:"avatar_url"`
+	Slug         string           `json:"slug"`
 	MembersCount int32            `json:"members_count"`
 	IsMember     bool             `json:"is_member"`
 	Status       *statusJSON      `json:"status"`
@@ -289,6 +312,7 @@ func toPublicGroup(g *conversationv1.PublicGroup) publicGroupJSON {
 		Name:         g.GetName(),
 		Description:  g.Description,
 		AvatarURL:    g.AvatarUrl,
+		Slug:         g.GetSlug(),
 		MembersCount: g.GetMembersCount(),
 		IsMember:     g.GetIsMember(),
 		Status:       toStatus(g.GetStatus()),

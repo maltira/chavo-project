@@ -1,51 +1,46 @@
-<!DOCTYPE html>
-<html lang="ru">
+{{define "title"}}Сброс пароля{{end}}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сброс пароля</title>
-</head>
+{{define "preheader"}}Ссылка для нового пароля в Chavo действует {{.ExpiresIn}}{{end}}
 
-<body style="margin:0; padding:0; background-color:#f4f7fa; font-family: 'Segoe UI', Arial, sans-serif;">
-    <div
-        style="max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+{{define "heading"}}Сброс пароля{{end}}
 
-        <!-- Шапка -->
-        <div style="background: linear-gradient(135deg, #0078D4, #00A1F1); padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 26px;">Chavo</h1>
-        </div>
+{{define "content"}}
+<p
+    style="margin: 0 0 28px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; text-align: center; color: #cdccc9;">
+    Для вашего аккаунта запросили сброс пароля. Нажмите кнопку, чтобы придумать новый.
+</p>
 
-        <!-- Основное содержание -->
-        <div style="padding: 40px 50px; text-align: center;">
-            <h2 style="color: #333; margin-bottom: 10px;">Сброс пароля</h2>
+<!-- Кнопка -->
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 28px;">
+    <tr>
+        <td align="center" bgcolor="#faf9f5" height="48" style="height: 48px; border-radius: 12px; background-color: #faf9f5; font-size: 0; line-height: 0;">
+            <a href="{{.ResetURL}}"
+                style="display: block; height: 48px; padding: 0 32px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 500; line-height: 48px; text-align: center; text-decoration: none; color: #141413; border-radius: 12px;">Сбросить пароль</a>
+        </td>
+    </tr>
+</table>
 
-            <p style="color: #555; font-size: 16px; line-height: 1.6;">
-                Вы получили это письмо, потому что был запрошен сброс пароля для вашего аккаунта.
+<p
+    style="margin: 0 0 24px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; text-align: center; color: #a1a09d;">
+    Ссылка действительна в течение <strong style="font-weight: 500; color: #faf9f5;">{{.ExpiresIn}}</strong>.
+    После смены пароля мы завершим все ваши сеансы на всех устройствах.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td style="border-top: 1px solid #2a2a2a; padding-top: 24px;">
+            <p
+                style="margin: 0 0 8px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; color: #a1a09d;">
+                Если кнопка не нажимается, скопируйте ссылку в браузер:
             </p>
-
-            <!-- Кнопка -->
-            <div style="margin: 35px 0;">
-                <a href="{{.ResetURL}}" style="display: inline-block; background-color: #0078D4; color: white;
-                          padding: 16px 36px; text-decoration: none; border-radius: 8px;
-                          font-size: 17px; font-weight: 600;">
-                    Сбросить пароль
-                </a>
-            </div>
-
-            <p style="color: #666; font-size: 15px;">
-                Ссылка действительна в течение <strong>{{.ExpiresIn}}</strong>.<br>
-                Если вы не запрашивали сброс пароля — просто проигнорируйте это письмо.
+            <p style="margin: 0 0 16px; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; word-break: break-all;">
+                <a href="{{.ResetURL}}" style="color: #d97757; text-decoration: none;">{{.ResetURL}}</a>
             </p>
-
-            <hr style="margin: 40px 0; border: none; border-top: 1px solid #eee;">
-
-            <p style="color: #999; font-size: 13px;">
-                С уважением,<br>
-                Команда Chavo
+            <p
+                style="margin: 0; font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.5; text-align: center; color: #a1a09d;">
+                Если вы не запрашивали сброс, просто проигнорируйте это письмо: пароль останется прежним.
             </p>
-        </div>
-    </div>
-</body>
-
-</html>
+        </td>
+    </tr>
+</table>
+{{end}}

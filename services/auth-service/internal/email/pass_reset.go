@@ -2,8 +2,6 @@ package email
 
 import (
 	"bytes"
-
-	"github.com/go-gomail/gomail"
 )
 
 type PassResetData struct {
@@ -22,11 +20,10 @@ func (s *Sender) SendPasswordReset(to, resetURL string) error {
 		return err
 	}
 
-	m := gomail.NewMessage()
-	m.SetHeader("From", s.user)
-	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Сброс пароля")
-	m.SetBody("text/html", body.String())
+	m, err := s.compose(to, "Сброс пароля", body.String())
+	if err != nil {
+		return err
+	}
 
 	d := s.dial()
 

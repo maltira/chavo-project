@@ -2,8 +2,6 @@ package email
 
 import (
 	"bytes"
-
-	"github.com/go-gomail/gomail"
 )
 
 type VerificationData struct {
@@ -22,11 +20,10 @@ func (s *Sender) SendVerification(to, verifyURL string) error {
 		return err
 	}
 
-	m := gomail.NewMessage()
-	m.SetHeader("From", s.user)
-	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Подтвердите ваш аккаунт на Chavo")
-	m.SetBody("text/html", body.String())
+	m, err := s.compose(to, "Подтвердите ваш аккаунт на Chavo", body.String())
+	if err != nil {
+		return err
+	}
 
 	d := s.dial()
 

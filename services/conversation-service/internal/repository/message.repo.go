@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
+	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/models"
 )
 
 // MessageRecord — строка messages; содержимое зашифровано.
@@ -20,13 +21,18 @@ type MessageRecord struct {
 	ContentEnc       []byte
 	ReplyToMessageID *uuid.UUID
 	IsEdited         bool
-	CreatedAt        time.Time
-	UpdatedAt        *time.Time
-	DeletedAt        *time.Time
+	// Kind - user или system; у системного нет текста, есть SystemEvent и TargetID
+	Kind        string
+	SystemEvent *string
+	TargetID    *uuid.UUID
+	CreatedAt   time.Time
+	UpdatedAt   *time.Time
+	DeletedAt   *time.Time
 }
 
 type MessageRepository interface {
 	Create(ctx context.Context, q DBTX, rec *MessageRecord) error
+	CreateSystem(ctx context.Context, q DBTX, rec *MessageRecord) error
 	FindByID(ctx context.Context, q DBTX, id uuid.UUID) (*MessageRecord, error)
 	// List отдаёт только сообщения, видимые участнику userID.
 	List(ctx context.Context, q DBTX, convID, userID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error)
@@ -51,15 +57,17 @@ func NewMessageRepository() MessageRepository {
 // Участник видит сообщения с момента вступления; admin видит всю историю.
 const visibleToMember = `(cm.member_role = 'admin' OR m.created_at >= cm.joined_at)`
 
-const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited, m.created_at, m.updated_at, m.deleted_at`
+const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
+	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at`
 
-const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited, created_at, updated_at, deleted_at`
+const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited,
+	kind, system_event, target_id, created_at, updated_at, deleted_at`
 
 func scanMessage(row pgx.Row) (*MessageRecord, error) {
 	var m MessageRecord
 	if err := row.Scan(
 		&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
-		&m.IsEdited, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
+		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -76,6 +84,21 @@ func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageReco
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create message: %w", err)
+	}
+	return nil
+}
+
+// CreateSystem вставляет системное сообщение о составе группы (rec.Kind и текст не нужны)
+func (r *messageRepository) CreateSystem(ctx context.Context, q DBTX, rec *MessageRecord) error {
+	rec.Kind = models.MessageSystem
+	err := q.QueryRow(ctx,
+		`INSERT INTO messages (conversation_id, sender_id, kind, system_event, target_id, created_at)
+		 VALUES ($1, $2, 'system', $3, $4, clock_timestamp())
+		 RETURNING id, created_at`,
+		rec.ConversationID, rec.SenderID, rec.SystemEvent, rec.TargetID,
+	).Scan(&rec.ID, &rec.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create system message: %w", err)
 	}
 	return nil
 }
@@ -161,7 +184,7 @@ func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, co
 	var updatedAt time.Time
 	err := q.QueryRow(ctx,
 		`UPDATE messages SET content_enc = $2, is_edited = TRUE, updated_at = clock_timestamp()
-		 WHERE id = $1 AND deleted_at IS NULL
+		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'
 		 RETURNING updated_at`,
 		id, contentEnc,
 	).Scan(&updatedAt)
@@ -178,7 +201,7 @@ func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, co
 func (r *messageRepository) SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error) {
 	ct, err := q.Exec(ctx,
 		`UPDATE messages SET content_enc = NULL, deleted_at = clock_timestamp()
-		 WHERE id = $1 AND deleted_at IS NULL`, id,
+		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'`, id,
 	)
 	if err != nil {
 		return false, fmt.Errorf("delete message: %w", err)
@@ -220,6 +243,7 @@ func (r *messageRepository) AuthorsBetween(ctx context.Context, q DBTX, convID u
 		 LEFT JOIN messages lo ON lo.id = $2
 		 WHERE m.conversation_id = $1
 		   AND m.deleted_at IS NULL
+		   AND m.kind = 'user'
 		   AND m.sender_id <> $4
 		   AND (m.created_at, m.id) <= (hi.created_at, hi.id)
 		   AND (lo.id IS NULL OR (m.created_at, m.id) > (lo.created_at, lo.id))

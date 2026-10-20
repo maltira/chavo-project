@@ -17,6 +17,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/events"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/repository"
+	"github.com/maltira/chavo-project-backend/services/conversation-service/pkg/crypto"
 )
 
 const (
@@ -32,7 +33,9 @@ type CreateGroupInput struct {
 	Description *string
 	AvatarURL   *string
 	Visibility  string
-	MemberIDs   []uuid.UUID
+	// Slug - код ссылки, обязателен для открытой группы; у закрытой код генерируется
+	Slug      *string
+	MemberIDs []uuid.UUID
 }
 
 // UpdateGroupInput: nil — поле не меняется; для description и avatar_url пустая строка очищает значение.
@@ -41,9 +44,11 @@ type UpdateGroupInput struct {
 	Description *string
 	AvatarURL   *string
 	Visibility  *string
+	// Slug меняет код ссылки открытой группы; обязателен при переходе в открытую
+	Slug *string
 }
 
-// GroupResult содержит invite-токен только в момент его создания: в БД хранится лишь хэш.
+// GroupResult содержит код ссылки закрытой группы в момент его выпуска; потом его видят админы в карточке чата
 type GroupResult struct {
 	Conversation models.Conversation
 	InviteToken  *string
@@ -76,6 +81,8 @@ type groupService struct {
 	outbox repository.OutboxRepository
 	users  userclient.Client
 	bans   repository.BanRepository
+	cipher *crypto.Cipher
+	system systemPoster
 	now    func() time.Time
 }
 
@@ -85,8 +92,13 @@ func NewGroupService(
 	outbox repository.OutboxRepository,
 	users userclient.Client,
 	bans repository.BanRepository,
+	cipher *crypto.Cipher,
+	msgs repository.MessageRepository,
 ) GroupService {
-	return &groupService{db: db, convs: convs, outbox: outbox, users: users, bans: bans, now: time.Now}
+	return &groupService{
+		db: db, convs: convs, outbox: outbox, users: users, bans: bans, cipher: cipher,
+		system: systemPoster{msgs: msgs, convs: convs, outbox: outbox}, now: time.Now,
+	}
 }
 
 func (s *groupService) publish(ctx context.Context, q repository.DBTX, topic string, convID uuid.UUID, eventType string, payload any) error {
@@ -224,25 +236,34 @@ func (s *groupService) Create(ctx context.Context, creatorID uuid.UUID, in Creat
 	if 1+len(members) > maxGroupMembers {
 		return nil, apperror.ErrGroupFull
 	}
+	if visibility == models.VisibilityPublic && (in.Slug == nil || strings.TrimSpace(*in.Slug) == "") {
+		return nil, apperror.ErrSlugRequired
+	}
+	if visibility == models.VisibilityPublic && !slugPattern.MatchString(strings.TrimSpace(*in.Slug)) {
+		return nil, apperror.ErrSlugInvalid
+	}
 	if err = s.ensureInvitable(ctx, creatorID, members); err != nil {
 		return nil, err
 	}
 
 	res := &GroupResult{}
-	var tokenHash *string
-	if visibility == models.VisibilityPrivate {
-		token, hash, err := newInviteToken()
-		if err != nil {
-			return nil, err
-		}
-		res.InviteToken, tokenHash = &token, &hash
-	}
-
 	err = s.db.WithTx(ctx, func(tx repository.DBTX) error {
-		convID, err := s.convs.CreateGroup(ctx, tx, repository.NewGroup{
-			Name: name, Description: description, AvatarURL: avatar,
-			Visibility: visibility, InviteTokenHash: tokenHash,
-		})
+		g := repository.NewGroup{Name: name, Description: description, AvatarURL: avatar, Visibility: visibility}
+		if visibility == models.VisibilityPublic {
+			slug, err := validateSlug(ctx, s.convs, tx, *in.Slug)
+			if err != nil {
+				return err
+			}
+			g.Slug = &slug
+		} else {
+			code, err := issueInviteCode(ctx, s.convs, tx, s.cipher)
+			if err != nil {
+				return err
+			}
+			g.InviteTokenHash, g.InviteTokenEnc = &code.hash, code.enc
+			res.InviteToken = &code.code
+		}
+		convID, err := s.convs.CreateGroup(ctx, tx, g)
 		if err != nil {
 			return err
 		}
@@ -306,7 +327,10 @@ func (s *groupService) Update(ctx context.Context, userID, convID uuid.UUID, in 
 	if in.Visibility != nil && !validVisibility(*in.Visibility) {
 		return nil, apperror.ErrIncorrectData
 	}
-	if len(updates) == 0 && in.Visibility == nil {
+	if in.Slug != nil && !slugPattern.MatchString(strings.TrimSpace(*in.Slug)) {
+		return nil, apperror.ErrSlugInvalid
+	}
+	if len(updates) == 0 && in.Visibility == nil && in.Slug == nil {
 		return nil, apperror.ErrIncorrectData
 	}
 
@@ -326,18 +350,40 @@ func (s *groupService) Update(ctx context.Context, userID, convID uuid.UUID, in 
 		}
 		changedFields := append([]string(nil), fields...)
 
-		if in.Visibility != nil && *in.Visibility != conv.Visibility {
-			changes["visibility"] = *in.Visibility
+		visibility := conv.Visibility
+		if in.Visibility != nil {
+			visibility = *in.Visibility
+		}
+		if visibility != conv.Visibility {
+			changes["visibility"] = visibility
 			changedFields = append(changedFields, "visibility")
-			if *in.Visibility == models.VisibilityPrivate {
-				token, hash, err := newInviteToken()
+		}
+		switch {
+		case visibility == models.VisibilityPrivate && conv.Visibility == models.VisibilityPublic:
+			// старая ссылка открытой группы перестаёт работать, у закрытой - новый сгенерированный код
+			code, err := issueInviteCode(ctx, s.convs, tx, s.cipher)
+			if err != nil {
+				return err
+			}
+			changes["public_slug"] = nil
+			changes["invite_token_hash"], changes["invite_token_enc"] = code.hash, code.enc
+			changedFields = append(changedFields, "slug")
+			res.InviteToken = &code.code
+		case visibility == models.VisibilityPublic:
+			// код закрытой группы стирается, у открытой ссылку задаёт админ
+			if in.Slug == nil && conv.Visibility == models.VisibilityPrivate {
+				return apperror.ErrSlugRequired
+			}
+			if in.Slug != nil && (conv.Slug == nil || strings.TrimSpace(*in.Slug) != *conv.Slug) {
+				slug, err := validateSlug(ctx, s.convs, tx, *in.Slug)
 				if err != nil {
 					return err
 				}
-				changes["invite_token_hash"] = hash
-				res.InviteToken = &token
-			} else {
-				changes["invite_token_hash"] = nil // публичной группе ссылка не нужна, старые ссылки перестают работать
+				changes["public_slug"] = slug
+				changedFields = append(changedFields, "slug")
+			}
+			if conv.Visibility == models.VisibilityPrivate {
+				changes["invite_token_hash"], changes["invite_token_enc"] = nil, nil
 			}
 		}
 
@@ -424,6 +470,9 @@ func (s *groupService) Join(ctx context.Context, userID, convID uuid.UUID) error
 		if err = s.convs.AddMember(ctx, tx, convID, userID, models.RoleMember); err != nil {
 			return err
 		}
+		if err = s.system.post(ctx, tx, convID, userID, userID, models.SystemJoined); err != nil {
+			return err
+		}
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
 		if err != nil {
 			return err
@@ -476,6 +525,9 @@ func (s *groupService) AddMembers(ctx context.Context, adminID, convID uuid.UUID
 				return apperror.ErrBanned
 			}
 			if err := s.convs.AddMember(ctx, tx, convID, id, models.RoleMember); err != nil {
+				return err
+			}
+			if err := s.system.post(ctx, tx, convID, adminID, id, models.SystemAdded); err != nil {
 				return err
 			}
 		}
@@ -602,6 +654,14 @@ func (s *groupService) removeLocked(ctx context.Context, tx repository.DBTX, con
 		if err = s.bans.Ban(ctx, tx, convID, targetID, actorID); err != nil {
 			return err
 		}
+	}
+	// бан в истории пишется как обычное исключение: блокировку видят только админы
+	event := models.SystemRemoved
+	if actorID == targetID {
+		event = models.SystemLeft
+	}
+	if err = s.system.post(ctx, tx, convID, actorID, targetID, event); err != nil {
+		return err
 	}
 
 	remaining, err := s.convs.MemberIDs(ctx, tx, convID)

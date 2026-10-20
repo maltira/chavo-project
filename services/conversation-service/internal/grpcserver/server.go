@@ -77,6 +77,7 @@ func (s *Server) SearchPublicGroups(ctx context.Context, req *conversationv1.Sea
 			IsMember:     g.IsMember,
 			Status:       toStatus(g.Status),
 			AvatarShape:  toAvatarShape(g.AvatarShape),
+			Slug:         g.Slug,
 		}
 	}
 	return &conversationv1.SearchPublicGroupsResponse{Items: out, Limit: int32(limit), Offset: int32(offset)}, nil
@@ -96,6 +97,7 @@ func (s *Server) CreateGroup(ctx context.Context, req *conversationv1.CreateGrou
 		Description: req.Description,
 		AvatarURL:   req.AvatarUrl,
 		Visibility:  req.GetVisibility(),
+		Slug:        req.Slug,
 		MemberIDs:   members,
 	})
 	if err != nil {
@@ -118,6 +120,7 @@ func (s *Server) UpdateGroup(ctx context.Context, req *conversationv1.UpdateGrou
 		Description: req.Description,
 		AvatarURL:   req.AvatarUrl,
 		Visibility:  req.Visibility,
+		Slug:        req.Slug,
 	})
 	if err != nil {
 		return nil, err
@@ -284,6 +287,8 @@ func (s *Server) GetInviteInfo(ctx context.Context, req *conversationv1.GetInvit
 	}
 	return &conversationv1.GetInviteInfoResponse{Info: &conversationv1.InviteInfo{
 		ConversationId: info.ConversationID.String(),
+		Visibility:     info.Visibility,
+		Slug:           info.Slug,
 		Name:           info.Name,
 		Description:    info.Description,
 		AvatarUrl:      info.AvatarURL,

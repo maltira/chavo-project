@@ -26,6 +26,10 @@ type MessageCreatedPayload struct {
 	MemberIDs        []uuid.UUID `json:"member_ids"`
 	ContentEnc       []byte      `json:"content_enc,omitempty"`
 	Content          *string     `json:"content,omitempty"`
+	// Kind - user или system; у системного вместо текста SystemEvent и TargetID
+	Kind        string     `json:"kind"`
+	SystemEvent *string    `json:"system_event,omitempty"`
+	TargetID    *uuid.UUID `json:"target_id,omitempty"`
 }
 
 type MessageUpdatedPayload struct {

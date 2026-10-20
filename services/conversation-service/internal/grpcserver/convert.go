@@ -108,6 +108,7 @@ func toConversation(c *models.Conversation) *conversationv1.Conversation {
 		UpdatedAt:        ts(c.UpdatedAt),
 		Status:           toStatus(c.Status),
 		AvatarShape:      toAvatarShape(c.AvatarShape),
+		Slug:             c.Slug,
 	}
 }
 
@@ -145,6 +146,9 @@ func toMessage(m *models.Message) *conversationv1.Message {
 		IsDeleted:        m.IsDeleted,
 		CreatedAt:        ts(m.CreatedAt),
 		UpdatedAt:        optTS(m.UpdatedAt),
+		Kind:             m.Kind,
+		SystemEvent:      m.SystemEvent,
+		TargetId:         optStr(m.TargetID),
 	}
 }
 
@@ -156,6 +160,8 @@ func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummar
 		LastMessage:     toMessage(s.LastMessage),
 		UnreadCount:     int32(s.UnreadCount),
 		LastMessageRead: s.LastMessageRead,
+		MembersCount:    int32(s.MembersCount),
+		InviteCode:      s.InviteCode,
 	}
 }
 

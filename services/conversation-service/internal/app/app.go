@@ -87,8 +87,8 @@ func New() (*App, error) {
 
 	srv := grpcserver.New(
 		service.NewConversationService(db, convRepo, cipher),
-		service.NewGroupService(db, convRepo, outboxRepo, users, banRepo),
-		service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo),
+		service.NewGroupService(db, convRepo, outboxRepo, users, banRepo, cipher, msgRepo),
+		service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo, cipher, msgRepo),
 		service.NewMessageService(db, convRepo, msgRepo, outboxRepo, users, cipher, log),
 	)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))

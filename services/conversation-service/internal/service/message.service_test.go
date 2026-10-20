@@ -69,8 +69,8 @@ func setup(t *testing.T) *env {
 		pool:   pool,
 		msgs:   service.NewMessageService(db, cr, mr, or, users, cipher, zap.NewNop()),
 		convs:  service.NewConversationService(db, cr, cipher),
-		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository()),
-		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository()),
+		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), cipher, mr),
+		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository(), cipher, mr),
 		users:  users,
 	}
 }
@@ -254,7 +254,7 @@ func TestGroupAdminCanDeleteForeignMessage(t *testing.T) {
 	admin, member := uuid.New(), uuid.New()
 
 	var convID uuid.UUID
-	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, name) VALUES ('group','g') RETURNING id`).Scan(&convID); err != nil {
+	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, visibility, name, public_slug) VALUES ('group','public','g', md5(random()::text)) RETURNING id`).Scan(&convID); err != nil {
 		t.Fatal(err)
 	}
 	for u, role := range map[uuid.UUID]string{admin: "admin", member: "member"} {
@@ -407,7 +407,7 @@ func TestReadEventNotifiesAuthorsOfAllCoveredMessages(t *testing.T) {
 	a, b, c := uuid.New(), uuid.New(), uuid.New()
 
 	var convID uuid.UUID
-	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, name) VALUES ('group','g') RETURNING id`).Scan(&convID); err != nil {
+	if err := e.pool.QueryRow(ctx, `INSERT INTO conversations (conversation_type, visibility, name, public_slug) VALUES ('group','public','g', md5(random()::text)) RETURNING id`).Scan(&convID); err != nil {
 		t.Fatal(err)
 	}
 	for _, u := range []uuid.UUID{a, b, c} {

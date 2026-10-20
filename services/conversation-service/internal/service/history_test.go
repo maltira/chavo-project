@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
+	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
 )
 
@@ -18,6 +19,17 @@ func sendTo(t *testing.T, e *env, from, conv uuid.UUID, text string, reply *uuid
 		t.Fatalf("send %q: %v", text, err)
 	}
 	return m.ID
+}
+
+// userOnly - обычные сообщения без системных (вступления, выходы): история проверяется по ним
+func userOnly(list []models.Message) []models.Message {
+	res := make([]models.Message, 0, len(list))
+	for _, m := range list {
+		if m.Kind != models.MessageSystem {
+			res = append(res, m)
+		}
+	}
+	return res
 }
 
 func TestNewMemberSeesHistoryOnlyFromJoin(t *testing.T) {
@@ -32,18 +44,20 @@ func TestNewMemberSeesHistoryOnlyFromJoin(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// новый участник видит только системное «admin добавил c»
 	list, err := e.msgs.List(ctx, c, conv, nil, 50)
-	if err != nil || len(list) != 0 {
-		t.Fatalf("new member list = %d, %v; want empty", len(list), err)
+	if err != nil || len(userOnly(list)) != 0 || len(list) != 1 ||
+		*list[0].SystemEvent != models.SystemAdded || *list[0].TargetID != c || list[0].SenderID != admin {
+		t.Fatalf("new member list = %+v, %v; want only the system message", list, err)
 	}
 	sum, err := e.convs.Get(ctx, c, conv)
-	if err != nil || sum.UnreadCount != 0 || sum.LastMessage != nil {
+	if err != nil || sum.UnreadCount != 0 || sum.LastMessage == nil || sum.LastMessage.Kind != models.MessageSystem {
 		t.Fatalf("summary before new messages: %+v %v", sum, err)
 	}
 
 	fresh := sendTo(t, e, admin, conv, "новое", nil)
 	list, _ = e.msgs.List(ctx, c, conv, nil, 50)
-	if len(list) != 1 || list[0].ID != fresh {
+	if list = userOnly(list); len(list) != 1 || list[0].ID != fresh {
 		t.Fatalf("list after join = %+v", list)
 	}
 	sum, _ = e.convs.Get(ctx, c, conv)
@@ -62,7 +76,7 @@ func TestNewMemberSeesHistoryOnlyFromJoin(t *testing.T) {
 		t.Fatalf("before hidden: %v", err)
 	}
 	// У старожилов история целая.
-	if list, _ = e.msgs.List(ctx, m1, conv, nil, 50); len(list) != 3 {
+	if list, _ = e.msgs.List(ctx, m1, conv, nil, 50); len(userOnly(list)) != 3 {
 		t.Fatalf("old member list = %d, want 3", len(list))
 	}
 }
@@ -74,29 +88,30 @@ func TestAdminSeesFullHistory(t *testing.T) {
 	conv := createGroup(t, e, admin, "").Conversation.ID
 
 	sendTo(t, e, admin, conv, "раз", nil)
-	last := sendTo(t, e, admin, conv, "два", nil)
+	sendTo(t, e, admin, conv, "два", nil)
 	if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{c}); err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(list) != 0 {
+	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(userOnly(list)) != 0 {
 		t.Fatalf("member sees %d old messages", len(list))
 	}
 
 	if err := e.groups.SetRole(ctx, admin, conv, c, "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(list) != 2 {
+	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(userOnly(list)) != 2 {
 		t.Fatalf("admin sees %d messages, want 2", len(list))
 	}
+	// последнее - системное о добавлении; непрочитанные считаются только по обычным сообщениям
 	sum, _ := e.convs.Get(ctx, c, conv)
-	if sum.UnreadCount != 0 || sum.LastMessage == nil || sum.LastMessage.ID != last {
+	if sum.UnreadCount != 0 || sum.LastMessage == nil || sum.LastMessage.Kind != models.MessageSystem {
 		t.Fatalf("admin summary: unread=%d last=%+v (unread counts only from joined_at)", sum.UnreadCount, sum.LastMessage)
 	}
 
 	if err := e.groups.SetRole(ctx, admin, conv, c, "member"); err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(list) != 0 {
+	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(userOnly(list)) != 0 {
 		t.Fatalf("demoted member sees %d old messages", len(list))
 	}
 }
@@ -133,11 +148,11 @@ func TestLeftMemberLosesChatAndRejoinStartsNewHistory(t *testing.T) {
 	if err := e.groups.Join(ctx, m1, conv); err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := e.msgs.List(ctx, m1, conv, nil, 50); len(list) != 0 {
+	if list, _ := e.msgs.List(ctx, m1, conv, nil, 50); len(userOnly(list)) != 0 {
 		t.Fatalf("rejoined member sees %d old messages, want 0", len(list))
 	}
 	fresh := sendTo(t, e, admin, conv, "D после возвращения", nil)
-	if list, _ := e.msgs.List(ctx, m1, conv, nil, 50); len(list) != 1 || list[0].ID != fresh {
+	if list := mustList(t, e, m1, conv); len(list) != 1 || list[0].ID != fresh {
 		t.Fatalf("rejoined list = %+v", list)
 	}
 }
@@ -165,7 +180,7 @@ func TestReplyTargetBeforeJoinIsReadableAlone(t *testing.T) {
 	if _, err = e.msgs.Get(ctx, outsider, target); !errors.Is(err, apperror.ErrNotFound) {
 		t.Fatalf("outsider: %v", err)
 	}
-	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(list) != 1 {
+	if list, _ := e.msgs.List(ctx, c, conv, nil, 50); len(userOnly(list)) != 1 {
 		t.Fatalf("list must still hide history, got %d", len(list))
 	}
 }
@@ -244,4 +259,14 @@ func TestBanPrivateGroupBlocksJoinRequests(t *testing.T) {
 	if _, err := e.joins.RequestJoin(ctx, m1, conv, token); err != nil {
 		t.Fatalf("request after unban: %v", err)
 	}
+}
+
+// mustList - обычные сообщения, видимые участнику
+func mustList(t *testing.T, e *env, user, conv uuid.UUID) []models.Message {
+	t.Helper()
+	list, err := e.msgs.List(context.Background(), user, conv, nil, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return userOnly(list)
 }

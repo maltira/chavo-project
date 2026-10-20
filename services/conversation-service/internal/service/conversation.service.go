@@ -57,7 +57,17 @@ func (s *conversationService) Get(ctx context.Context, userID, convID uuid.UUID)
 	if len(recs) == 0 {
 		return nil, apperror.ErrNotFound
 	}
-	return s.toSummary(&recs[0])
+	item, err := s.toSummary(&recs[0])
+	if err != nil {
+		return nil, err
+	}
+	// код ссылки закрытой группы видят только её админы
+	if item.MyRole == models.RoleAdmin {
+		if item.InviteCode, err = decryptInviteCode(s.cipher, recs[0].Conversation.InviteCodeEnc); err != nil {
+			return nil, err
+		}
+	}
+	return item, nil
 }
 
 func (s *conversationService) toSummary(rec *repository.SummaryRecord) (*models.ConversationSummary, error) {
@@ -67,6 +77,7 @@ func (s *conversationService) toSummary(rec *repository.SummaryRecord) (*models.
 		PeerID:          rec.PeerID,
 		UnreadCount:     rec.UnreadCount,
 		LastMessageRead: rec.LastMessageRead,
+		MembersCount:    rec.MembersCount,
 	}
 	if rec.LastMessage != nil {
 		m, err := recordToModel(s.cipher, rec.LastMessage)

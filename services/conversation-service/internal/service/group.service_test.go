@@ -16,9 +16,11 @@ import (
 
 func createGroup(t *testing.T, e *env, creator uuid.UUID, visibility string, members ...uuid.UUID) *service.GroupResult {
 	t.Helper()
-	res, err := e.groups.Create(context.Background(), creator, service.CreateGroupInput{
-		Name: "Группа", Visibility: visibility, MemberIDs: members,
-	})
+	in := service.CreateGroupInput{Name: "Группа", Visibility: visibility, MemberIDs: members}
+	if visibility == "public" {
+		in.Slug = str(testSlug())
+	}
+	res, err := e.groups.Create(context.Background(), creator, in)
 	if err != nil {
 		t.Fatalf("create group: %v", err)
 	}
@@ -105,7 +107,6 @@ func TestUpdateGroup(t *testing.T) {
 	admin, member := uuid.New(), uuid.New()
 	g := createGroup(t, e, admin, "private", member)
 	id := g.Conversation.ID
-	str := func(s string) *string { return &s }
 
 	if _, err := e.groups.Update(ctx, member, id, service.UpdateGroupInput{Name: str("hack")}); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("member update: %v", err)
@@ -130,7 +131,7 @@ func TestUpdateGroup(t *testing.T) {
 	}
 
 	// private -> public: ссылка перестаёт действовать; public -> private: новый токен.
-	res, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{Visibility: str("public")})
+	res, err = e.groups.Update(ctx, admin, id, service.UpdateGroupInput{Visibility: str("public"), Slug: str(testSlug())})
 	if err != nil || res.Conversation.Visibility != "public" || res.InviteToken != nil {
 		t.Fatalf("to public: %+v %v", res, err)
 	}

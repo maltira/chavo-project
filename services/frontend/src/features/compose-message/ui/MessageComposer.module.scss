@@ -92,3 +92,16 @@
 .send {
     flex-shrink: 0;
 }
+
+// кнопка эмодзи и её панель: панель над полем, по правому краю кнопки
+.emoji {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.emojiPanel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 12px);
+    z-index: 20;
+}

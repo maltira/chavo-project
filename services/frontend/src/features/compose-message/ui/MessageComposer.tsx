@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 
 import { MAX_MESSAGE_LENGTH } from '@/entities/message'
 import type { Message } from '@/entities/message'
-import { Icon, IconButton } from '@/shared/ui'
+import { useFavoriteEmojis } from '@/entities/user'
+import { useDismiss } from '@/shared/lib'
+import { EmojiPicker, Icon, IconButton } from '@/shared/ui'
 
 import { useEditMessage } from '../model/useEditMessage'
 import { useSendMessage } from '../model/useSendMessage'
@@ -44,6 +46,12 @@ export function MessageComposer({
     const [text, setText] = useState(editing?.content ?? '')
     const fieldRef = useRef<HTMLTextAreaElement>(null)
     const send = useSendMessage(myId, onSent)
+    // панель эмодзи: кнопка и панель - одна область, клик вне неё и Esc закрывают панель
+    const [emojiOpen, setEmojiOpen] = useState(false)
+    const emojiRef = useRef<HTMLDivElement>(null)
+    const closeEmoji = useCallback(() => setEmojiOpen(false), [])
+    useDismiss(emojiOpen, emojiRef, closeEmoji)
+    const favorites = useFavoriteEmojis(emojiOpen)
 
     // при открытии чата фокуса нет - пользователь сам нажмёт на поле;
     // при редактировании - фокус и курсор в конце текста, высота по тексту
@@ -106,6 +114,24 @@ export function MessageComposer({
         onCancel()
     }
 
+    // эмодзи встаёт в позицию курсора (или заменяет выделенное); курсор после него, фокус - в поле,
+    // чтобы можно было сразу печатать дальше
+    function insertEmoji(emoji: string) {
+        const field = fieldRef.current
+        const start = field?.selectionStart ?? text.length
+        const end = field?.selectionEnd ?? text.length
+        const next = text.slice(0, start) + emoji + text.slice(end)
+        if (next.length > MAX_MESSAGE_LENGTH) {
+            return
+        }
+        setText(next)
+        const caret = start + emoji.length
+        requestAnimationFrame(() => {
+            resize()
+            field?.setSelectionRange(caret, caret)
+        })
+    }
+
     function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault()
@@ -155,6 +181,35 @@ export function MessageComposer({
                     }}
                     onKeyDown={onKeyDown}
                 />
+                {/* Esc закрывает панель и возвращает фокус в поле */}
+                <div
+                    ref={emojiRef}
+                    className={styles.emoji}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Escape' && emojiOpen) {
+                            event.stopPropagation()
+                            fieldRef.current?.focus()
+                        }
+                    }}
+                >
+                    {emojiOpen && (
+                        <div className={styles.emojiPanel}>
+                            <EmojiPicker
+                                onPick={insertEmoji}
+                                favorites={favorites.list}
+                                onToggleFavorite={favorites.toggle}
+                            />
+                        </div>
+                    )}
+                    <IconButton
+                        icon="emoji"
+                        aria-label="Эмодзи"
+                        aria-haspopup="dialog"
+                        aria-expanded={emojiOpen}
+                        isActive={emojiOpen}
+                        onClick={() => setEmojiOpen((open) => !open)}
+                    />
+                </div>
                 <IconButton
                     icon={editing ? 'check' : 'send'}
                     aria-label={editing ? 'Сохранить' : 'Отправить'}

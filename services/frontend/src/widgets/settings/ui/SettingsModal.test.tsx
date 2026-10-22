@@ -46,6 +46,7 @@ function renderSettings() {
         allow_group_invites: true,
         show_online_status: true,
         hide_forward_author: false,
+        favorite_emojis: [],
     })
     render(
         <QueryClientProvider client={client}>

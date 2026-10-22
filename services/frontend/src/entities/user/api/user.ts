@@ -108,7 +108,12 @@ export interface Settings {
     show_online_status: boolean
     // в пересланных моих сообщениях вместо имени - «скрытый автор»
     hide_forward_author: boolean
+    // избранные эмодзи панели в поле ввода: до 30, в порядке добавления
+    favorite_emojis: string[]
 }
+
+// сколько эмодзи можно держать в избранном (так же ограничивает сервер)
+export const MAX_FAVORITE_EMOJIS = 30
 
 export function getSettings(): Promise<Settings> {
     return request<Settings>('/users/me/settings')

@@ -1547,8 +1547,10 @@ func (x *UpdateGroupResponse) GetInviteToken() string {
 type DeleteConversationRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// только для личного чата: удалить у обоих, иначе - только у себя
+	ForEveryone   bool `protobuf:"varint,2,opt,name=for_everyone,json=forEveryone,proto3" json:"for_everyone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteConversationRequest) Reset() {
@@ -1586,6 +1588,13 @@ func (x *DeleteConversationRequest) GetConversationId() string {
 		return x.ConversationId
 	}
 	return ""
+}
+
+func (x *DeleteConversationRequest) GetForEveryone() bool {
+	if x != nil {
+		return x.ForEveryone
+	}
+	return false
 }
 
 type DeleteConversationResponse struct {
@@ -4537,9 +4546,10 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\x13UpdateGroupResponse\x12A\n" +
 	"\fconversation\x18\x01 \x01(\v2\x1d.conversation.v1.ConversationR\fconversation\x12&\n" +
 	"\finvite_token\x18\x02 \x01(\tH\x00R\vinviteToken\x88\x01\x01B\x0f\n" +
-	"\r_invite_token\"D\n" +
+	"\r_invite_token\"g\n" +
 	"\x19DeleteConversationRequest\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"\x1c\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12!\n" +
+	"\ffor_everyone\x18\x02 \x01(\bR\vforEveryone\"\x1c\n" +
 	"\x1aDeleteConversationResponse\";\n" +
 	"\x10JoinGroupRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"\x13\n" +

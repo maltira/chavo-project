@@ -53,7 +53,7 @@ describe('ChatActionsMenu', () => {
 
     it('a direct chat has info and read, but no leave', () => {
         renderMenu(direct)
-        expect(screen.queryByRole('menuitem', { name: /Покинуть|Удалить/ })).toBeNull()
+        expect(screen.queryByRole('menuitem', { name: 'Покинуть чат' })).toBeNull()
 
         fireEvent.click(screen.getByRole('menuitem', { name: 'Прочитать чат' }))
         expect(fetchMock).toHaveBeenCalledWith(
@@ -126,6 +126,22 @@ describe('ChatActionsMenu', () => {
         )
         await vi.waitFor(() =>
             expect(screen.queryByRole('dialog', { name: 'Без звука' })).toBeNull(),
+        )
+    })
+
+    it.each([
+        ['Только у меня', '/api/conversations/d1'],
+        ['У меня и у собеседника', '/api/conversations/d1?scope=all'],
+    ])('deletes a direct chat: %s', async (button, url) => {
+        renderMenu(direct)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Удалить чат' }))
+        const dialog = screen.getByRole('dialog', { name: 'Удалить чат?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: button }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                url,
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
         )
     })
 })

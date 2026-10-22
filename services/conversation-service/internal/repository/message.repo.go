@@ -54,8 +54,10 @@ func NewMessageRepository() MessageRepository {
 	return &messageRepository{}
 }
 
-// Участник видит сообщения с момента вступления; admin видит всю историю.
-const visibleToMember = `(cm.member_role = 'admin' OR m.created_at >= cm.joined_at)`
+// Участник видит сообщения с момента вступления, admin - всю историю; в обоих случаях - только после
+// своей очистки личного чата (cleared_at): в direct оба участника admin, поэтому условие через AND.
+const visibleToMember = `((cm.member_role = 'admin' OR m.created_at >= cm.joined_at)
+	AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at))`
 
 const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
 	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at`
@@ -169,7 +171,8 @@ func (r *messageRepository) FindForViewer(ctx context.Context, q DBTX, id, userI
 		   AND (`+visibleToMember+` OR EXISTS (
 		        SELECT 1 FROM messages r
 		        WHERE r.reply_to_message_id = m.id AND r.conversation_id = m.conversation_id
-		          AND (cm.member_role = 'admin' OR r.created_at >= cm.joined_at)))`, id, userID))
+		          AND (cm.member_role = 'admin' OR r.created_at >= cm.joined_at)
+		          AND (cm.cleared_at IS NULL OR r.created_at > cm.cleared_at)))`, id, userID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.ErrNotFound

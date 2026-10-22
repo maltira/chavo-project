@@ -137,7 +137,7 @@ func (s *Server) DeleteConversation(ctx context.Context, req *conversationv1.Del
 	if err != nil {
 		return nil, err
 	}
-	if err = s.groups.Delete(ctx, user, convID); err != nil {
+	if err = s.groups.Delete(ctx, user, convID, req.GetForEveryone()); err != nil {
 		return nil, err
 	}
 	return &conversationv1.DeleteConversationResponse{}, nil

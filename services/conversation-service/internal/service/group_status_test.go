@@ -101,7 +101,7 @@ func TestGroupStatus(t *testing.T) {
 	if _, err := e.groups.SetStatus(ctx, admin, id, in("heart", "до удаления", "1h")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.groups.Delete(ctx, admin, id); err != nil {
+	if err := e.groups.Delete(ctx, admin, id, false); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM conversation_statuses WHERE conversation_id = $1`, id); n != 0 {

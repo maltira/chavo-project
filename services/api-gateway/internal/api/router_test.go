@@ -223,6 +223,15 @@ type fakeConversations struct {
 	admins  map[string]string // группа -> её админ
 	// lastArchived - фильтр архива в последнем ListConversations
 	lastArchived bool
+	// lastForEveryone - for_everyone последнего DeleteConversation
+	lastForEveryone bool
+}
+
+func (f *fakeConversations) DeleteConversation(_ context.Context, req *conversationv1.DeleteConversationRequest) (*conversationv1.DeleteConversationResponse, error) {
+	f.mu.Lock()
+	f.lastForEveryone = req.GetForEveryone()
+	f.mu.Unlock()
+	return &conversationv1.DeleteConversationResponse{}, nil
 }
 
 func (f *fakeConversations) GetConversation(_ context.Context, req *conversationv1.GetConversationRequest) (*conversationv1.GetConversationResponse, error) {
@@ -872,6 +881,16 @@ func TestChatSettingsEndpoints(t *testing.T) {
 	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/pin", tok, ""), http.StatusConflict, "PIN_LIMIT")
 	if w := e.do(http.MethodDelete, "/api/conversations/"+id+"/pin", tok, ""); w.Code != http.StatusOK {
 		t.Fatalf("unpin: %d", w.Code)
+	}
+
+	// личный чат удаляется у себя или у обоих
+	e.do(http.MethodDelete, "/api/conversations/"+id+"?scope=all", tok, "")
+	if !e.convs.lastForEveryone {
+		t.Fatal("scope=all not passed")
+	}
+	e.do(http.MethodDelete, "/api/conversations/"+id, tok, "")
+	if e.convs.lastForEveryone {
+		t.Fatal("delete for me became for everyone")
 	}
 
 	// архив - отдельный список

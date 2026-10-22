@@ -9,6 +9,7 @@ import type { MenuPosition } from '@/shared/ui'
 import { useChatSettings } from '../model/useChatSettings'
 import { useLeaveChat } from '../model/useLeaveChat'
 import { useOpenChatInfo } from '../model/useOpenChatInfo'
+import { DeleteDirectModal } from './DeleteDirectModal'
 import { MuteModal } from './MuteModal'
 
 interface Props {
@@ -68,13 +69,17 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                 >
                     {chat.archived_at ? 'Вернуть из архива' : 'В архив'}
                 </MenuItem>
-                {isGroup && (
+                {isGroup ? (
                     <MenuItem
                         icon={isAdmin ? 'trash' : 'exit'}
                         danger
                         onClick={() => setConfirm(true)}
                     >
                         {isAdmin ? 'Удалить чат' : 'Покинуть чат'}
+                    </MenuItem>
+                ) : (
+                    <MenuItem icon="trash" danger onClick={() => setConfirm(true)}>
+                        Удалить чат
                     </MenuItem>
                 )}
             </ContextMenu>
@@ -94,12 +99,25 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                 />
             )}
 
+            {!isGroup && (
+                <DeleteDirectModal
+                    open={confirm}
+                    peerId={chat.peer_id}
+                    pending={leave.isPending}
+                    onClose={() => setConfirm(false)}
+                    onDelete={(forEveryone) => {
+                        setConfirm(false)
+                        leave.mutate({ conversationId: chat.id, forEveryone })
+                    }}
+                />
+            )}
+
             <ConfirmModal
-                open={confirm}
+                open={confirm && isGroup}
                 onClose={() => setConfirm(false)}
                 onConfirm={() => {
                     setConfirm(false)
-                    leave.mutate(chat.id)
+                    leave.mutate({ conversationId: chat.id })
                 }}
                 confirmLabel={isAdmin ? 'Удалить' : 'Покинуть'}
                 danger

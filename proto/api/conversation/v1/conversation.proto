@@ -22,7 +22,7 @@ service ConversationService {
   // SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
   rpc SetGroupAvatarShape(SetGroupAvatarShapeRequest) returns (SetGroupAvatarShapeResponse);
   rpc ClearGroupAvatarShape(ClearGroupAvatarShapeRequest) returns (ClearGroupAvatarShapeResponse);
-  // DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
+  // DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
   // личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
@@ -230,6 +230,8 @@ message UpdateGroupResponse {
 
 message DeleteConversationRequest {
   string conversation_id = 1;
+  // только для личного чата: удалить у обоих, иначе - только у себя
+  bool for_everyone = 2;
 }
 message DeleteConversationResponse {}
 

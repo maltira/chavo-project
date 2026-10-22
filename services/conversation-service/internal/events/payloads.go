@@ -68,10 +68,13 @@ type ConversationUpdatedPayload struct {
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
 
+// ForEveryone=false - личный чат удалён только у DeletedBy (MemberIDs - он сам): у собеседника чат остаётся
 type ConversationDeletedPayload struct {
-	ConversationID uuid.UUID   `json:"conversation_id"`
-	DeletedBy      uuid.UUID   `json:"deleted_by"`
-	MemberIDs      []uuid.UUID `json:"member_ids"`
+	ConversationID   uuid.UUID   `json:"conversation_id"`
+	ConversationType string      `json:"conversation_type"`
+	DeletedBy        uuid.UUID   `json:"deleted_by"`
+	ForEveryone      bool        `json:"for_everyone"`
+	MemberIDs        []uuid.UUID `json:"member_ids"`
 }
 
 type MemberAddedPayload struct {

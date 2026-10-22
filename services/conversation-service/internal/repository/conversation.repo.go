@@ -107,6 +107,8 @@ type ConversationRepository interface {
 	ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, archived *bool, limit, offset int) ([]SummaryRecord, error)
 	// UpdateChatSettings меняет личные настройки участника (nil - NULL); ErrNotMember, если он не участник
 	UpdateChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID, updates map[string]any) (*models.ChatSettings, error)
+	// ClearHistory - личный чат «удалён у меня»: история до этого момента скрыта, личные настройки сброшены
+	ClearHistory(ctx context.Context, q DBTX, convID, userID uuid.UUID) error
 	// LockChatSettings читает настройки участника с блокировкой строки; ErrNotMember, если он не участник
 	LockChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*models.ChatSettings, error)
 	// CountPinnedChats блокирует строки участия пользователя до конца транзакции: лимит закрепов не обходится параллельными запросами
@@ -252,6 +254,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
 		            AND m.kind = 'user'
 		            AND m.created_at >= cm.joined_at
+		            AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at)
 		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))),
 		        COALESCE((SELECT TRUE FROM conversation_members om
 		          JOIN messages orm ON orm.id = om.last_read_message_id
@@ -269,9 +272,12 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		 LEFT JOIN LATERAL (
 		        SELECT * FROM messages x WHERE x.conversation_id = c.id
 		           AND (cm.member_role = 'admin' OR x.created_at >= cm.joined_at)
+		           AND (cm.cleared_at IS NULL OR x.created_at > cm.cleared_at)
 		        ORDER BY x.created_at DESC, x.id DESC LIMIT 1) lm ON TRUE
 		 WHERE cm.user_id = $1 AND ($2::uuid IS NULL OR c.id = $2)
 		   AND ($5::boolean IS NULL OR (cm.archived_at IS NOT NULL) = $5)
+		   -- очищенный «только у меня» чат пропадает из списка до следующего сообщения; карточка (convID) доступна
+		   AND ($2::uuid IS NOT NULL OR cm.cleared_at IS NULL OR c.last_message_at > cm.cleared_at)
 		 ORDER BY cm.pinned_at DESC NULLS LAST, c.last_message_at DESC, c.id DESC
 		 LIMIT $3 OFFSET $4`,
 		userID, convID, limit, offset, archived,
@@ -345,6 +351,21 @@ func (r *conversationRepository) UpdateChatSettings(ctx context.Context, q DBTX,
 		return nil, fmt.Errorf("update chat settings: %w", err)
 	}
 	return &cs, nil
+}
+
+func (r *conversationRepository) ClearHistory(ctx context.Context, q DBTX, convID, userID uuid.UUID) error {
+	// clock_timestamp(), как у messages.created_at: граница точно отделяет уже отправленные сообщения
+	ct, err := q.Exec(ctx,
+		`UPDATE conversation_members
+		 SET cleared_at = clock_timestamp(), muted_until = NULL, archived_at = NULL, pinned_at = NULL
+		 WHERE conversation_id = $1 AND user_id = $2`, convID, userID)
+	if err != nil {
+		return fmt.Errorf("clear history: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return apperror.ErrNotMember
+	}
+	return nil
 }
 
 func (r *conversationRepository) LockChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*models.ChatSettings, error) {

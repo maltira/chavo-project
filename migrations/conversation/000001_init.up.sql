@@ -109,6 +109,8 @@ CREATE TABLE conversation_members (
     muted_until TIMESTAMPTZ,
     archived_at TIMESTAMPTZ,
     pinned_at TIMESTAMPTZ,
+    -- Личный чат удалён «только у меня»: участник не видит сообщений до этого момента (включительно).
+    cleared_at TIMESTAMPTZ,
     -- Закреплённый чат не бывает в архиве.
     CONSTRAINT conversation_members_pin_archive_check CHECK (pinned_at IS NULL OR archived_at IS NULL),
     PRIMARY KEY (conversation_id, user_id)

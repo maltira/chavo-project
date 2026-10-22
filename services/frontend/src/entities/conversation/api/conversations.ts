@@ -101,9 +101,13 @@ export function joinGroup(id: string): Promise<void> {
     return request<void>(`/conversations/${encodeURIComponent(id)}/join`, { method: 'POST' })
 }
 
-// участник выходит из группы, админ удаляет её для всех; личный чат так удалить нельзя
-export function deleteConversation(id: string): Promise<void> {
-    return request<void>(`/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
+// участник выходит из группы, админ удаляет её для всех; личный чат удаляется у себя (история скрыта,
+// чат вернётся со следующим сообщением) или forEveryone - у обоих
+export function deleteConversation(id: string, forEveryone = false): Promise<void> {
+    return request<void>(
+        `/conversations/${encodeURIComponent(id)}${forEveryone ? '?scope=all' : ''}`,
+        { method: 'DELETE' },
+    )
 }
 
 export interface CreateGroupInput {

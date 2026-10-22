@@ -71,7 +71,7 @@ type ConversationServiceClient interface {
 	// SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
 	SetGroupAvatarShape(ctx context.Context, in *SetGroupAvatarShapeRequest, opts ...grpc.CallOption) (*SetGroupAvatarShapeResponse, error)
 	ClearGroupAvatarShape(ctx context.Context, in *ClearGroupAvatarShapeRequest, opts ...grpc.CallOption) (*ClearGroupAvatarShapeResponse, error)
-	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
+	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
 	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
 	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
@@ -456,7 +456,7 @@ type ConversationServiceServer interface {
 	// SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
 	SetGroupAvatarShape(context.Context, *SetGroupAvatarShapeRequest) (*SetGroupAvatarShapeResponse, error)
 	ClearGroupAvatarShape(context.Context, *ClearGroupAvatarShapeRequest) (*ClearGroupAvatarShapeResponse, error)
-	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
+	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
 	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
 	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),

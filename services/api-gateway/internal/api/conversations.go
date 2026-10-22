@@ -90,9 +90,10 @@ func (h *Handler) updateGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, groupJSON{conversationJSON: toConversation(resp.GetConversation()), InviteToken: resp.InviteToken})
 }
 
+// deleteConversation: группа - выход или удаление админом; личный чат - у себя или ?scope=all у обоих
 func (h *Handler) deleteConversation(c *gin.Context) {
 	if _, err := h.conversations.DeleteConversation(c.Request.Context(), &conversationv1.DeleteConversationRequest{
-		ConversationId: c.Param("id"),
+		ConversationId: c.Param("id"), ForEveryone: c.Query("scope") == "all",
 	}); err != nil {
 		h.fail(c, err)
 		return

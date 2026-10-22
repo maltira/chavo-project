@@ -86,7 +86,7 @@ func TestGroupAvatarShape(t *testing.T) {
 	if _, err := e.groups.SetAvatarShape(ctx, admin, id, "circle", "#FFFFFF"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.groups.Delete(ctx, admin, id); err != nil {
+	if err := e.groups.Delete(ctx, admin, id, false); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM conversation_avatar_shapes WHERE conversation_id = $1`, id); n != 0 {

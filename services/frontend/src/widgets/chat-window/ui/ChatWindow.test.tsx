@@ -100,7 +100,10 @@ describe('ChatWindow', () => {
         expect(screen.getByText('Сегодня')).toBeInTheDocument()
         expect(screen.getAllByText('Привет! Как дела?')).toHaveLength(2) // сообщение и цитата
         expect(screen.getByText('Сообщение удалено')).toBeInTheDocument()
-        expect(screen.getByText('изменено')).toBeInTheDocument()
+        // вторая копия времени в пузыре - невидимое место под него, скринридеру не видна
+        expect(
+            screen.getAllByText('изменено').filter((el) => !el.closest('[aria-hidden="true"]')),
+        ).toHaveLength(1)
     })
 
     it('opens actions only on the right click, leaving the left click for selection', () => {

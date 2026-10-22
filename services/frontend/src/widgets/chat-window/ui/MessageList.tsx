@@ -223,6 +223,7 @@ export function MessageList({
                                         avatar={avatar}
                                         // у раскрывающейся строки отступ серии задаёт AppearRow
                                         continued={continued && !appears(message)}
+                                        tail={lastInSeries}
                                         replyTo={
                                             message.reply_to_message_id
                                                 ? byId.get(message.reply_to_message_id)

@@ -16,6 +16,8 @@ interface Props {
     avatar: 'show' | 'space' | 'none'
     // продолжение серии того же автора: ближе к сообщению над ним
     continued: boolean
+    // последнее в серии: хвостик пузыря в сторону автора
+    tail: boolean
     replyTo: Message | null | undefined
     canEdit: boolean
     canDelete: boolean
@@ -60,6 +62,7 @@ export function MessageBubble({
     showAuthor,
     avatar,
     continued,
+    tail,
     replyTo,
     canEdit,
     canDelete,
@@ -103,18 +106,15 @@ export function MessageBubble({
             .then(() => notify({ id: 'copied', icon: 'check', title: 'Текст скопирован' }))
     }
 
-    const meta = (
-        <span className={styles.meta}>
-            {mine && !deleted && !message.pending && (
-                <Icon
-                    name={read ? 'check-double' : 'check'}
-                    size={14}
-                    color="var(--color-accent)"
-                />
-            )}
+    // время, «изменено» и галочки - в правом нижнем углу пузыря, как в Telegram
+    const metaContent = (
+        <>
             {message.is_edited && !deleted && <span>изменено</span>}
             <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
-        </span>
+            {mine && !deleted && !message.pending && (
+                <Icon name={read ? 'check-double' : 'check'} size={14} color="currentColor" />
+            )}
+        </>
     )
 
     return (
@@ -129,8 +129,6 @@ export function MessageBubble({
             )}
             data-message-id={message.id}
         >
-            {mine && meta}
-
             {avatar !== 'none' && (
                 <span className={styles.avatar}>
                     {avatar === 'show' && <AuthorAvatar userId={message.sender_id} />}
@@ -141,6 +139,7 @@ export function MessageBubble({
                 <div
                     className={cn(
                         styles.bubble,
+                        tail && styles.tail,
                         deleted && styles.deleted,
                         highlighted && styles.highlighted,
                     )}
@@ -186,7 +185,13 @@ export function MessageBubble({
                     >
                         <span className={styles.text}>
                             {deleted ? 'Сообщение удалено' : message.content}
+                            {/* невидимая копия занимает место в конце последней строки:
+                                если не помещается, время уходит на новую строку */}
+                            <span className={styles.metaSpace} aria-hidden="true">
+                                {metaContent}
+                            </span>
                         </span>
+                        <span className={styles.meta}>{metaContent}</span>
                     </div>
                 </div>
 
@@ -232,8 +237,6 @@ export function MessageBubble({
                     </div>
                 )}
             </div>
-
-            {!mine && meta}
         </div>
     )
 }

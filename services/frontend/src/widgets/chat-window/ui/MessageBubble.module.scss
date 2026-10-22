@@ -1,3 +1,7 @@
+// хвостик пузыря: выступает в сторону автора у нижнего угла последнего сообщения серии
+$tail-width: 8px;
+$tail-height: 14px;
+
 .row {
     display: flex;
     align-items: flex-end;
@@ -15,7 +19,20 @@
         }
 
         & .bubble {
+            margin-right: $tail-width;
+            margin-left: 0;
             background-color: var(--color-bg-muted);
+        }
+
+        & .tail {
+            border-bottom-right-radius: 0;
+            border-bottom-left-radius: $radius-lg;
+
+            &::after {
+                right: -$tail-width;
+                left: auto;
+                transform: none;
+            }
         }
     }
 
@@ -83,15 +100,37 @@
 }
 
 .bubble {
+    position: relative;
     display: flex;
     flex-direction: column;
-    max-width: 100%;
+    max-width: calc(100% - #{$tail-width});
+    // место под хвостик есть у всех пузырей серии, чтобы они стояли ровно
+    margin-left: $tail-width;
 
     border-radius: $radius-lg;
     background-color: var(--color-bg-tertiary);
     color: var(--color-text);
 
     transition: box-shadow $transition-fast;
+
+    &.tail {
+        border-bottom-left-radius: 0;
+
+        // изгиб нарисован для чужого сообщения (хвостик влево), у своего отражается
+        &::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: -$tail-width;
+            width: $tail-width;
+            height: $tail-height;
+
+            background-color: inherit;
+            transform: scaleX(-1);
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 14'%3E%3Cpath d='M0 0C0 7 2.5 11.5 8 14H0Z'/%3E%3C/svg%3E")
+                no-repeat center / 100% 100%;
+        }
+    }
 
     // сообщение, к которому перешли по цитате
     &.highlighted {
@@ -127,7 +166,8 @@
 .body {
     @include type(main-regular);
 
-    padding: 8px 16px;
+    position: relative;
+    padding: 8px 12px 8px 16px;
     border-radius: inherit;
     user-select: text;
 
@@ -183,17 +223,31 @@
     }
 }
 
-.meta {
+// время, «изменено» и галочки в правом нижнем углу пузыря
+.meta,
+.metaSpace {
     @include type(xs-regular);
 
     display: inline-flex;
-    flex-shrink: 0;
     align-items: center;
     gap: 4px;
-    padding-bottom: 4px;
 
     color: alpha(var(--color-text), 0.6);
     white-space: nowrap;
+}
+
+.meta {
+    position: absolute;
+    right: 12px;
+    bottom: 6px;
+    user-select: none;
+}
+
+// невидимая копия той же ширины в конце текста: текст не заезжает под время
+.metaSpace {
+    visibility: hidden;
+    margin-left: 8px;
+    vertical-align: bottom;
 }
 
 .actions {

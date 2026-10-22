@@ -39,9 +39,14 @@ interface Props {
     onToggleSelect: (message: Message) => void
 }
 
+// автор для раскладки: в «Избранном» пересланное с автором стоит слева, как чужое, и серии
+// собираются по первому автору
+const authorKey = (m: Message, saved: boolean) =>
+    saved && m.is_forwarded ? `forwarded:${m.forwarded_from_user_id ?? ''}` : m.sender_id
+
 // одна серия - подряд идущие сообщения одного автора; системное серию прерывает
-const sameAuthor = (a: Message | undefined, b: Message) =>
-    !!a && !isSystem(a) && !isSystem(b) && a.sender_id === b.sender_id
+const sameAuthor = (a: Message | undefined, b: Message, saved: boolean) =>
+    !!a && !isSystem(a) && !isSystem(b) && authorKey(a, saved) === authorKey(b, saved)
 
 // насколько надо уйти от низа истории, чтобы появилась кнопка «вниз»
 const SCROLL_DOWN_THRESHOLD = 300
@@ -97,6 +102,7 @@ export function MessageList({
     const appears = (message: Message) => message.created_at > openedAt
     const isGroup = chat.conversation_type === 'group'
     const isAdmin = chat.my_role === 'admin'
+    const saved = chat.is_saved
     const byId = new Map(messages.map((m) => [m.id, m]))
 
     // старые сообщения подгружаются, когда верх истории подошёл к видимой области
@@ -218,21 +224,26 @@ export function MessageList({
             >
                 {messages.map((message, index) => {
                     const older = messages[index + 1]
-                    const mine = message.sender_id === myId
+                    const own = message.sender_id === myId
+                    // сторона пузыря: в «Избранном» пересланное с автором - слева
+                    const mine = own && !(saved && message.is_forwarded)
                     const newDay = !older || dayKey(older.created_at) !== dayKey(message.created_at)
                     // имя автора - у первого сообщения из серии подряд идущих чужих в группе
-                    const showAuthor = isGroup && !mine && (newDay || !sameAuthor(older, message))
+                    const showAuthor =
+                        isGroup && !mine && (newDay || !sameAuthor(older, message, saved))
                     // аватар - у нижнего (самого свежего) сообщения серии; у остальных - пустое место
                     // той же ширины, чтобы пузыри серии стояли ровно
                     const newer = messages[index - 1]
                     const lastInSeries =
-                        !sameAuthor(newer, message) ||
+                        !sameAuthor(newer, message, saved) ||
                         dayKey(newer!.created_at) !== dayKey(message.created_at)
-                    const avatar = isGroup && !mine ? (lastInSeries ? 'show' : 'space') : 'none'
+                    // в группе - у чужих, в «Избранном» - у пересланных от другого автора
+                    const avatar =
+                        (isGroup || saved) && !mine ? (lastInSeries ? 'show' : 'space') : 'none'
                     // продолжение серии: сверху сообщение того же автора за тот же день без разделителя -
                     // между ними отступ меньше обычного
                     const continued =
-                        !newDay && sameAuthor(older, message) && message.id !== firstUnreadId
+                        !newDay && sameAuthor(older, message, saved) && message.id !== firstUnreadId
 
                     return (
                         <Fragment key={message.local_key ?? message.id}>
@@ -256,6 +267,11 @@ export function MessageList({
                                         receipts={!chat.is_saved}
                                         showAuthor={showAuthor}
                                         avatar={avatar}
+                                        avatarUserId={
+                                            saved && message.is_forwarded
+                                                ? (message.forwarded_from_user_id ?? null)
+                                                : undefined
+                                        }
                                         // у раскрывающейся строки отступ серии задаёт AppearRow
                                         continued={continued && !appears(message)}
                                         tail={lastInSeries}
@@ -265,8 +281,8 @@ export function MessageList({
                                                 : undefined
                                         }
                                         // пересланное - чужой текст: не правится
-                                        canEdit={mine && !message.is_forwarded}
-                                        canDelete={mine || (isGroup && isAdmin)}
+                                        canEdit={own && !message.is_forwarded}
+                                        canDelete={own || (isGroup && isAdmin)}
                                         pinned={canPin ? pinnedIds.has(message.id) : null}
                                         onPin={onPin}
                                         onForward={onForward}

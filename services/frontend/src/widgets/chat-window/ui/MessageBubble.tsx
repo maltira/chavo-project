@@ -14,8 +14,11 @@ interface Props {
     // галочки прочтения у своих сообщений; в «Избранном» читать некому
     receipts: boolean
     showAuthor: boolean // имя автора над пузырём
-    // аватар автора слева (чужие сообщения в группе): show - у нижнего в серии, space - место под него
+    // аватар автора слева (чужие сообщения в группе, пересланные в «Избранном»): show - у нижнего
+    // в серии, space - место под него
     avatar: 'show' | 'space' | 'none'
+    // чей аватар: по умолчанию отправителя; у пересланного в «Избранном» - первого автора (null - скрыт)
+    avatarUserId?: string | null
     // продолжение серии того же автора: ближе к сообщению над ним
     continued: boolean
     // последнее в серии: хвостик пузыря в сторону автора
@@ -39,11 +42,14 @@ interface Props {
     onToggleSelect: (message: Message) => void
 }
 
-// аватар автора; нажатие открывает его профиль
-function AuthorAvatar({ userId }: { userId: string }) {
+// аватар автора; нажатие открывает его профиль; null - автор скрыл имя: заглушка без ссылки
+function AuthorAvatar({ userId }: { userId: string | null }) {
     const user = useUser(userId)
     const openProfile = useProfileCard((state) => state.open)
     const profile = user.data
+    if (!userId) {
+        return <UserAvatar size={32} />
+    }
     return (
         <button
             type="button"
@@ -93,6 +99,7 @@ export function MessageBubble({
     receipts,
     showAuthor,
     avatar,
+    avatarUserId,
     continued,
     tail,
     replyTo,
@@ -196,7 +203,11 @@ export function MessageBubble({
 
             {avatar !== 'none' && (
                 <span className={styles.avatar}>
-                    {avatar === 'show' && <AuthorAvatar userId={message.sender_id} />}
+                    {avatar === 'show' && (
+                        <AuthorAvatar
+                            userId={avatarUserId === undefined ? message.sender_id : avatarUserId}
+                        />
+                    )}
                 </span>
             )}
 

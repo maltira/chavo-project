@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -104,8 +106,23 @@ func (e *env) upload(method, path, token string, parts ...part) *httptest.Respon
 	return w
 }
 
+// assertStored - в хранилище ровно две версии аватарки по этому пути: маленькая и крупная (_l)
+func assertStored(t *testing.T, s *memStore, url string) {
+	t.Helper()
+	want := []string{
+		strings.TrimPrefix(url, "/media/"),
+		strings.TrimSuffix(strings.TrimPrefix(url, "/media/"), ".jpg") + "_l.jpg",
+	}
+	keys := s.keys()
+	sort.Strings(keys)
+	sort.Strings(want)
+	if !slices.Equal(keys, want) {
+		t.Fatalf("stored %v, want %v", keys, want)
+	}
+}
+
 func photo(t *testing.T) part {
-	return part{field: "file", filename: "me.png", contentType: "image/png", data: pngBytes(t, 200, 150)}
+	return part{field: "file", filename: "me.png", contentType: "image/png", data: pngBytes(t, 640, 600)}
 }
 
 func TestUploadMyAvatarReplacesTheOldFile(t *testing.T) {
@@ -118,9 +135,8 @@ func TestUploadMyAvatarReplacesTheOldFile(t *testing.T) {
 	if !avatarURLRe.MatchString(first) {
 		t.Fatalf("avatar_url: %q", first)
 	}
-	if keys := e.media.keys(); len(keys) != 1 || "/media/"+keys[0] != first {
-		t.Fatalf("stored: %v", keys)
-	}
+	// в хранилище обе версии: маленькая по пути из ответа и крупная с суффиксом _l
+	assertStored(t, e.media, first)
 
 	// замена: новый файл, прежний удалён из хранилища
 	w = e.upload(http.MethodPost, "/api/users/me/avatar", token, photo(t))
@@ -129,8 +145,17 @@ func TestUploadMyAvatarReplacesTheOldFile(t *testing.T) {
 	if second == first {
 		t.Fatal("a new upload must get a new name")
 	}
-	if keys := e.media.keys(); len(keys) != 1 || "/media/"+keys[0] != second {
-		t.Fatalf("old file must be deleted, stored: %v", keys)
+	assertStored(t, e.media, second)
+	// крупная версия отдаётся так же и по тем же правилам
+	large := strings.TrimSuffix(second, ".jpg") + "_l.jpg"
+	lr := e.do(http.MethodGet, large, "", "")
+	if lr.Code != http.StatusOK || lr.Header().Get("Content-Type") != "image/jpeg" ||
+		lr.Header().Get("X-Content-Type-Options") != "nosniff" || !bytes.HasPrefix(lr.Body.Bytes(), []byte{0xFF, 0xD8}) {
+		t.Fatalf("large: %d %v", lr.Code, lr.Header())
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(lr.Body.Bytes()))
+	if err != nil || cfg.Width != 600 {
+		t.Fatalf("large version of a 640x600 photo must be its 600px square, got %v %+v", err, cfg)
 	}
 
 	// отдача: наш JPEG и заголовки, запрещающие исполнение
@@ -170,8 +195,9 @@ func TestUploadRejectsNonImagesWhateverTheyClaim(t *testing.T) {
 		{"script", []part{{"file", "a.jpg.sh", "image/jpeg", []byte("#!/bin/sh\nrm -rf ~\n")}}, http.StatusUnsupportedMediaType, "AVATAR_TYPE_UNSUPPORTED"},
 		{"html", []part{{"file", "x.png", "image/png", []byte("<html><script>alert(1)</script></html>")}}, http.StatusUnsupportedMediaType, "AVATAR_TYPE_UNSUPPORTED"},
 		{"svg", []part{{"file", "x.svg", "image/svg+xml", []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)}}, http.StatusUnsupportedMediaType, "AVATAR_TYPE_UNSUPPORTED"},
-		{"tiny image", []part{{"file", "a.png", "image/png", pngBytes(t, 8, 8)}}, http.StatusBadRequest, "AVATAR_INVALID"},
-		{"no file field", []part{{"avatar", "a.png", "image/png", pngBytes(t, 100, 100)}}, http.StatusBadRequest, "INVALID_REQUEST"},
+		{"tiny image", []part{{"file", "a.png", "image/png", pngBytes(t, 8, 8)}}, http.StatusBadRequest, "AVATAR_TOO_SMALL"},
+		{"almost big enough", []part{{"file", "a.png", "image/png", pngBytes(t, 511, 900)}}, http.StatusBadRequest, "AVATAR_TOO_SMALL"},
+		{"no file field", []part{{"avatar", "a.png", "image/png", pngBytes(t, 600, 600)}}, http.StatusBadRequest, "INVALID_REQUEST"},
 		{"too many parts", []part{{"a", "", "text/plain", []byte("1")}, {"b", "", "text/plain", []byte("2")}, {"c", "", "text/plain", []byte("3")}, {"d", "", "text/plain", []byte("4")}, photo(t)}, http.StatusBadRequest, "INVALID_REQUEST"},
 		{"too large", []part{{"file", "big.png", "image/png", make([]byte, 2<<20)}}, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE"},
 	}
@@ -226,7 +252,11 @@ func TestServeAvatarRejectsForeignNames(t *testing.T) {
 		"/media/avatars/..%2F..%2Fetc%2Fpasswd",
 		"/media/avatars/x.jpg",
 		"/media/avatars/" + strings.Repeat("a", 32) + ".png",
-		"/media/avatars/" + strings.Repeat("a", 32) + ".jpg", // формат верный, но файла нет
+		"/media/avatars/" + strings.Repeat("a", 32) + ".jpg",   // формат верный, но файла нет
+		"/media/avatars/" + strings.Repeat("a", 32) + "_l.jpg", // крупная версия тоже по формату, но файла нет
+		"/media/avatars/" + strings.Repeat("a", 32) + "_l.png",
+		"/media/avatars/" + strings.Repeat("a", 32) + "_x.jpg",
+		"/media/avatars/" + strings.Repeat("a", 32) + "_l_l.jpg",
 	} {
 		if w := e.do(http.MethodGet, path, "", ""); w.Code != http.StatusNotFound {
 			t.Errorf("%s: %d", path, w.Code)

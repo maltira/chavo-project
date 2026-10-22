@@ -56,3 +56,26 @@ func TestNormalizeAvatarURL(t *testing.T) {
 		t.Fatalf("external: %v", err)
 	}
 }
+
+func TestLargeAvatarNames(t *testing.T) {
+	name, err := NewAvatarName()
+	if err != nil {
+		t.Fatal(err)
+	}
+	large := LargeName(name)
+	if large != strings.TrimSuffix(name, ".jpg")+"_l.jpg" {
+		t.Fatalf("large name = %q", large)
+	}
+	// отдаются обе версии, а в базу попадает только маленькая
+	if !ValidAvatarFile(name) || !ValidAvatarFile(large) || !ValidAvatarName(name) || ValidAvatarName(large) {
+		t.Fatalf("validation: %q %q", name, large)
+	}
+	if _, err := NormalizeAvatarURL(AvatarURL(large)); !errors.Is(err, ErrInvalidAvatarURL) {
+		t.Fatalf("large url must not be stored: %v", err)
+	}
+	for _, bad := range []string{"", "../x.jpg", name + "x", strings.ToUpper(large), "abc_l.jpg", large + ".png", strings.Replace(large, "_l", "_x", 1)} {
+		if ValidAvatarFile(bad) {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}

@@ -255,7 +255,7 @@ describe('GroupInfoModal', () => {
     })
 
     it('an admin uploads and removes the group photo from the settings', async () => {
-        loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+        loadImage.mockResolvedValue({ source: {}, width: 800, height: 800 })
         encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
         renderModal({ ...chat, avatar_url: '/media/avatars/old.jpg' })
         act(() => useGroupCard.getState().openChat('g1'))

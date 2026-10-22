@@ -19,18 +19,21 @@ import (
 
 const (
 	reasonAvatarInvalid     = "AVATAR_INVALID"
+	reasonAvatarTooSmall    = "AVATAR_TOO_SMALL"
 	reasonAvatarUnsupported = "AVATAR_TYPE_UNSUPPORTED"
 
 	// частей multipart больше этого - запрос отклоняется, даже если поле file нашлось бы дальше
 	maxUploadParts = 4
 	// удаление старого или откат нового объекта не должно зависеть от отменённого запроса
 	cleanupTimeout = 10 * time.Second
+	// предел отдаваемого файла: наши JPEG до 1024×1024 весят сотни килобайт
+	maxServedBytes = 4 << 20
 )
 
-// readAvatar читает файл из поля file (multipart/form-data) и перекодирует его в аватарку.
+// readAvatar читает файл из поля file (multipart/form-data) и перекодирует его в обе версии аватарки.
 // Имя файла и Content-Type части не используются: тип определяется по содержимому (media.ProcessAvatar).
 // При ошибке ответ уже записан
-func (h *Handler) readAvatar(c *gin.Context) ([]byte, bool) {
+func (h *Handler) readAvatar(c *gin.Context) (*media.Avatars, bool) {
 	mr, err := c.Request.MultipartReader()
 	if err != nil {
 		httpx.Abort(c, http.StatusBadRequest, "Ожидается файл в поле file (multipart/form-data)", httpx.ReasonInvalidRequest)
@@ -80,8 +83,11 @@ func (h *Handler) readAvatar(c *gin.Context) ([]byte, bool) {
 	case errors.Is(err, media.ErrUnsupportedType):
 		httpx.Abort(c, http.StatusUnsupportedMediaType, "Можно загрузить только фото в формате JPEG, PNG, GIF или WebP", reasonAvatarUnsupported)
 		return nil, false
+	case errors.Is(err, media.ErrImageTooSmall):
+		httpx.Abort(c, http.StatusBadRequest, "Фото слишком маленькое: каждая сторона должна быть не меньше 512 px", reasonAvatarTooSmall)
+		return nil, false
 	case errors.Is(err, media.ErrInvalidImage):
-		httpx.Abort(c, http.StatusBadRequest, "Не удалось прочитать фото: файл повреждён, слишком маленький или слишком большой", reasonAvatarInvalid)
+		httpx.Abort(c, http.StatusBadRequest, "Не удалось прочитать фото: файл повреждён или слишком большой", reasonAvatarInvalid)
 		return nil, false
 	case err != nil:
 		h.log.Error("Avatar encoding failed", zap.Error(err))
@@ -89,7 +95,8 @@ func (h *Handler) readAvatar(c *gin.Context) ([]byte, bool) {
 		return nil, false
 	}
 	// в лог - только итог и размеры, без содержимого и имени файла
-	h.log.Debug("Avatar processed", zap.Int("upload_bytes", len(data)), zap.Int("avatar_bytes", len(avatar)))
+	h.log.Debug("Avatar processed", zap.Int("upload_bytes", len(data)),
+		zap.Int("avatar_bytes", len(avatar.Small)), zap.Int("large_bytes", len(avatar.Large)))
 	return avatar, true
 }
 
@@ -102,23 +109,32 @@ func abortReadError(c *gin.Context, err error) {
 	httpx.Abort(c, http.StatusBadRequest, "Некорректный запрос с файлом", httpx.ReasonInvalidRequest)
 }
 
-// storeAvatar кладёт перекодированную аватарку в хранилище под новым случайным именем и возвращает её путь
-func (h *Handler) storeAvatar(c *gin.Context, avatar []byte) (string, bool) {
+// storeAvatar кладёт обе версии аватарки в хранилище под новым случайным именем и возвращает путь
+// маленькой: по нему же (с суффиксом _l) лежит крупная
+func (h *Handler) storeAvatar(c *gin.Context, avatar *media.Avatars) (string, bool) {
 	name, err := pmedia.NewAvatarName()
 	if err != nil {
 		h.log.Error("Avatar name generation failed", zap.Error(err))
 		httpx.Internal(c)
 		return "", false
 	}
-	if err = h.media.Put(c.Request.Context(), pmedia.AvatarKey(name), avatar, "image/jpeg"); err != nil {
-		h.log.Error("Avatar upload to storage failed", zap.Error(err))
-		httpx.Unavailable(c)
-		return "", false
+	ctx := c.Request.Context()
+	for _, f := range []struct {
+		name string
+		data []byte
+	}{{pmedia.LargeName(name), avatar.Large}, {name, avatar.Small}} {
+		if err = h.media.Put(ctx, pmedia.AvatarKey(f.name), f.data, "image/jpeg"); err != nil {
+			h.log.Error("Avatar upload to storage failed", zap.Error(err))
+			// первая версия уже лежит - не оставляем её без пары
+			h.dropAvatar(pmedia.AvatarURL(name))
+			httpx.Unavailable(c)
+			return "", false
+		}
 	}
 	return pmedia.AvatarURL(name), true
 }
 
-// dropAvatar удаляет файл прежней (или не пригодившейся) аватарки; чужие и внешние URL не трогает.
+// dropAvatar удаляет файлы прежней (или не пригодившейся) аватарки, обе версии; чужие и внешние URL не трогает.
 // Ошибка не мешает ответу: в худшем случае в хранилище остаётся ненужный файл
 func (h *Handler) dropAvatar(url string) {
 	name, ok := pmedia.AvatarNameFromURL(url)
@@ -127,8 +143,10 @@ func (h *Handler) dropAvatar(url string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 	defer cancel()
-	if err := h.media.Delete(ctx, pmedia.AvatarKey(name)); err != nil {
-		h.log.Warn("Avatar object left in storage", zap.String("key", pmedia.AvatarKey(name)), zap.Error(err))
+	for _, file := range []string{name, pmedia.LargeName(name)} {
+		if err := h.media.Delete(ctx, pmedia.AvatarKey(file)); err != nil {
+			h.log.Warn("Avatar object left in storage", zap.String("key", pmedia.AvatarKey(file)), zap.Error(err))
+		}
 	}
 }
 
@@ -219,12 +237,13 @@ func (h *Handler) deleteGroupAvatar(c *gin.Context) {
 	httpx.Success(c, http.StatusOK, "Фото удалено")
 }
 
-// serveAvatar: GET /media/avatars/:name - публичная отдача файла из приватного хранилища.
+// serveAvatar: GET /media/avatars/:name - публичная отдача файла из приватного хранилища (маленькая или
+// крупная версия, <имя>_l.jpg).
 // Имя случайное (128 бит) и выдаётся только через API с учётом блокировок. Тип ставим сами, а заголовки
 // запрещают браузеру исполнять ответ как страницу или скрипт, даже если объект оказался бы чужим
 func (h *Handler) serveAvatar(c *gin.Context) {
 	name := c.Param("name")
-	if !pmedia.ValidAvatarName(name) {
+	if !pmedia.ValidAvatarFile(name) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -248,5 +267,6 @@ func (h *Handler) serveAvatar(c *gin.Context) {
 	hdr.Set("Cross-Origin-Resource-Policy", "same-origin")
 	hdr.Set("Content-Disposition", `inline; filename="avatar.jpg"`)
 	c.Status(http.StatusOK)
-	_, _ = io.Copy(c.Writer, io.LimitReader(body, media.MaxUploadBytes))
+	// крупная версия может быть больше загруженного файла (до 1024 px без сжатия исходника): предел с запасом
+	_, _ = io.Copy(c.Writer, io.LimitReader(body, maxServedBytes))
 }

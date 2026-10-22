@@ -28,7 +28,7 @@ vi.mock('@/shared/lib', async (importOriginal) => ({
 
 // выбрать фото и подтвердить кроп
 async function pickPhoto() {
-    loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+    loadImage.mockResolvedValue({ source: {}, width: 800, height: 800 })
     encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
     const file = new File([new Uint8Array(10)], 'me.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByTestId('photo-input'), { target: { files: [file] } })

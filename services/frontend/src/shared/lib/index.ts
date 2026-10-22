@@ -8,14 +8,17 @@ export { useDebouncedValue } from './useDebounce'
 export { settleAll } from './settle'
 export { useLoadMore } from './useLoadMore'
 export {
+    AVATAR_MIN_SIDE,
     AVATAR_UPLOAD_SIZE,
     checkImageFile,
     clampCrop,
     coverScale,
     encodeSquare,
     IMAGE_ACCEPT,
+    isTooSmall,
     loadImage,
     MAX_ZOOM,
+    maxZoomFor,
     MIN_ZOOM,
     sourceRect,
     usePhotoDraft,

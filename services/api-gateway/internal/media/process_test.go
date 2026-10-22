@@ -51,8 +51,8 @@ func encodeGIF(t *testing.T, w, h int) []byte {
 	return b.Bytes()
 }
 
-// assertCleanAvatar - на выходе ровно наш JPEG 256×256 без чужих байтов
-func assertCleanAvatar(t *testing.T, out []byte) {
+// assertCleanJPEG - ровно один наш JPEG от SOI до EOI без чужих байтов; возвращает его стороны
+func assertCleanJPEG(t *testing.T, out []byte) (int, int) {
 	t.Helper()
 	if !bytes.HasPrefix(out, []byte{0xFF, 0xD8}) || !bytes.HasSuffix(out, []byte{0xFF, 0xD9}) {
 		t.Fatal("output must be a single JPEG from SOI to EOI")
@@ -62,8 +62,20 @@ func assertCleanAvatar(t *testing.T, out []byte) {
 		t.Fatal("foreign data survived re-encoding")
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(out))
-	if err != nil || format != "jpeg" || cfg.Width != AvatarSize || cfg.Height != AvatarSize {
+	if err != nil || format != "jpeg" || cfg.Width != cfg.Height {
 		t.Fatalf("output: %v %s %dx%d", err, format, cfg.Width, cfg.Height)
+	}
+	return cfg.Width, cfg.Height
+}
+
+// assertCleanAvatar - обе версии чистые: маленькая 256×256, крупная - квадрат не больше LargeAvatarSize
+func assertCleanAvatar(t *testing.T, a *Avatars) {
+	t.Helper()
+	if w, _ := assertCleanJPEG(t, a.Small); w != AvatarSize {
+		t.Fatalf("small side = %d", w)
+	}
+	if w, _ := assertCleanJPEG(t, a.Large); w > LargeAvatarSize {
+		t.Fatalf("large side = %d", w)
 	}
 }
 
@@ -73,9 +85,9 @@ func TestProcessAcceptsSupportedFormats(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string][]byte{
-		"jpeg": encodeJPEG(t, 300, 300),
-		"png":  encodePNG(t, solid(120, 90, color.RGBA{10, 20, 30, 255})),
-		"gif":  encodeGIF(t, 100, 100),
+		"jpeg": encodeJPEG(t, 600, 600),
+		"png":  encodePNG(t, solid(640, 520, color.RGBA{10, 20, 30, 255})),
+		"gif":  encodeGIF(t, 520, 520),
 		"webp": webp,
 	}
 	for name, data := range cases {
@@ -99,7 +111,7 @@ func TestProcessRejectsNonImagesDisguisedAsPhotos(t *testing.T) {
 		"pdf":               []byte("%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"),
 		"zip":               append([]byte("PK\x03\x04\x14\x00\x00\x00\x08\x00"), bytes.Repeat([]byte{1}, 64)...),
 		// исполняемый файл, внутри которого дальше лежит настоящая картинка: тип решают первые байты
-		"executable with image inside": append([]byte("\x7fELF\x02\x01\x01\x00"), encodeJPEG(t, 100, 100)...),
+		"executable with image inside": append([]byte("\x7fELF\x02\x01\x01\x00"), encodeJPEG(t, 600, 600)...),
 	}
 	for name, data := range cases {
 		if _, err := ProcessAvatar(data); !errors.Is(err, ErrUnsupportedType) {
@@ -111,9 +123,9 @@ func TestProcessRejectsNonImagesDisguisedAsPhotos(t *testing.T) {
 func TestProcessStripsAppendedPayloadFromPolyglots(t *testing.T) {
 	payload := append([]byte("\x7fELF\x02\x01\x01\x00"+payloadMarker), []byte("PK\x03\x04"+payloadMarker)...)
 	for name, img := range map[string][]byte{
-		"jpeg": encodeJPEG(t, 200, 200),
-		"png":  encodePNG(t, solid(100, 100, color.Black)),
-		"gif":  encodeGIF(t, 100, 100),
+		"jpeg": encodeJPEG(t, 600, 600),
+		"png":  encodePNG(t, solid(520, 520, color.Black)),
+		"gif":  encodeGIF(t, 520, 520),
 	} {
 		polyglot := append(append([]byte(nil), img...), payload...)
 		out, err := ProcessAvatar(polyglot)
@@ -125,7 +137,7 @@ func TestProcessStripsAppendedPayloadFromPolyglots(t *testing.T) {
 }
 
 func TestProcessDropsEXIF(t *testing.T) {
-	src := encodeJPEG(t, 100, 100)
+	src := encodeJPEG(t, 600, 600)
 	// APP1 Exif сразу после SOI: внутри - данные, которые не должны попасть в хранилище
 	body := []byte("Exif\x00\x00" + payloadMarker)
 	app1 := append([]byte{0xFF, 0xE1, byte((len(body) + 2) >> 8), byte(len(body) + 2)}, body...)
@@ -141,7 +153,7 @@ func TestProcessDropsEXIF(t *testing.T) {
 }
 
 func TestProcessRejectsBrokenAndOversized(t *testing.T) {
-	jpg := encodeJPEG(t, 100, 100)
+	jpg := encodeJPEG(t, 600, 600)
 
 	// «бомба»: в заголовке SOF0 стороны 40000×40000 - отсекается по DecodeConfig, до декодирования
 	bomb := append([]byte(nil), jpg...)
@@ -155,9 +167,8 @@ func TestProcessRejectsBrokenAndOversized(t *testing.T) {
 	cases := map[string][]byte{
 		"empty":           nil,
 		"truncated jpeg":  jpg[:len(jpg)/2],
-		"tiny image":      encodePNG(t, solid(10, 10, color.White)),
 		"decompress bomb": bomb,
-		"too large file":  append(encodeJPEG(t, 100, 100), make([]byte, MaxUploadBytes)...),
+		"too large file":  append(encodeJPEG(t, 600, 600), make([]byte, MaxUploadBytes)...),
 		"magic only":      []byte{0xFF, 0xD8, 0xFF, 0xE0, 0, 0},
 	}
 	for name, data := range cases {
@@ -169,12 +180,12 @@ func TestProcessRejectsBrokenAndOversized(t *testing.T) {
 
 func TestProcessCropsToSquareAndFlattensTransparency(t *testing.T) {
 	// прозрачная картинка 400×200 - квадрат по центру, фон белый
-	out, err := ProcessAvatar(encodePNG(t, solid(400, 200, color.RGBA{0, 0, 0, 0})))
+	out, err := ProcessAvatar(encodePNG(t, solid(900, 600, color.RGBA{0, 0, 0, 0})))
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertCleanAvatar(t, out)
-	img, err := jpeg.Decode(bytes.NewReader(out))
+	img, err := jpeg.Decode(bytes.NewReader(out.Small))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,17 +197,56 @@ func TestProcessCropsToSquareAndFlattensTransparency(t *testing.T) {
 
 func FuzzProcessAvatar(f *testing.F) {
 	var b bytes.Buffer
-	_ = jpeg.Encode(&b, solid(80, 80, color.White), nil)
+	_ = jpeg.Encode(&b, solid(520, 520, color.White), nil)
 	f.Add(b.Bytes())
 	b.Reset()
-	_ = png.Encode(&b, solid(70, 70, color.Black))
+	_ = png.Encode(&b, solid(512, 512, color.Black))
 	f.Add(b.Bytes())
 	f.Add([]byte("GIF89a"))
 	f.Add([]byte("\x7fELF"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		out, err := ProcessAvatar(data)
-		if err == nil && !bytes.HasPrefix(out, []byte{0xFF, 0xD8}) {
+		if err == nil && (!bytes.HasPrefix(out.Small, []byte{0xFF, 0xD8}) || !bytes.HasPrefix(out.Large, []byte{0xFF, 0xD8})) {
 			t.Fatal("accepted input must produce our JPEG")
 		}
 	})
+}
+
+func TestProcessLargeVersionIsNeverUpscaled(t *testing.T) {
+	cases := map[string]struct{ w, h, wantLarge int }{
+		"small photo keeps its size":    {700, 600, 600},
+		"big photo is cut to the limit": {1600, 1300, LargeAvatarSize},
+		"exactly the limit":             {LargeAvatarSize, LargeAvatarSize + 100, LargeAvatarSize},
+	}
+	for name, c := range cases {
+		out, err := ProcessAvatar(encodePNG(t, solid(c.w, c.h, color.RGBA{200, 100, 50, 255})))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		assertCleanAvatar(t, out)
+		if w, _ := assertCleanJPEG(t, out.Large); w != c.wantLarge {
+			t.Errorf("%s: large side = %d, want %d", name, w, c.wantLarge)
+		}
+	}
+}
+
+func TestProcessRejectsPhotosSmallerThanMinimum(t *testing.T) {
+	// каждая сторона не меньше MinAvatarSide: и узкая, и низкая, и совсем маленькая картинка отклоняются
+	for name, c := range map[string]struct{ w, h int }{
+		"tiny":       {10, 10},
+		"old limit":  {64, 64},
+		"just under": {MinAvatarSide - 1, MinAvatarSide - 1},
+		"narrow":     {MinAvatarSide - 1, 1000},
+		"low":        {1000, MinAvatarSide - 1},
+	} {
+		if _, err := ProcessAvatar(encodePNG(t, solid(c.w, c.h, color.White))); !errors.Is(err, ErrImageTooSmall) {
+			t.Errorf("%s (%dx%d): want ErrImageTooSmall, got %v", name, c.w, c.h, err)
+		}
+	}
+	// ровно минимум проходит
+	out, err := ProcessAvatar(encodePNG(t, solid(MinAvatarSide, MinAvatarSide, color.White)))
+	if err != nil {
+		t.Fatalf("exact minimum: %v", err)
+	}
+	assertCleanAvatar(t, out)
 }

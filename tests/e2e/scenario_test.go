@@ -226,6 +226,9 @@ func TestScenario(t *testing.T) {
 		elf := append([]byte("\x7fELF\x02\x01\x01\x00"), bytes.Repeat([]byte{0}, 128)...)
 		r = a.dev.upload(t, "/api/users/me/avatar", "photo.jpg", "image/jpeg", elf)
 		check(t, r.status == 415 && r.body["reason"] == "AVATAR_TYPE_UNSUPPORTED", "executable as avatar: %d %s", r.status, r.raw)
+		// фото меньше 512 px по любой стороне не принимается
+		r = a.dev.upload(t, "/api/users/me/avatar", "small.png", "image/png", pngPhotoSize(t, 511, 900))
+		check(t, r.status == 400 && r.body["reason"] == "AVATAR_TOO_SMALL", "small photo: %d %s", r.status, r.raw)
 		// полиглот: настоящая картинка с дописанным хвостом - хвост не сохраняется
 		marker := "E2E-PAYLOAD-" + w.run
 		r = a.dev.upload(t, "/api/users/me/avatar", "me.png", "image/png", append(pngPhoto(t), []byte("\x7fELF"+marker)...))
@@ -236,6 +239,10 @@ func TestScenario(t *testing.T) {
 		check(t, img.status == 200 && img.header.Get("Content-Type") == "image/jpeg" &&
 			img.header.Get("X-Content-Type-Options") == "nosniff" && strings.HasPrefix(img.raw, "\xff\xd8") &&
 			!strings.Contains(img.raw, marker), "served avatar: %d %v", img.status, img.header)
+		// крупная версия для просмотра на весь экран лежит рядом и отдаётся так же
+		big := a.dev.do(t, "GET", strings.TrimSuffix(avatarURL, ".jpg")+"_l.jpg", nil)
+		check(t, big.status == 200 && big.header.Get("Content-Type") == "image/jpeg" && strings.HasPrefix(big.raw, "\xff\xd8") &&
+			!strings.Contains(big.raw, marker) && len(big.raw) > len(img.raw), "large avatar: %d %v", big.status, big.header)
 		// внешний URL через PATCH больше не ставится: поле игнорируется
 		r = a.dev.do(t, "PATCH", "/api/users/me", map[string]string{"avatar_url": "https://example.com/e2e.png", "bio": "e2e"})
 		check(t, r.status == 200, "patch profile: %d %s", r.status, r.raw)

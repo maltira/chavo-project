@@ -1,4 +1,13 @@
-import { checkImageFile, clampCrop, coverScale, MAX_IMAGE_BYTES, sourceRect } from './image'
+import {
+    AVATAR_MIN_SIDE,
+    checkImageFile,
+    clampCrop,
+    coverScale,
+    isTooSmall,
+    MAX_IMAGE_BYTES,
+    maxZoomFor,
+    sourceRect,
+} from './image'
 
 const file = (type: string, size = 10) => new File([new Uint8Array(size)], 'x', { type })
 
@@ -41,8 +50,29 @@ describe('crop math', () => {
     })
 
     it('keeps zoom within bounds and shows less of the photo when zoomed', () => {
-        expect(clampCrop({ zoom: 10, x: 0, y: 0 }, W, H, V).zoom).toBe(4)
+        // большое фото: приближать можно до общего предела 4
+        expect(clampCrop({ zoom: 10, x: 0, y: 0 }, 4000, 3000, V).zoom).toBe(4)
         expect(clampCrop({ zoom: 0.1, x: 0, y: 0 }, W, H, V).zoom).toBe(1)
         expect(sourceRect({ zoom: 2, x: 0, y: 0 }, W, H, V)).toEqual({ sx: 150, sy: 50, size: 100 })
+    })
+})
+
+describe('minimum photo size', () => {
+    it('rejects a photo shorter than 512 px on any side', () => {
+        expect(AVATAR_MIN_SIDE).toBe(512)
+        expect(isTooSmall(511, 2000)).toBe(true)
+        expect(isTooSmall(2000, 511)).toBe(true)
+        expect(isTooSmall(512, 512)).toBe(false)
+    })
+
+    it('stops zooming where the crop would get smaller than 512 real pixels', () => {
+        // короткая сторона 1024: при зуме 2 кроп ровно 512, дальше сервер его не примет
+        expect(maxZoomFor(2048, 1024)).toBe(2)
+        expect(maxZoomFor(512, 512)).toBe(1)
+        // очень большое фото - общий предел
+        expect(maxZoomFor(8000, 6000)).toBe(4)
+        const crop = clampCrop({ zoom: 4, x: 0, y: 0 }, 2048, 1024, 100)
+        expect(crop.zoom).toBe(2)
+        expect(sourceRect(crop, 2048, 1024, 100).size).toBe(512)
     })
 })

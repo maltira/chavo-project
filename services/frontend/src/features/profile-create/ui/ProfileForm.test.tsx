@@ -49,7 +49,7 @@ describe('ProfileForm', () => {
         createMock.mockReset()
         uploadMyAvatar.mockReset()
         useNotifications.setState({ items: [] })
-        loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+        loadImage.mockResolvedValue({ source: {}, width: 800, height: 800 })
         encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
         URL.createObjectURL = vi.fn(() => 'blob:preview')
         URL.revokeObjectURL = vi.fn()

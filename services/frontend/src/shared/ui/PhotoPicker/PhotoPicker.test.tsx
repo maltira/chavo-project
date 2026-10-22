@@ -38,7 +38,7 @@ describe('PhotoPicker', () => {
         useNotifications.setState({ items: [] })
         loadImage.mockReset()
         encodeSquare.mockReset()
-        loadImage.mockResolvedValue({ source: {}, width: 400, height: 300 })
+        loadImage.mockResolvedValue({ source: {}, width: 2000, height: 1500 })
         encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
     })
 
@@ -75,9 +75,35 @@ describe('PhotoPicker', () => {
 
         expect(encodeSquare).toHaveBeenCalledTimes(1)
         const [, rect] = encodeSquare.mock.calls[0]!
-        // фото 400×300 в окне 280 при zoom 2: виден квадрат 150 пикселей исходника
-        expect(rect.size).toBeCloseTo(150)
+        // фото 2000×1500 при zoom 2: виден квадрат 750 пикселей исходника
+        expect(rect.size).toBeCloseTo(750)
         expect(onPick).toHaveBeenCalledWith(expect.any(Blob))
+    })
+
+    it('refuses a photo smaller than 512 px right away, with its size in the notice', async () => {
+        loadImage.mockResolvedValue({ source: {}, width: 500, height: 900 })
+        const { choose, onPick } = renderPicker()
+        choose(photo())
+        await waitFor(() =>
+            expect(useNotifications.getState().items[0]?.title).toBe('Фото слишком маленькое'),
+        )
+        expect(useNotifications.getState().items[0]?.description).toMatch(/512×512.*500×900/)
+        expect(onPick).not.toHaveBeenCalled()
+        // окно закрывается (в разметке остаётся на время анимации)
+        expect(screen.getByRole('dialog', { name: 'Фото' }).parentElement).toHaveAttribute(
+            'data-state',
+            'closed',
+        )
+    })
+
+    it('limits the zoom so that the crop never gets smaller than 512 px', async () => {
+        loadImage.mockResolvedValue({ source: {}, width: 1024, height: 768 })
+        const { choose } = renderPicker()
+        choose(photo())
+        const slider = await screen.findByRole('slider', { name: 'Масштаб' })
+        await waitFor(() => expect(slider).toBeEnabled())
+        // короткая сторона 768: больше 768 / 512 = 1,5 приближать нельзя
+        expect(Number(slider.getAttribute('max'))).toBeCloseTo(1.5)
     })
 
     it('closes with a notice when the photo cannot be decoded', async () => {

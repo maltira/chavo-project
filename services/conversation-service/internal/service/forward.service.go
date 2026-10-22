@@ -170,7 +170,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		}
 		rec := &repository.MessageRecord{
 			ConversationID: convID, SenderID: userID, ContentEnc: enc,
-			IsForwarded: !hideAuthor,
+			IsForwarded: !hideAuthor, Entities: src.rec.Entities,
 		}
 		if !hideAuthor {
 			rec.ForwardedFromUserID = src.origin
@@ -191,6 +191,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 			Kind:                models.MessageUser,
 			IsForwarded:         rec.IsForwarded,
 			ForwardedFromUserID: rec.ForwardedFromUserID,
+			Entities:            rec.Entities,
 		}); err != nil {
 			return nil, err
 		}
@@ -198,6 +199,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		res.Messages = append(res.Messages, models.Message{
 			ID: rec.ID, ConversationID: convID, SenderID: userID, Content: &content, Kind: models.MessageUser,
 			CreatedAt: rec.CreatedAt, IsForwarded: rec.IsForwarded, ForwardedFromUserID: rec.ForwardedFromUserID,
+			Entities: rec.Entities,
 		})
 	}
 	return res, nil

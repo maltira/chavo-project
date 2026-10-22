@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/models"
 )
 
 // MemberIDs нужны Gateway, чтобы определить получателей.
@@ -33,6 +35,8 @@ type MessageCreatedPayload struct {
 	// пересланная копия: первый автор, null - автор скрыл имя
 	IsForwarded         bool       `json:"is_forwarded,omitempty"`
 	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id,omitempty"`
+	// форматирование текста
+	Entities []models.Entity `json:"entities,omitempty"`
 }
 
 type MessageUpdatedPayload struct {
@@ -43,6 +47,8 @@ type MessageUpdatedPayload struct {
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 	ContentEnc     []byte      `json:"content_enc,omitempty"`
 	Content        *string     `json:"content,omitempty"`
+	// новое форматирование целиком; пусто - без форматирования
+	Entities []models.Entity `json:"entities"`
 }
 
 type MessageDeletedPayload struct {

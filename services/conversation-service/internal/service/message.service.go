@@ -23,12 +23,15 @@ type SendMessageInput struct {
 	RecipientID      *uuid.UUID
 	Content          string
 	ReplyToMessageID *uuid.UUID
+	// Entities - форматирование текста; смещения в единицах UTF-16
+	Entities []models.Entity
 }
 
 type MessageService interface {
 	Send(ctx context.Context, senderID uuid.UUID, in SendMessageInput) (*models.Message, error)
 	List(ctx context.Context, userID, convID uuid.UUID, before *uuid.UUID, limit int) ([]models.Message, error)
-	Edit(ctx context.Context, userID, messageID uuid.UUID, content string) (*models.Message, error)
+	// Edit заменяет текст и форматирование целиком
+	Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error)
 	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
@@ -108,6 +111,7 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 
 		IsForwarded:         rec.IsForwarded,
 		ForwardedFromUserID: rec.ForwardedFromUserID,
+		Entities:            rec.Entities,
 	}
 	if m.Kind == "" {
 		m.Kind = models.MessageUser
@@ -129,6 +133,10 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		return nil, apperror.ErrIncorrectData
 	}
 	if err := validateContent(in.Content); err != nil {
+		return nil, err
+	}
+	entities, err := normalizeEntities(in.Content, in.Entities)
+	if err != nil {
 		return nil, err
 	}
 
@@ -188,6 +196,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			SenderID:         senderID,
 			ContentEnc:       enc,
 			ReplyToMessageID: in.ReplyToMessageID,
+			Entities:         entities,
 		}
 		if err = s.msgs.Create(ctx, tx, rec); err != nil {
 			return err
@@ -209,6 +218,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			MemberIDs:        memberIDs,
 			ContentEnc:       enc,
 			Kind:             models.MessageUser,
+			Entities:         entities,
 		}); err != nil {
 			return err
 		}
@@ -216,7 +226,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		content := in.Content
 		result = &models.Message{
 			ID: rec.ID, ConversationID: convID, SenderID: senderID, Content: &content, Kind: models.MessageUser,
-			ReplyToMessageID: in.ReplyToMessageID, CreatedAt: rec.CreatedAt,
+			ReplyToMessageID: in.ReplyToMessageID, CreatedAt: rec.CreatedAt, Entities: entities,
 		}
 		return nil
 	})
@@ -286,8 +296,12 @@ func (s *messageService) List(ctx context.Context, userID, convID uuid.UUID, bef
 	return items, nil
 }
 
-func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, content string) (*models.Message, error) {
+func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error) {
 	if err := validateContent(content); err != nil {
+		return nil, err
+	}
+	entities, err := normalizeEntities(content, entities)
+	if err != nil {
 		return nil, err
 	}
 	enc, err := s.cipher.Encrypt([]byte(content))
@@ -315,7 +329,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			return apperror.ErrMessageDeleted
 		}
 
-		updatedAt, err := s.msgs.Update(ctx, tx, messageID, enc)
+		updatedAt, err := s.msgs.Update(ctx, tx, messageID, enc, entities)
 		if err != nil {
 			return err
 		}
@@ -330,6 +344,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			UpdatedAt:      *updatedAt,
 			MemberIDs:      memberIDs,
 			ContentEnc:     enc,
+			Entities:       entities,
 		}); err != nil {
 			return err
 		}
@@ -337,6 +352,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 		result = &models.Message{
 			ID: rec.ID, ConversationID: rec.ConversationID, SenderID: rec.SenderID, Content: &content,
 			ReplyToMessageID: rec.ReplyToMessageID, IsEdited: true, CreatedAt: rec.CreatedAt, UpdatedAt: updatedAt,
+			Entities: entities,
 		}
 		return nil
 	})

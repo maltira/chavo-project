@@ -519,6 +519,14 @@ func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.S
 	}
 	return &conversationv1.SendMessageResponse{Message: &conversationv1.Message{
 		Id: uuid.NewString(), ConversationId: req.GetConversationId(), Content: &req.Content, CreatedAt: timestamppb.Now(),
+		Entities: req.GetEntities(),
+	}}, nil
+}
+
+// EditMessage отвечает присланной разметкой, как будто сервис её принял
+func (f *fakeConversations) EditMessage(_ context.Context, req *conversationv1.EditMessageRequest) (*conversationv1.EditMessageResponse, error) {
+	return &conversationv1.EditMessageResponse{Message: &conversationv1.Message{
+		Id: req.GetMessageId(), Content: &req.Content, CreatedAt: timestamppb.Now(), IsEdited: true, Entities: req.GetEntities(),
 	}}, nil
 }
 
@@ -1212,5 +1220,32 @@ func TestFavoriteEmojisSettings(t *testing.T) {
 	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"favorite_emojis":[]}`)
 	if list, ok := decode(t, w)["favorite_emojis"].([]any); !ok || len(list) != 0 {
 		t.Fatalf("cleared: %s", w.Body.String())
+	}
+}
+
+func TestMessageEntitiesPassThrough(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv := uuid.NewString()
+
+	// отправка: разметка уходит в сервис и возвращается в ответе
+	w := e.do(http.MethodPost, "/api/messages", tok,
+		`{"conversation_id":"`+conv+`","content":"привет мир","entities":[{"type":"bold","offset":0,"length":6},{"type":"underline","offset":7,"length":3}]}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("send: %d %s", w.Code, w.Body.String())
+	}
+	got, _ := decode(t, w)["entities"].([]any)
+	if len(got) != 2 || got[0].(map[string]any)["type"] != "bold" || got[1].(map[string]any)["offset"] != float64(7) {
+		t.Fatalf("entities: %v", got)
+	}
+	// без разметки - пустой список, а не null
+	w = e.do(http.MethodPost, "/api/messages", tok, `{"conversation_id":"`+conv+`","content":"просто"}`)
+	if list, ok := decode(t, w)["entities"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("plain entities: %s", w.Body.String())
+	}
+	// правка
+	w = e.do(http.MethodPatch, "/api/messages/"+uuid.NewString(), tok, `{"content":"новый","entities":[{"type":"italic","offset":0,"length":5}]}`)
+	if list, _ := decode(t, w)["entities"].([]any); w.Code != http.StatusOK || len(list) != 1 {
+		t.Fatalf("edit: %d %s", w.Code, w.Body.String())
 	}
 }

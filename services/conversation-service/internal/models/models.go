@@ -92,6 +92,22 @@ type Message struct {
 	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор, nil - автор скрыл имя
 	IsForwarded         bool       `json:"is_forwarded"`
 	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id"`
+	// Entities - форматирование текста; пусто - обычный текст
+	Entities []Entity `json:"entities"`
+}
+
+// виды форматирования текста
+const (
+	EntityBold      = "bold"
+	EntityItalic    = "italic"
+	EntityUnderline = "underline"
+)
+
+// Entity - форматированный фрагмент текста; Offset и Length в единицах UTF-16 (как индексы строки JS)
+type Entity struct {
+	Type   string `json:"type"`
+	Offset int    `json:"offset"`
+	Length int    `json:"length"`
 }
 
 // Закреп сообщения: для всех участников или только для себя (личный чат)

@@ -223,10 +223,10 @@ func TestMessageLifecycle(t *testing.T) {
 	}
 
 	// Edit: только автор.
-	if _, err = e.msgs.Edit(ctx, b, m1.ID, "чужое"); !errors.Is(err, apperror.ErrForbidden) {
+	if _, err = e.msgs.Edit(ctx, b, m1.ID, "чужое", nil); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("edit by non-author: %v", err)
 	}
-	edited, err := e.msgs.Edit(ctx, a, m1.ID, "исправлено")
+	edited, err := e.msgs.Edit(ctx, a, m1.ID, "исправлено", nil)
 	if err != nil || !edited.IsEdited || *edited.Content != "исправлено" {
 		t.Fatalf("edit: %+v %v", edited, err)
 	}
@@ -250,7 +250,7 @@ func TestMessageLifecycle(t *testing.T) {
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->'payload'->>'message_id' = $1 AND payload->'payload'->>'content_enc' IS NOT NULL`, m1.ID.String()); n == 0 {
 		t.Fatal("scrub must not touch other messages")
 	}
-	if _, err = e.msgs.Edit(ctx, b, m2.ID, "x"); !errors.Is(err, apperror.ErrMessageDeleted) {
+	if _, err = e.msgs.Edit(ctx, b, m2.ID, "x", nil); !errors.Is(err, apperror.ErrMessageDeleted) {
 		t.Fatalf("edit deleted: %v", err)
 	}
 

@@ -74,6 +74,9 @@ CREATE TABLE messages (
     -- копия, пересланная «без указания автора», - обычное сообщение (is_forwarded = FALSE)
     is_forwarded BOOLEAN NOT NULL DEFAULT FALSE,
     forwarded_from_user_id UUID,
+    -- форматирование текста: [{"type": "bold|italic|underline", "offset": N, "length": N}], смещения в
+    -- единицах UTF-16 (как строки JS в клиенте). Это только разметка текста, самого текста тут нет
+    entities JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
     updated_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
@@ -82,6 +85,7 @@ CREATE TABLE messages (
         OR content_enc IS NOT NULL
         OR kind = 'system'
     ),
+    CONSTRAINT messages_entities_check CHECK (entities IS NULL OR jsonb_typeof(entities) = 'array'),
     CONSTRAINT messages_forward_check CHECK (
         (is_forwarded OR forwarded_from_user_id IS NULL)
         AND (kind = 'user' OR NOT is_forwarded)

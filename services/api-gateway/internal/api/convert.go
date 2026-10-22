@@ -175,6 +175,30 @@ type messageJSON struct {
 	// пересланная копия; forwarded_from_user_id - первый автор, null - автор скрыл имя
 	IsForwarded         bool    `json:"is_forwarded"`
 	ForwardedFromUserID *string `json:"forwarded_from_user_id"`
+	// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
+	Entities []entityJSON `json:"entities"`
+}
+
+type entityJSON struct {
+	Type   string `json:"type"`
+	Offset int32  `json:"offset"`
+	Length int32  `json:"length"`
+}
+
+func toEntities(in []*conversationv1.MessageEntity) []entityJSON {
+	out := make([]entityJSON, len(in))
+	for i, e := range in {
+		out[i] = entityJSON{Type: e.GetType(), Offset: e.GetOffset(), Length: e.GetLength()}
+	}
+	return out
+}
+
+func fromEntities(in []entityJSON) []*conversationv1.MessageEntity {
+	out := make([]*conversationv1.MessageEntity, len(in))
+	for i, e := range in {
+		out[i] = &conversationv1.MessageEntity{Type: e.Type, Offset: e.Offset, Length: e.Length}
+	}
+	return out
 }
 
 func toMessage(m *conversationv1.Message) *messageJSON {
@@ -197,6 +221,7 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 
 		IsForwarded:         m.GetIsForwarded(),
 		ForwardedFromUserID: m.ForwardedFromUserId,
+		Entities:            toEntities(m.GetEntities()),
 	}
 }
 

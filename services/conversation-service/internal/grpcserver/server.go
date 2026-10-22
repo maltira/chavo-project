@@ -410,6 +410,7 @@ func (s *Server) SendMessage(ctx context.Context, req *conversationv1.SendMessag
 		RecipientID:      recipient,
 		Content:          req.GetContent(),
 		ReplyToMessageID: reply,
+		Entities:         fromEntities(req.GetEntities()),
 	})
 	if err != nil {
 		return nil, err
@@ -471,7 +472,7 @@ func (s *Server) EditMessage(ctx context.Context, req *conversationv1.EditMessag
 	if err != nil {
 		return nil, err
 	}
-	msg, err := s.msgs.Edit(ctx, user, msgID, req.GetContent())
+	msg, err := s.msgs.Edit(ctx, user, msgID, req.GetContent(), fromEntities(req.GetEntities()))
 	if err != nil {
 		return nil, err
 	}

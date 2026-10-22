@@ -74,7 +74,7 @@ func TestForwardCopies(t *testing.T) {
 		WHERE a.id = $1 AND b.id <> a.id`, msgs[1].ID); n != 0 {
 		t.Fatal("copy shares ciphertext with the original")
 	}
-	if _, err = e.msgs.Edit(ctx, author, msgs[1].ID, "исправлено"); err != nil {
+	if _, err = e.msgs.Edit(ctx, author, msgs[1].ID, "исправлено", nil); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.msgs.Delete(ctx, author, msgs[0].ID); err != nil {
@@ -86,7 +86,7 @@ func TestForwardCopies(t *testing.T) {
 	}
 
 	// пересланное нельзя править; удалить своё - можно
-	if _, err = e.msgs.Edit(ctx, me, fwd.ID, "моё"); !errors.Is(err, apperror.ErrForbidden) {
+	if _, err = e.msgs.Edit(ctx, me, fwd.ID, "моё", nil); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("edit forwarded: %v", err)
 	}
 

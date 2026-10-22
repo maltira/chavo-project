@@ -114,6 +114,16 @@ message Message {
   // пересланная копия; forwarded_from_user_id - первый автор, без него - автор скрыл имя
   bool is_forwarded = 13;
   optional string forwarded_from_user_id = 14;
+  // форматирование текста
+  repeated MessageEntity entities = 15;
+}
+
+// MessageEntity - форматированный фрагмент текста: type bold, italic или underline; offset и length в единицах
+// UTF-16 (как индексы строки JS)
+message MessageEntity {
+  string type = 1;
+  int32 offset = 2;
+  int32 length = 3;
 }
 
 message ConversationSummary {
@@ -466,6 +476,7 @@ message SendMessageRequest {
   optional string recipient_id = 2;
   string content = 3;
   optional string reply_to_message_id = 4;
+  repeated MessageEntity entities = 5;
 }
 message SendMessageResponse {
   Message message = 1;
@@ -492,6 +503,8 @@ message ListMessagesResponse {
 message EditMessageRequest {
   string message_id = 1;
   string content = 2;
+  // новая разметка целиком; пусто - без форматирования
+  repeated MessageEntity entities = 3;
 }
 message EditMessageResponse {
   Message message = 1;

@@ -151,7 +151,24 @@ func toMessage(m *models.Message) *conversationv1.Message {
 		TargetId:            optStr(m.TargetID),
 		IsForwarded:         m.IsForwarded,
 		ForwardedFromUserId: optStr(m.ForwardedFromUserID),
+		Entities:            toEntities(m.Entities),
 	}
+}
+
+func toEntities(in []models.Entity) []*conversationv1.MessageEntity {
+	out := make([]*conversationv1.MessageEntity, len(in))
+	for i, e := range in {
+		out[i] = &conversationv1.MessageEntity{Type: e.Type, Offset: int32(e.Offset), Length: int32(e.Length)}
+	}
+	return out
+}
+
+func fromEntities(in []*conversationv1.MessageEntity) []models.Entity {
+	out := make([]models.Entity, len(in))
+	for i, e := range in {
+		out[i] = models.Entity{Type: e.GetType(), Offset: int(e.GetOffset()), Length: int(e.GetLength())}
+	}
+	return out
 }
 
 func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummary {

@@ -24,6 +24,8 @@ type MessageRecord struct {
 	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор (nil - скрыл имя)
 	IsForwarded         bool
 	ForwardedFromUserID *uuid.UUID
+	// Entities - форматирование текста (nil - обычный текст)
+	Entities []models.Entity
 	// Kind - user или system; у системного нет текста, есть SystemEvent и TargetID
 	Kind        string
 	SystemEvent *string
@@ -43,7 +45,7 @@ type MessageRepository interface {
 	FindVisible(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
 	// FindForViewer — как FindVisible, но также отдаёт сообщение, на которое отвечает видимое участнику сообщение.
 	FindForViewer(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
-	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte) (*time.Time, error)
+	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte, entities []models.Entity) (*time.Time, error)
 	SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error)
 	SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (moved bool, prev *uuid.UUID, err error)
 	// AuthorsBetween возвращает авторов неудалённых сообщений в (after, upTo], кроме exclude; after == nil — с начала чата.
@@ -64,17 +66,17 @@ const visibleToMember = `((cm.member_role = 'admin' OR m.created_at >= cm.joined
 
 const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
 	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at,
-	m.is_forwarded, m.forwarded_from_user_id`
+	m.is_forwarded, m.forwarded_from_user_id, m.entities`
 
 const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited,
 	kind, system_event, target_id, created_at, updated_at, deleted_at,
-	is_forwarded, forwarded_from_user_id`
+	is_forwarded, forwarded_from_user_id, entities`
 
 // messageDest - поля для Scan в порядке messageColumns
 func messageDest(m *MessageRecord) []any {
 	return []any{&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
 		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
-		&m.IsForwarded, &m.ForwardedFromUserID}
+		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities}
 }
 
 func scanMessage(row pgx.Row) (*MessageRecord, error) {
@@ -85,15 +87,23 @@ func scanMessage(row pgx.Row) (*MessageRecord, error) {
 	return &m, nil
 }
 
+// entitiesArg: без форматирования в колонку пишется NULL, а не пустой массив
+func entitiesArg(entities []models.Entity) any {
+	if len(entities) == 0 {
+		return nil
+	}
+	return entities
+}
+
 func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageRecord) error {
 	// clock_timestamp(), а не NOW(): порядок сообщений должен отражать момент вставки, а не начало транзакции.
 	err := q.QueryRow(ctx,
 		`INSERT INTO messages (conversation_id, sender_id, content_enc, reply_to_message_id,
-		                       is_forwarded, forwarded_from_user_id, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, clock_timestamp())
+		                       is_forwarded, forwarded_from_user_id, entities, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp())
 		 RETURNING id, created_at`,
 		rec.ConversationID, rec.SenderID, rec.ContentEnc, rec.ReplyToMessageID,
-		rec.IsForwarded, rec.ForwardedFromUserID,
+		rec.IsForwarded, rec.ForwardedFromUserID, entitiesArg(rec.Entities),
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create message: %w", err)
@@ -194,13 +204,13 @@ func (r *messageRepository) FindForViewer(ctx context.Context, q DBTX, id, userI
 }
 
 // Update меняет содержимое неудалённого сообщения; ErrMessageDeleted, если оно удалено.
-func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte) (*time.Time, error) {
+func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte, entities []models.Entity) (*time.Time, error) {
 	var updatedAt time.Time
 	err := q.QueryRow(ctx,
-		`UPDATE messages SET content_enc = $2, is_edited = TRUE, updated_at = clock_timestamp()
+		`UPDATE messages SET content_enc = $2, entities = $3, is_edited = TRUE, updated_at = clock_timestamp()
 		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'
 		 RETURNING updated_at`,
-		id, contentEnc,
+		id, contentEnc, entitiesArg(entities),
 	).Scan(&updatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

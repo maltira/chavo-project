@@ -30,13 +30,15 @@ func (h *Handler) sendMessage(c *gin.Context) {
 		RecipientID      *string `json:"recipient_id"`
 		Content          string  `json:"content"`
 		ReplyToMessageID *string `json:"reply_to_message_id"`
+		// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
+		Entities []entityJSON `json:"entities"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.SendMessage(c.Request.Context(), &conversationv1.SendMessageRequest{
 		ConversationId: body.ConversationID, RecipientId: body.RecipientID,
-		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID,
+		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID, Entities: fromEntities(body.Entities),
 	})
 	if err != nil {
 		h.fail(c, err)
@@ -88,12 +90,14 @@ func (h *Handler) getMessage(c *gin.Context) {
 func (h *Handler) editMessage(c *gin.Context) {
 	var body struct {
 		Content string `json:"content"`
+		// новое форматирование целиком; нет - без форматирования
+		Entities []entityJSON `json:"entities"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.EditMessage(c.Request.Context(), &conversationv1.EditMessageRequest{
-		MessageId: c.Param("message_id"), Content: body.Content,
+		MessageId: c.Param("message_id"), Content: body.Content, Entities: fromEntities(body.Entities),
 	})
 	if err != nil {
 		h.fail(c, err)

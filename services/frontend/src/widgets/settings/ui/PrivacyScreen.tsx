@@ -10,13 +10,14 @@ import { Button, SkeletonRow } from '@/shared/ui'
 import styles from './PrivacyScreen.module.scss'
 import common from './SettingsModal.module.scss'
 
-// конфиденциальность: кто зовёт в группы и кто видит, что я в сети
+// конфиденциальность: кто зовёт в группы, кто видит, что я в сети, и чьё имя видно при пересылке
 export function PrivacyScreen({ onSaved }: { onSaved: () => void }) {
     const settings = useSettings()
 
     if (!settings.data) {
         return (
             <div className={common.body}>
+                <SkeletonRow />
                 <SkeletonRow />
                 <SkeletonRow />
             </div>
@@ -29,11 +30,20 @@ function PrivacyForm({ initial, onSaved }: { initial: Settings; onSaved: () => v
     const queryClient = useQueryClient()
     const [invites, setInvites] = useState(initial.allow_group_invites)
     const [online, setOnline] = useState(initial.show_online_status)
-    const changed = invites !== initial.allow_group_invites || online !== initial.show_online_status
+    // «Все» - имя видно, «Никто» - в пересланных «скрытый автор»
+    const [forwardName, setForwardName] = useState(!initial.hide_forward_author)
+    const changed =
+        invites !== initial.allow_group_invites ||
+        online !== initial.show_online_status ||
+        forwardName === initial.hide_forward_author
 
     const save = useMutation({
         mutationFn: () =>
-            updateSettings({ allow_group_invites: invites, show_online_status: online }),
+            updateSettings({
+                allow_group_invites: invites,
+                show_online_status: online,
+                hide_forward_author: !forwardName,
+            }),
         onSuccess: (saved) => {
             queryClient.setQueryData(settingsKey, saved)
             // от show_online_status зависят мои online и last_seen_at в профиле
@@ -58,9 +68,15 @@ function PrivacyForm({ initial, onSaved }: { initial: Settings; onSaved: () => v
                     value={online}
                     onChange={setOnline}
                 />
+                <Choice
+                    question="Кто видит моё имя при пересылке?"
+                    value={forwardName}
+                    onChange={setForwardName}
+                />
             </div>
             <p className={common.hint}>
-                Если скрыть статус в сети, другие не увидят, когда вы были онлайн.
+                Если скрыть статус в сети, другие не увидят, когда вы были онлайн. Если скрыть имя
+                при пересылке, ваши сообщения будут пересылаться от «скрытого автора».
             </p>
 
             <Button

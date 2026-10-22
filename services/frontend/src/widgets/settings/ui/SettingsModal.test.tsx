@@ -42,7 +42,11 @@ function renderSettings() {
         ],
     )
     client.setQueryData(['blocked'], { pages: [blockedPage], pageParams: [0] })
-    client.setQueryData(['settings'], { allow_group_invites: true, show_online_status: true })
+    client.setQueryData(['settings'], {
+        allow_group_invites: true,
+        show_online_status: true,
+        hide_forward_author: false,
+    })
     render(
         <QueryClientProvider client={client}>
             <MemoryRouter>
@@ -97,6 +101,11 @@ describe('SettingsModal', () => {
         const save = screen.getByRole('button', { name: 'Сохранить изменения' })
         expect(save).toBeDisabled()
         fireEvent.click(screen.getByRole('button', { name: /Кто может добавлять меня/ }))
+        // имя при пересылке: «Все» -> «Никто» скрывает его
+        const forwardName = screen.getByRole('button', { name: /Кто видит моё имя при пересылке/ })
+        expect(forwardName).toHaveTextContent('Все')
+        fireEvent.click(forwardName)
+        expect(forwardName).toHaveTextContent('Никто')
         fireEvent.click(save)
         await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
         const [url, init] = fetchMock.mock.calls[0]!
@@ -104,6 +113,7 @@ describe('SettingsModal', () => {
         expect(JSON.parse(init.body as string)).toEqual({
             allow_group_invites: false,
             show_online_status: true,
+            hide_forward_author: true,
         })
     })
 

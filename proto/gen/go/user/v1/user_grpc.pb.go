@@ -661,11 +661,12 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	UserInternalService_MessagingAllowed_FullMethodName   = "/user.v1.UserInternalService/MessagingAllowed"
-	UserInternalService_UserExists_FullMethodName         = "/user.v1.UserInternalService/UserExists"
-	UserInternalService_GroupInviteAllowed_FullMethodName = "/user.v1.UserInternalService/GroupInviteAllowed"
-	UserInternalService_PresenceVisible_FullMethodName    = "/user.v1.UserInternalService/PresenceVisible"
-	UserInternalService_BlockedIDs_FullMethodName         = "/user.v1.UserInternalService/BlockedIDs"
+	UserInternalService_MessagingAllowed_FullMethodName     = "/user.v1.UserInternalService/MessagingAllowed"
+	UserInternalService_UserExists_FullMethodName           = "/user.v1.UserInternalService/UserExists"
+	UserInternalService_GroupInviteAllowed_FullMethodName   = "/user.v1.UserInternalService/GroupInviteAllowed"
+	UserInternalService_PresenceVisible_FullMethodName      = "/user.v1.UserInternalService/PresenceVisible"
+	UserInternalService_BlockedIDs_FullMethodName           = "/user.v1.UserInternalService/BlockedIDs"
+	UserInternalService_ForwardAuthorsHidden_FullMethodName = "/user.v1.UserInternalService/ForwardAuthorsHidden"
 )
 
 // UserInternalServiceClient is the client API for UserInternalService service.
@@ -681,6 +682,8 @@ type UserInternalServiceClient interface {
 	PresenceVisible(ctx context.Context, in *PresenceVisibleRequest, opts ...grpc.CallOption) (*PresenceVisibleResponse, error)
 	// BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
 	BlockedIDs(ctx context.Context, in *BlockedIDsRequest, opts ...grpc.CallOption) (*BlockedIDsResponse, error)
+	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
+	ForwardAuthorsHidden(ctx context.Context, in *ForwardAuthorsHiddenRequest, opts ...grpc.CallOption) (*ForwardAuthorsHiddenResponse, error)
 }
 
 type userInternalServiceClient struct {
@@ -741,6 +744,16 @@ func (c *userInternalServiceClient) BlockedIDs(ctx context.Context, in *BlockedI
 	return out, nil
 }
 
+func (c *userInternalServiceClient) ForwardAuthorsHidden(ctx context.Context, in *ForwardAuthorsHiddenRequest, opts ...grpc.CallOption) (*ForwardAuthorsHiddenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForwardAuthorsHiddenResponse)
+	err := c.cc.Invoke(ctx, UserInternalService_ForwardAuthorsHidden_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserInternalServiceServer is the server API for UserInternalService service.
 // All implementations must embed UnimplementedUserInternalServiceServer
 // for forward compatibility.
@@ -754,6 +767,8 @@ type UserInternalServiceServer interface {
 	PresenceVisible(context.Context, *PresenceVisibleRequest) (*PresenceVisibleResponse, error)
 	// BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
 	BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error)
+	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
+	ForwardAuthorsHidden(context.Context, *ForwardAuthorsHiddenRequest) (*ForwardAuthorsHiddenResponse, error)
 	mustEmbedUnimplementedUserInternalServiceServer()
 }
 
@@ -778,6 +793,9 @@ func (UnimplementedUserInternalServiceServer) PresenceVisible(context.Context, *
 }
 func (UnimplementedUserInternalServiceServer) BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BlockedIDs not implemented")
+}
+func (UnimplementedUserInternalServiceServer) ForwardAuthorsHidden(context.Context, *ForwardAuthorsHiddenRequest) (*ForwardAuthorsHiddenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForwardAuthorsHidden not implemented")
 }
 func (UnimplementedUserInternalServiceServer) mustEmbedUnimplementedUserInternalServiceServer() {}
 func (UnimplementedUserInternalServiceServer) testEmbeddedByValue()                             {}
@@ -890,6 +908,24 @@ func _UserInternalService_BlockedIDs_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserInternalService_ForwardAuthorsHidden_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForwardAuthorsHiddenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserInternalServiceServer).ForwardAuthorsHidden(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserInternalService_ForwardAuthorsHidden_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserInternalServiceServer).ForwardAuthorsHidden(ctx, req.(*ForwardAuthorsHiddenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserInternalService_ServiceDesc is the grpc.ServiceDesc for UserInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -916,6 +952,10 @@ var UserInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BlockedIDs",
 			Handler:    _UserInternalService_BlockedIDs_Handler,
+		},
+		{
+			MethodName: "ForwardAuthorsHidden",
+			Handler:    _UserInternalService_ForwardAuthorsHidden_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

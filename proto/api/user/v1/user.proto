@@ -42,6 +42,8 @@ service UserInternalService {
   rpc PresenceVisible(PresenceVisibleRequest) returns (PresenceVisibleResponse);
   // BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
   rpc BlockedIDs(BlockedIDsRequest) returns (BlockedIDsResponse);
+  // ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
+  rpc ForwardAuthorsHidden(ForwardAuthorsHiddenRequest) returns (ForwardAuthorsHiddenResponse);
 }
 
 message Profile {
@@ -67,6 +69,8 @@ message Settings {
   bool show_online_status = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
+  // при пересылке моих сообщений вместо имени - «скрытый автор»
+  bool hide_forward_author = 6;
 }
 
 message BlockedEntry {
@@ -150,8 +154,16 @@ message GetSettingsResponse {
 message UpdateSettingsRequest {
   optional bool allow_group_invites = 1;
   optional bool show_online_status = 2;
+  optional bool hide_forward_author = 3;
 }
 message UpdateSettingsResponse {}
+
+message ForwardAuthorsHiddenRequest {
+  repeated string user_ids = 1;
+}
+message ForwardAuthorsHiddenResponse {
+  repeated string hidden_user_ids = 1;
+}
 
 message MessagingAllowedRequest {
   string sender_id = 1;

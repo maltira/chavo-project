@@ -14,6 +14,7 @@ type SettingsService interface {
 	GetSettings(ctx context.Context, userID uuid.UUID) (*models.Settings, error)
 	UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error
 	ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	ForwardAuthorsHidden(ctx context.Context, userIDs []uuid.UUID) ([]uuid.UUID, error)
 }
 
 type settingsService struct {
@@ -39,6 +40,10 @@ func (s *settingsService) UpdateSettings(ctx context.Context, userID uuid.UUID, 
 		updates["show_online_status"] = v
 	}
 
+	if v, ok := data["hide_forward_author"]; ok {
+		updates["hide_forward_author"] = v
+	}
+
 	if len(updates) == 0 {
 		return apperror.ErrNoColumnsToUpdate
 	}
@@ -48,4 +53,8 @@ func (s *settingsService) UpdateSettings(ctx context.Context, userID uuid.UUID, 
 
 func (s *settingsService) ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	return s.repo.ShowOnlineStatus(ctx, userIDs)
+}
+
+func (s *settingsService) ForwardAuthorsHidden(ctx context.Context, userIDs []uuid.UUID) ([]uuid.UUID, error) {
+	return s.repo.ForwardAuthorsHidden(ctx, userIDs)
 }

@@ -81,6 +81,7 @@ type settingsJSON struct {
 	UserID            string    `json:"user_id"`
 	AllowGroupInvites bool      `json:"allow_group_invites"`
 	ShowOnlineStatus  bool      `json:"show_online_status"`
+	HideForwardAuthor bool      `json:"hide_forward_author"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -90,6 +91,7 @@ func toSettings(s *userv1.Settings) settingsJSON {
 		UserID:            s.GetUserId(),
 		AllowGroupInvites: s.GetAllowGroupInvites(),
 		ShowOnlineStatus:  s.GetShowOnlineStatus(),
+		HideForwardAuthor: s.GetHideForwardAuthor(),
 		CreatedAt:         s.GetCreatedAt().AsTime(),
 		UpdatedAt:         s.GetUpdatedAt().AsTime(),
 	}

@@ -139,6 +139,7 @@ type fakeUsers struct {
 	profiles    map[string]bool
 	avatars     map[string]string
 	existsCalls atomic.Int32
+	hideForward bool
 }
 
 func (u *fakeUsers) has(id string) bool {
@@ -208,6 +209,24 @@ func (u *fakeUsers) ClearAvatarShape(context.Context, *userv1.ClearAvatarShapeRe
 
 func (u *fakeUsers) SearchProfiles(context.Context, *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
 	return &userv1.SearchProfilesResponse{}, nil
+}
+
+// настройки одного пользователя: PATCH должен вернуть то, что стало после изменения
+func (u *fakeUsers) GetSettings(context.Context, *userv1.GetSettingsRequest) (*userv1.GetSettingsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return &userv1.GetSettingsResponse{Settings: &userv1.Settings{
+		AllowGroupInvites: true, ShowOnlineStatus: true, HideForwardAuthor: u.hideForward,
+	}}, nil
+}
+
+func (u *fakeUsers) UpdateSettings(_ context.Context, req *userv1.UpdateSettingsRequest) (*userv1.UpdateSettingsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if req.HideForwardAuthor != nil {
+		u.hideForward = req.GetHideForwardAuthor()
+	}
+	return &userv1.UpdateSettingsResponse{}, nil
 }
 
 func (u *fakeUsers) UserExists(_ context.Context, req *userv1.UserExistsRequest) (*userv1.UserExistsResponse, error) {
@@ -956,5 +975,17 @@ func TestPinEndpoints(t *testing.T) {
 	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg+"?scope=me", tok, "")
 	if e.convs.lastUnpinScope != "me" {
 		t.Fatalf("scope = %q", e.convs.lastUnpinScope)
+	}
+}
+
+func TestUpdateSettingsReturnsSettings(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	w := e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"hide_forward_author":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", w.Code, w.Body.String())
+	}
+	if body := decode(t, w); body["hide_forward_author"] != true || body["show_online_status"] != true {
+		t.Fatalf("settings: %v", body)
 	}
 }

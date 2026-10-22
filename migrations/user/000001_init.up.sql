@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
     user_id             UUID PRIMARY KEY,
     allow_group_invites BOOLEAN NOT NULL DEFAULT TRUE,
     show_online_status  BOOLEAN NOT NULL DEFAULT TRUE,
+    -- при пересылке моих сообщений вместо имени - «скрытый автор»
+    hide_forward_author BOOLEAN NOT NULL DEFAULT FALSE,
     
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),    
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()

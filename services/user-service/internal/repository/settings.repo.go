@@ -20,6 +20,8 @@ type SettingsRepository interface {
 	UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error
 	// ShowOnlineStatus возвращает настройку для найденных пользователей; отсутствующие не попадают в map
 	ShowOnlineStatus(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях
+	ForwardAuthorsHidden(ctx context.Context, userIDs []uuid.UUID) ([]uuid.UUID, error)
 }
 
 type settingsRepository struct {
@@ -33,11 +35,11 @@ func NewSettingsRepository(pool *pgxpool.Pool) SettingsRepository {
 func (r *settingsRepository) GetSettings(ctx context.Context, userID uuid.UUID) (*models.Settings, error) {
 	var s models.Settings
 	err := r.pool.QueryRow(ctx,
-		`SELECT user_id, allow_group_invites, show_online_status, created_at, updated_at
+		`SELECT user_id, allow_group_invites, show_online_status, hide_forward_author, created_at, updated_at
 		 FROM user_settings WHERE user_id = $1`, userID,
 	).Scan(
 		&s.UserID,
-		&s.AllowGroupInvites, &s.ShowOnlineStatus,
+		&s.AllowGroupInvites, &s.ShowOnlineStatus, &s.HideForwardAuthor,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
@@ -50,7 +52,7 @@ func (r *settingsRepository) GetSettings(ctx context.Context, userID uuid.UUID) 
 }
 
 var allowedSettingsColumns = map[string]bool{
-	"allow_group_invites": true, "show_online_status": true,
+	"allow_group_invites": true, "show_online_status": true, "hide_forward_author": true,
 }
 
 func (r *settingsRepository) UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error {
@@ -111,4 +113,25 @@ func (r *settingsRepository) ShowOnlineStatus(ctx context.Context, userIDs []uui
 		res[id] = visible
 	}
 	return res, rows.Err()
+}
+
+func (r *settingsRepository) ForwardAuthorsHidden(ctx context.Context, userIDs []uuid.UUID) ([]uuid.UUID, error) {
+	hidden := make([]uuid.UUID, 0)
+	if len(userIDs) == 0 {
+		return hidden, nil
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id FROM user_settings WHERE user_id = ANY($1) AND hide_forward_author ORDER BY user_id`, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("select hide_forward_author: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan hide_forward_author: %w", err)
+		}
+		hidden = append(hidden, id)
+	}
+	return hidden, rows.Err()
 }

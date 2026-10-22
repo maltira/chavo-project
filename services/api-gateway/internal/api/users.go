@@ -126,15 +126,23 @@ func (h *Handler) updateSettings(c *gin.Context) {
 	var body struct {
 		AllowGroupInvites *bool `json:"allow_group_invites"`
 		ShowOnlineStatus  *bool `json:"show_online_status"`
+		HideForwardAuthor *bool `json:"hide_forward_author"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	if _, err := h.users.UpdateSettings(c.Request.Context(), &userv1.UpdateSettingsRequest{
 		AllowGroupInvites: body.AllowGroupInvites, ShowOnlineStatus: body.ShowOnlineStatus,
+		HideForwardAuthor: body.HideForwardAuthor,
 	}); err != nil {
 		h.fail(c, err)
 		return
 	}
-	httpx.Success(c, http.StatusOK, "Настройки успешно обновлены")
+	// ответ - настройки после изменения: клиент кладёт их в кеш как есть
+	resp, err := h.users.GetSettings(c.Request.Context(), &userv1.GetSettingsRequest{})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toSettings(resp.GetSettings()))
 }

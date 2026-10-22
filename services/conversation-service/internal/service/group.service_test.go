@@ -447,3 +447,30 @@ func TestAddMembersCannotCrossLimit(t *testing.T) {
 		t.Fatalf("exactly one slot left: %v", err)
 	}
 }
+
+func TestListMembersAdminsFirst(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin, m1, m2 := uuid.New(), uuid.New(), uuid.New()
+	g := createGroup(t, e, admin, "private", m1, m2)
+	id := g.Conversation.ID
+	// m2 вступил позже m1, но как админ стоит выше
+	var later uuid.UUID
+	if err := e.pool.QueryRow(ctx, `SELECT user_id FROM conversation_members
+		WHERE conversation_id = $1 AND user_id <> $2 ORDER BY joined_at DESC, user_id DESC LIMIT 1`, id, admin).Scan(&later); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.groups.SetRole(ctx, admin, id, later, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	members, err := e.groups.ListMembers(ctx, admin, id, 10, 0)
+	if err != nil || len(members) != 3 {
+		t.Fatalf("members: %d %v", len(members), err)
+	}
+	if members[0].Role != "admin" || members[1].Role != "admin" || members[2].Role != "member" {
+		t.Fatalf("order: %+v", members)
+	}
+	if members[0].UserID != admin || members[1].UserID != later {
+		t.Fatalf("admins by join time: %v %v", members[0].UserID, members[1].UserID)
+	}
+}

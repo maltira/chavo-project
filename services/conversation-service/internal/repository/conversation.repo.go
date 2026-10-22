@@ -513,11 +513,12 @@ func (r *conversationRepository) CountAdmins(ctx context.Context, q DBTX, convID
 	return n, nil
 }
 
+// ListMembers: сначала админы, внутри - по времени вступления
 func (r *conversationRepository) ListMembers(ctx context.Context, q DBTX, convID uuid.UUID, limit, offset int) ([]models.Member, error) {
 	rows, err := q.Query(ctx,
 		`SELECT conversation_id, user_id, member_role, last_read_message_id, joined_at
 		 FROM conversation_members WHERE conversation_id = $1
-		 ORDER BY joined_at, user_id LIMIT $2 OFFSET $3`, convID, limit, offset)
+		 ORDER BY member_role = 'admin' DESC, joined_at, user_id LIMIT $2 OFFSET $3`, convID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list members: %w", err)
 	}

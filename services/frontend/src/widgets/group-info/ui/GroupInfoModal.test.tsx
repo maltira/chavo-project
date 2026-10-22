@@ -37,6 +37,10 @@ const chat: ConversationSummary = {
     unread_count: 0,
     last_message_read: false,
     members_count: 2,
+    muted_until: null,
+    archived_at: null,
+    pinned_at: null,
+    is_saved: false,
     invite_code: 'abc123def456',
 }
 

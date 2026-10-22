@@ -2,7 +2,7 @@ import type { ServerEvent } from '@/shared/api'
 
 import type { Message } from '@/entities/message/@x/conversation'
 
-import type { ConversationSummary } from './types'
+import type { ChatSettings, ConversationSummary } from './types'
 
 interface MessagePayload {
     conversation_id?: string
@@ -16,6 +16,8 @@ interface MessagePayload {
     kind?: Message['kind']
     system_event?: Message['system_event']
     target_id?: string | null
+    is_forwarded?: boolean
+    forwarded_from_user_id?: string | null
 }
 
 // результат применения события к списку:
@@ -25,8 +27,11 @@ interface MessagePayload {
 export type ListUpdate =
     { kind: 'list'; list: ConversationSummary[] } | { kind: 'invalidate' } | { kind: 'ignore' }
 
-const byFreshness = (a: ConversationSummary, b: ConversationSummary) =>
-    b.last_message_at.localeCompare(a.last_message_at)
+// порядок списка, как у сервера: закреплённые сверху (новый закреп выше), дальше свежие;
+// время сравнивается числом - у строк сервера разная длина дробной части секунд
+export const byListOrder = (a: ConversationSummary, b: ConversationSummary) =>
+    (b.pinned_at ? Date.parse(b.pinned_at) : 0) - (a.pinned_at ? Date.parse(a.pinned_at) : 0) ||
+    Date.parse(b.last_message_at) - Date.parse(a.last_message_at)
 
 // события, после которых список перечитывается целиком: меняется состав чатов или их карточки
 const RELOAD_EVENTS = new Set([
@@ -71,6 +76,8 @@ export function applyToConversations(
                 kind: data.kind ?? 'user',
                 system_event: data.system_event ?? null,
                 target_id: data.target_id ?? null,
+                is_forwarded: data.is_forwarded ?? false,
+                forwarded_from_user_id: data.forwarded_from_user_id ?? null,
             }
             // системные сообщения поднимают чат, но в непрочитанные не идут (так считает и сервер)
             const counts = data.sender_id !== myId && message.kind !== 'system'
@@ -82,7 +89,7 @@ export function applyToConversations(
                 unread_count: chat.unread_count + (counts ? 1 : 0),
             }
             const next = list.map((c, i) => (i === index ? updated : c))
-            return { kind: 'list', list: next.sort(byFreshness) }
+            return { kind: 'list', list: next.sort(byListOrder) }
         }
 
         case 'message.updated': {
@@ -129,5 +136,48 @@ export function applyToConversations(
 
         default:
             return { kind: 'ignore' }
+    }
+}
+
+// chat - чат с новыми настройками; settings - что пришло в conversation.settings.updated
+interface SettingsPayload extends Partial<ChatSettings> {
+    conversation_id?: string
+}
+
+export interface ListsUpdate {
+    main?: ConversationSummary[]
+    archived?: ConversationSummary[]
+    // чата нет ни в одном загруженном списке - их надо перечитать
+    reload: boolean
+}
+
+// новые личные настройки чата: чат обновляется на месте и при архивации переезжает между основным
+// списком и архивом; незагруженный список (undefined) не трогается
+export function applyChatSettings(
+    main: ConversationSummary[] | undefined,
+    archived: ConversationSummary[] | undefined,
+    event: ServerEvent,
+): ListsUpdate {
+    const data = (event.data ?? {}) as SettingsPayload
+    const chat =
+        main?.find((c) => c.id === data.conversation_id) ??
+        archived?.find((c) => c.id === data.conversation_id)
+    if (!chat) {
+        return { reload: true }
+    }
+    const updated: ConversationSummary = {
+        ...chat,
+        muted_until: data.muted_until ?? null,
+        archived_at: data.archived_at ?? null,
+        pinned_at: data.pinned_at ?? null,
+    }
+    const place = (list: ConversationSummary[] | undefined, inside: boolean) =>
+        list &&
+        [...list.filter((c) => c.id !== chat.id), ...(inside ? [updated] : [])].sort(byListOrder)
+    return {
+        main: place(main, !updated.archived_at),
+        archived: place(archived, !!updated.archived_at),
+        // чат ушёл в незагруженный список - тот загрузится с сервера, когда понадобится
+        reload: false,
     }
 }

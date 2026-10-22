@@ -161,6 +161,24 @@ func TestSettings(t *testing.T) {
 	if err != nil || len(visible) != 2 || visible[a] || !visible[b] {
 		t.Fatalf("visibility: %v %v", visible, err)
 	}
+
+	// имя в пересланных по умолчанию видно; скрывают только включившие настройку
+	if s, _ := repo.GetSettings(ctx, b); s.HideForwardAuthor {
+		t.Fatal("hide_forward_author is on by default")
+	}
+	if err := repo.UpdateSettings(ctx, b, map[string]any{"hide_forward_author": true}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := repo.GetSettings(ctx, b); !s.HideForwardAuthor {
+		t.Fatal("hide_forward_author not saved")
+	}
+	hidden, err := repo.ForwardAuthorsHidden(ctx, []uuid.UUID{a, b, uuid.New()})
+	if err != nil || len(hidden) != 1 || hidden[0] != b {
+		t.Fatalf("hidden authors: %v %v", hidden, err)
+	}
+	if hidden, err := repo.ForwardAuthorsHidden(ctx, nil); err != nil || len(hidden) != 0 {
+		t.Fatalf("empty: %v %v", hidden, err)
+	}
 }
 
 func TestBlocks(t *testing.T) {

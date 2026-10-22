@@ -29,7 +29,7 @@ func (s *Server) ListConversations(ctx context.Context, req *conversationv1.List
 		return nil, err
 	}
 	limit, offset := page(req.GetLimit(), req.GetOffset(), 30, 100)
-	items, err := s.convs.List(ctx, user, limit, offset)
+	items, err := s.convs.List(ctx, user, req.GetArchived(), limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (s *Server) DeleteConversation(ctx context.Context, req *conversationv1.Del
 	if err != nil {
 		return nil, err
 	}
-	if err = s.groups.Delete(ctx, user, convID); err != nil {
+	if err = s.groups.Delete(ctx, user, convID, req.GetForEveryone()); err != nil {
 		return nil, err
 	}
 	return &conversationv1.DeleteConversationResponse{}, nil
@@ -607,4 +607,141 @@ func (s *Server) ClearGroupAvatarShape(ctx context.Context, req *conversationv1.
 		return nil, err
 	}
 	return &conversationv1.ClearGroupAvatarShapeResponse{}, nil
+}
+
+func (s *Server) SetChatMute(ctx context.Context, req *conversationv1.SetChatMuteRequest) (*conversationv1.SetChatMuteResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	cs, err := s.convs.SetMute(ctx, user, convID, req.Duration)
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetChatMuteResponse{Settings: toChatSettings(convID, cs)}, nil
+}
+
+func (s *Server) SetChatArchived(ctx context.Context, req *conversationv1.SetChatArchivedRequest) (*conversationv1.SetChatArchivedResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	cs, err := s.convs.SetArchived(ctx, user, convID, req.GetArchived())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetChatArchivedResponse{Settings: toChatSettings(convID, cs)}, nil
+}
+
+func (s *Server) SetChatPinned(ctx context.Context, req *conversationv1.SetChatPinnedRequest) (*conversationv1.SetChatPinnedResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	cs, err := s.convs.SetPinned(ctx, user, convID, req.GetPinned())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetChatPinnedResponse{Settings: toChatSettings(convID, cs)}, nil
+}
+
+func (s *Server) ListPins(ctx context.Context, req *conversationv1.ListPinsRequest) (*conversationv1.ListPinsResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	pins, err := s.msgs.ListPins(ctx, user, convID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*conversationv1.PinnedMessage, len(pins))
+	for i := range pins {
+		out[i] = toPinnedMessage(&pins[i])
+	}
+	return &conversationv1.ListPinsResponse{Items: out}, nil
+}
+
+func (s *Server) PinMessage(ctx context.Context, req *conversationv1.PinMessageRequest) (*conversationv1.PinMessageResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := parseID(req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	pin, err := s.msgs.PinMessage(ctx, user, convID, msgID, req.GetScope())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.PinMessageResponse{Pin: toPinnedMessage(pin)}, nil
+}
+
+func (s *Server) UnpinMessage(ctx context.Context, req *conversationv1.UnpinMessageRequest) (*conversationv1.UnpinMessageResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := parseID(req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.msgs.UnpinMessage(ctx, user, convID, msgID, req.GetScope()); err != nil {
+		return nil, err
+	}
+	return &conversationv1.UnpinMessageResponse{}, nil
+}
+
+func (s *Server) ForwardMessages(ctx context.Context, req *conversationv1.ForwardMessagesRequest) (*conversationv1.ForwardMessagesResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	msgIDs, err := parseIDs(req.GetMessageIds())
+	if err != nil {
+		return nil, err
+	}
+	convIDs, err := parseIDs(req.GetConversationIds())
+	if err != nil {
+		return nil, err
+	}
+	results, err := s.msgs.Forward(ctx, user, service.ForwardInput{
+		MessageIDs: msgIDs, ConversationIDs: convIDs, ToSaved: req.GetToSaved(), HideAuthor: req.GetHideAuthor(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*conversationv1.ForwardedChat, len(results))
+	for i := range results {
+		msgs := make([]*conversationv1.Message, len(results[i].Messages))
+		for j := range results[i].Messages {
+			msgs[j] = toMessage(&results[i].Messages[j])
+		}
+		out[i] = &conversationv1.ForwardedChat{ConversationId: results[i].ConversationID.String(), Messages: msgs}
+	}
+	return &conversationv1.ForwardMessagesResponse{Items: out}, nil
 }

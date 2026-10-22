@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 
+import { isMuted, SAVED_NAME, SavedAvatar } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import { isSystem, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
@@ -31,25 +32,35 @@ function preview(chat: ConversationSummary, myId: string | undefined, systemText
         return systemText
     }
     const text = message.is_deleted ? 'Сообщение удалено' : (message.content ?? '')
-    return message.sender_id === myId ? `Вы: ${text}` : text
+    // в «Избранном» все сообщения свои - без «Вы:»
+    return message.sender_id === myId && !chat.is_saved ? `Вы: ${text}` : text
 }
 
 // строка чата: аватар, имя, последнее сообщение, время, галочки и непрочитанные
 export function ChatListItem({ chat, myId, compact }: Props) {
     const isDirect = chat.conversation_type === 'direct'
+    const saved = chat.is_saved
 
     const peer = useUser(isDirect ? chat.peer_id : null)
     const presence = usePresence(isDirect ? chat.peer_id : null)
 
-    const name = isDirect ? (peer.data?.display_name ?? '') : (chat.name ?? 'Группа')
+    const name = saved
+        ? SAVED_NAME
+        : isDirect
+          ? (peer.data?.display_name ?? '')
+          : (chat.name ?? 'Группа')
     const avatarUrl = isDirect ? peer.data?.avatar_url : chat.avatar_url
     const online = isDirect && (presence?.online ?? peer.data?.online ?? false)
 
     const systemText = useSystemText(chat.last_message)
-    // галочки - только у моих обычных сообщений
+    // галочки - только у моих обычных сообщений; в «Избранном» читать некому
     const mine =
-        !!chat.last_message && chat.last_message.sender_id === myId && !isSystem(chat.last_message)
+        !saved &&
+        !!chat.last_message &&
+        chat.last_message.sender_id === myId &&
+        !isSystem(chat.last_message)
     const unread = chat.unread_count > 0
+    const muted = isMuted(chat)
     const time = formatChatTime(chat.last_message?.created_at ?? chat.created_at)
 
     // меню чата по правой кнопке - у курсора
@@ -70,9 +81,15 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                 title={compact ? name : undefined}
             >
                 <span className={styles.avatar}>
-                    <UserAvatar src={avatarUrl} size={44} online={online} />
+                    {saved ? (
+                        <SavedAvatar size={44} />
+                    ) : (
+                        <UserAvatar src={avatarUrl} size={44} online={online} />
+                    )}
                     {compact && unread && (
-                        <span className={styles.badge}>{unreadLabel(chat.unread_count)}</span>
+                        <span className={cn(styles.badge, muted && styles.mutedBadge)}>
+                            {unreadLabel(chat.unread_count)}
+                        </span>
                     )}
                 </span>
 
@@ -96,7 +113,23 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                                 )}
                                 {time}
                             </span>
-                            {unread && <Tag>{unreadLabel(chat.unread_count)}</Tag>}
+                            <span className={styles.flags}>
+                                {muted && (
+                                    <span role="img" aria-label="Без звука" className={styles.flag}>
+                                        <Icon name="notif-off" size={16} color="currentColor" />
+                                    </span>
+                                )}
+                                {chat.pinned_at && !unread && (
+                                    <span role="img" aria-label="Закреплён" className={styles.flag}>
+                                        <Icon name="pinned" size={16} color="currentColor" />
+                                    </span>
+                                )}
+                                {unread && (
+                                    <Tag variant={muted ? 'muted' : 'default'}>
+                                        {unreadLabel(chat.unread_count)}
+                                    </Tag>
+                                )}
+                            </span>
                         </span>
                     </>
                 )}

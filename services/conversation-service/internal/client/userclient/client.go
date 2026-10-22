@@ -23,6 +23,8 @@ type Client interface {
 	UserExists(ctx context.Context, userID uuid.UUID) (bool, error)
 	// GroupInviteAllowed: false, если пользователь запретил приглашения или между ним и inviter есть блокировка.
 	GroupInviteAllowed(ctx context.Context, userID, inviterID uuid.UUID) (bool, error)
+	// ForwardAuthorsHidden - кто из авторов скрывает имя в пересланных сообщениях
+	ForwardAuthorsHidden(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 type grpcClient struct {
@@ -75,4 +77,29 @@ func (c *grpcClient) GroupInviteAllowed(ctx context.Context, userID, inviterID u
 		return false, unavailable(err)
 	}
 	return resp.GetAllowed(), nil
+}
+
+func (c *grpcClient) ForwardAuthorsHidden(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	hidden := make(map[uuid.UUID]bool)
+	if len(userIDs) == 0 {
+		return hidden, nil
+	}
+	ids := make([]string, len(userIDs))
+	for i, id := range userIDs {
+		ids[i] = id.String()
+	}
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	resp, err := c.api.ForwardAuthorsHidden(ctx, &userv1.ForwardAuthorsHiddenRequest{UserIds: ids})
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	for _, raw := range resp.GetHiddenUserIds() {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, unavailable(err)
+		}
+		hidden[id] = true
+	}
+	return hidden, nil
 }

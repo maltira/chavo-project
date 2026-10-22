@@ -79,6 +79,8 @@ export function deleteMyAvatar(): Promise<void> {
 export interface Settings {
     allow_group_invites: boolean
     show_online_status: boolean
+    // в пересланных моих сообщениях вместо имени - «скрытый автор»
+    hide_forward_author: boolean
 }
 
 export function getSettings(): Promise<Settings> {

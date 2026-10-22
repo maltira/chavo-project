@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { SAVED_NAME, SavedAvatar } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { formatLastSeen, plural } from '@/shared/lib'
@@ -11,6 +12,8 @@ interface Props {
     // открытый чат; без него - новый личный чат с peerId, которого ещё нет на сервере
     chat?: ConversationSummary
     peerId?: string
+    // черновик «Избранного» (чата с собой ещё нет)
+    saved?: boolean
     // клик по аватару и имени: профиль собеседника или сведения о группе
     onOpenInfo?: () => void
     // кнопки справа (меню чата)
@@ -18,9 +21,11 @@ interface Props {
 }
 
 // шапка чата
-export function ChatHeader({ chat, peerId, onOpenInfo, actions }: Props) {
+export function ChatHeader({ chat, peerId, saved: savedDraft, onOpenInfo, actions }: Props) {
+    const saved = chat ? chat.is_saved : !!savedDraft
     const isDirect = !chat || chat.conversation_type === 'direct'
-    const peerUserId = chat ? chat.peer_id : peerId
+    // у «Избранного» собеседника нет: ни профиля, ни «в сети»
+    const peerUserId = saved ? null : chat ? chat.peer_id : peerId
 
     const peer = useUser(isDirect ? peerUserId : null)
     const presence = usePresence(isDirect ? peerUserId : null)
@@ -31,7 +36,9 @@ export function ChatHeader({ chat, peerId, onOpenInfo, actions }: Props) {
     const online = isDirect && (presence?.online ?? profile?.online ?? false)
 
     let subtitle = ''
-    if (isDirect) {
+    if (saved) {
+        subtitle = 'Сообщения для себя'
+    } else if (isDirect) {
         subtitle = online
             ? 'в сети'
             : formatLastSeen(presence?.lastSeenAt ?? profile?.last_seen_at ?? null)
@@ -49,13 +56,17 @@ export function ChatHeader({ chat, peerId, onOpenInfo, actions }: Props) {
                 aria-label={isDirect ? 'Профиль собеседника' : 'Сведения о группе'}
                 onClick={onOpenInfo}
             >
-                <UserAvatar
-                    src={isDirect ? profile?.avatar_url : chat?.avatar_url}
-                    shape={isDirect ? profile?.avatar_shape : chat?.avatar_shape}
-                    online={online}
-                />
+                {saved ? (
+                    <SavedAvatar />
+                ) : (
+                    <UserAvatar
+                        src={isDirect ? profile?.avatar_url : chat?.avatar_url}
+                        shape={isDirect ? profile?.avatar_shape : chat?.avatar_shape}
+                        online={online}
+                    />
+                )}
                 <div className={styles.texts}>
-                    <h2 className={styles.name}>{name || ' '}</h2>
+                    <h2 className={styles.name}>{saved ? SAVED_NAME : name || ' '}</h2>
                     <span className={styles.subtitle}>{subtitle || ' '}</span>
                 </div>
             </button>

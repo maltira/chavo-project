@@ -30,6 +30,9 @@ type MessageCreatedPayload struct {
 	Kind        string     `json:"kind"`
 	SystemEvent *string    `json:"system_event,omitempty"`
 	TargetID    *uuid.UUID `json:"target_id,omitempty"`
+	// пересланная копия: первый автор, null - автор скрыл имя
+	IsForwarded         bool       `json:"is_forwarded,omitempty"`
+	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id,omitempty"`
 }
 
 type MessageUpdatedPayload struct {
@@ -68,10 +71,13 @@ type ConversationUpdatedPayload struct {
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
 
+// ForEveryone=false - личный чат удалён только у DeletedBy (MemberIDs - он сам): у собеседника чат остаётся
 type ConversationDeletedPayload struct {
-	ConversationID uuid.UUID   `json:"conversation_id"`
-	DeletedBy      uuid.UUID   `json:"deleted_by"`
-	MemberIDs      []uuid.UUID `json:"member_ids"`
+	ConversationID   uuid.UUID   `json:"conversation_id"`
+	ConversationType string      `json:"conversation_type"`
+	DeletedBy        uuid.UUID   `json:"deleted_by"`
+	ForEveryone      bool        `json:"for_everyone"`
+	MemberIDs        []uuid.UUID `json:"member_ids"`
 }
 
 type MemberAddedPayload struct {
@@ -103,5 +109,21 @@ type JoinRequestApprovedPayload struct {
 	RequestID      uuid.UUID   `json:"request_id"`
 	UserID         uuid.UUID   `json:"user_id"`
 	ApprovedBy     uuid.UUID   `json:"approved_by"`
+	MemberIDs      []uuid.UUID `json:"member_ids"`
+}
+
+// ChatSettingsUpdatedPayload - новое состояние личных настроек; MemberIDs - только сам участник
+type ChatSettingsUpdatedPayload struct {
+	ConversationID uuid.UUID   `json:"conversation_id"`
+	UserID         uuid.UUID   `json:"user_id"`
+	MutedUntil     *time.Time  `json:"muted_until"`
+	ArchivedAt     *time.Time  `json:"archived_at"`
+	PinnedAt       *time.Time  `json:"pinned_at"`
+	MemberIDs      []uuid.UUID `json:"member_ids"`
+}
+
+// PinsChangedPayload: MemberIDs - все участники при общем закрепе, только владелец - при личном
+type PinsChangedPayload struct {
+	ConversationID uuid.UUID   `json:"conversation_id"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }

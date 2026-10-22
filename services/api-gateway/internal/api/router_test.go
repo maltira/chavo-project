@@ -139,6 +139,7 @@ type fakeUsers struct {
 	profiles    map[string]bool
 	avatars     map[string]string
 	existsCalls atomic.Int32
+	hideForward bool
 }
 
 func (u *fakeUsers) has(id string) bool {
@@ -210,6 +211,24 @@ func (u *fakeUsers) SearchProfiles(context.Context, *userv1.SearchProfilesReques
 	return &userv1.SearchProfilesResponse{}, nil
 }
 
+// настройки одного пользователя: PATCH должен вернуть то, что стало после изменения
+func (u *fakeUsers) GetSettings(context.Context, *userv1.GetSettingsRequest) (*userv1.GetSettingsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return &userv1.GetSettingsResponse{Settings: &userv1.Settings{
+		AllowGroupInvites: true, ShowOnlineStatus: true, HideForwardAuthor: u.hideForward,
+	}}, nil
+}
+
+func (u *fakeUsers) UpdateSettings(_ context.Context, req *userv1.UpdateSettingsRequest) (*userv1.UpdateSettingsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if req.HideForwardAuthor != nil {
+		u.hideForward = req.GetHideForwardAuthor()
+	}
+	return &userv1.UpdateSettingsResponse{}, nil
+}
+
 func (u *fakeUsers) UserExists(_ context.Context, req *userv1.UserExistsRequest) (*userv1.UserExistsResponse, error) {
 	u.existsCalls.Add(1)
 	return &userv1.UserExistsResponse{Exists: u.has(req.GetUserId())}, nil
@@ -221,6 +240,55 @@ type fakeConversations struct {
 	mu      sync.Mutex
 	avatars map[string]string // группа -> путь аватарки
 	admins  map[string]string // группа -> её админ
+	// lastArchived - фильтр архива в последнем ListConversations
+	lastArchived bool
+	// lastForEveryone - for_everyone последнего DeleteConversation
+	lastForEveryone bool
+	// lastUnpinScope - scope последнего UnpinMessage
+	lastUnpinScope string
+}
+
+func (*fakeConversations) ListPins(context.Context, *conversationv1.ListPinsRequest) (*conversationv1.ListPinsResponse, error) {
+	return &conversationv1.ListPinsResponse{}, nil
+}
+
+func (*fakeConversations) PinMessage(_ context.Context, req *conversationv1.PinMessageRequest) (*conversationv1.PinMessageResponse, error) {
+	if req.GetScope() != "all" && req.GetScope() != "me" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.PinMessageResponse{Pin: &conversationv1.PinnedMessage{
+		Message: &conversationv1.Message{Id: req.GetMessageId(), ConversationId: req.GetConversationId(), CreatedAt: timestamppb.Now()},
+		Scope:   req.GetScope(), PinnedBy: "me", PinnedAt: timestamppb.Now(),
+	}}, nil
+}
+
+func (f *fakeConversations) UnpinMessage(_ context.Context, req *conversationv1.UnpinMessageRequest) (*conversationv1.UnpinMessageResponse, error) {
+	f.mu.Lock()
+	f.lastUnpinScope = req.GetScope()
+	f.mu.Unlock()
+	return &conversationv1.UnpinMessageResponse{}, nil
+}
+
+func (*fakeConversations) ForwardMessages(_ context.Context, req *conversationv1.ForwardMessagesRequest) (*conversationv1.ForwardMessagesResponse, error) {
+	if len(req.GetMessageIds()) == 0 {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	from := "author"
+	items := make([]*conversationv1.ForwardedChat, 0, len(req.GetConversationIds()))
+	for _, id := range req.GetConversationIds() {
+		items = append(items, &conversationv1.ForwardedChat{ConversationId: id, Messages: []*conversationv1.Message{{
+			Id: uuid.NewString(), ConversationId: id, CreatedAt: timestamppb.Now(),
+			IsForwarded: !req.GetHideAuthor(), ForwardedFromUserId: &from,
+		}}})
+	}
+	return &conversationv1.ForwardMessagesResponse{Items: items}, nil
+}
+
+func (f *fakeConversations) DeleteConversation(_ context.Context, req *conversationv1.DeleteConversationRequest) (*conversationv1.DeleteConversationResponse, error) {
+	f.mu.Lock()
+	f.lastForEveryone = req.GetForEveryone()
+	f.mu.Unlock()
+	return &conversationv1.DeleteConversationResponse{}, nil
 }
 
 func (f *fakeConversations) GetConversation(_ context.Context, req *conversationv1.GetConversationRequest) (*conversationv1.GetConversationResponse, error) {
@@ -248,8 +316,39 @@ func (f *fakeConversations) UpdateGroup(ctx context.Context, req *conversationv1
 	return &conversationv1.UpdateGroupResponse{Conversation: &conversationv1.Conversation{Id: req.GetConversationId()}}, nil
 }
 
-func (*fakeConversations) ListConversations(context.Context, *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+func (f *fakeConversations) ListConversations(_ context.Context, req *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+	f.mu.Lock()
+	f.lastArchived = req.GetArchived()
+	f.mu.Unlock()
 	return &conversationv1.ListConversationsResponse{Limit: 30}, nil
+}
+
+// SetChatMute отвечает сроком как временем: так тест видит, что ушло в сервис
+func (f *fakeConversations) SetChatMute(_ context.Context, req *conversationv1.SetChatMuteRequest) (*conversationv1.SetChatMuteResponse, error) {
+	cs := &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}
+	switch {
+	case req.Duration == nil:
+	case req.GetDuration() == "8h":
+		cs.MutedUntil = timestamppb.New(time.Date(2026, 1, 1, 8, 0, 0, 0, time.UTC))
+	default:
+		return nil, grpcx.Error(codes.InvalidArgument, "MUTE_DURATION_INVALID", "Неизвестный срок отключения звука")
+	}
+	return &conversationv1.SetChatMuteResponse{Settings: cs}, nil
+}
+
+func (*fakeConversations) SetChatArchived(_ context.Context, req *conversationv1.SetChatArchivedRequest) (*conversationv1.SetChatArchivedResponse, error) {
+	cs := &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}
+	if req.GetArchived() {
+		cs.ArchivedAt = timestamppb.Now()
+	}
+	return &conversationv1.SetChatArchivedResponse{Settings: cs}, nil
+}
+
+func (*fakeConversations) SetChatPinned(_ context.Context, req *conversationv1.SetChatPinnedRequest) (*conversationv1.SetChatPinnedResponse, error) {
+	if req.GetPinned() {
+		return nil, grpcx.Error(codes.FailedPrecondition, "PIN_LIMIT", "Можно закрепить не больше 5 чатов")
+	}
+	return &conversationv1.SetChatPinnedResponse{Settings: &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}}, nil
 }
 
 func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.SendMessageRequest) (*conversationv1.SendMessageResponse, error) {
@@ -748,7 +847,9 @@ func TestStatusEndpoints(t *testing.T) {
 	icons, _ := st["icons"].([]any)
 	durations, _ := st["durations"].([]any)
 	shapes, _ := cat["avatar_shapes"].([]any)
-	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" {
+	mutes, _ := cat["mute_durations"].([]any)
+	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" ||
+		len(mutes) != 4 || mutes[3] != "forever" {
 		t.Fatalf("catalog content: %v", cat)
 	}
 	if w := e.do(http.MethodGet, "/api/statuses", "", ""); w.Code != http.StatusNotFound {
@@ -806,5 +907,122 @@ func TestAvatarShapeEndpoints(t *testing.T) {
 	// PUT не поддерживается: фигура только ставится заново или удаляется
 	if w := e.do(http.MethodPut, "/api/users/me/avatar-shape", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT: %d", w.Code)
+	}
+}
+
+func TestChatSettingsEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	id := uuid.NewString()
+
+	w := e.do(http.MethodPost, "/api/conversations/"+id+"/mute", tok, `{"duration":"8h"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("mute: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["conversation_id"] != id || body["muted_until"] != "2026-01-01T08:00:00Z" {
+		t.Fatalf("mute body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/mute", tok, `{"duration":"3h"}`),
+		http.StatusBadRequest, "MUTE_DURATION_INVALID")
+	if body = decode(t, e.do(http.MethodDelete, "/api/conversations/"+id+"/mute", tok, "")); body["muted_until"] != nil {
+		t.Fatalf("unmute body: %v", body)
+	}
+
+	if body = decode(t, e.do(http.MethodPost, "/api/conversations/"+id+"/archive", tok, "")); body["archived_at"] == nil {
+		t.Fatalf("archive body: %v", body)
+	}
+	if body = decode(t, e.do(http.MethodDelete, "/api/conversations/"+id+"/archive", tok, "")); body["archived_at"] != nil {
+		t.Fatalf("unarchive body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/pin", tok, ""), http.StatusConflict, "PIN_LIMIT")
+	if w := e.do(http.MethodDelete, "/api/conversations/"+id+"/pin", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("unpin: %d", w.Code)
+	}
+
+	// личный чат удаляется у себя или у обоих
+	e.do(http.MethodDelete, "/api/conversations/"+id+"?scope=all", tok, "")
+	if !e.convs.lastForEveryone {
+		t.Fatal("scope=all not passed")
+	}
+	e.do(http.MethodDelete, "/api/conversations/"+id, tok, "")
+	if e.convs.lastForEveryone {
+		t.Fatal("delete for me became for everyone")
+	}
+
+	// архив - отдельный список
+	e.do(http.MethodGet, "/api/conversations?archived=true", tok, "")
+	if !e.convs.lastArchived {
+		t.Fatal("archived filter not passed")
+	}
+	e.do(http.MethodGet, "/api/conversations", tok, "")
+	if e.convs.lastArchived {
+		t.Fatal("main list asked for archive")
+	}
+}
+
+func TestPinEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv, msg := uuid.NewString(), uuid.NewString()
+
+	// пустой список - массив, а не null
+	if w := e.do(http.MethodGet, "/api/conversations/"+conv+"/pins", tok, ""); w.Code != http.StatusOK ||
+		!strings.Contains(w.Body.String(), `"items":[]`) {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	w := e.do(http.MethodPost, "/api/conversations/"+conv+"/pins", tok, `{"message_id":"`+msg+`","scope":"me"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("pin: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["scope"] != "me" || body["message"].(map[string]any)["id"] != msg {
+		t.Fatalf("pin body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+conv+"/pins", tok, `{"message_id":"`+msg+`","scope":"x"}`),
+		http.StatusBadRequest, "")
+
+	// без scope снимается общий закреп
+	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg, tok, "")
+	if e.convs.lastUnpinScope != "all" {
+		t.Fatalf("default scope = %q", e.convs.lastUnpinScope)
+	}
+	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg+"?scope=me", tok, "")
+	if e.convs.lastUnpinScope != "me" {
+		t.Fatalf("scope = %q", e.convs.lastUnpinScope)
+	}
+}
+
+func TestForwardEndpoint(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv := uuid.NewString()
+
+	w := e.do(http.MethodPost, "/api/messages/forward", tok,
+		`{"message_ids":["`+uuid.NewString()+`"],"conversation_ids":["`+conv+`"],"to_saved":true}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("forward: %d %s", w.Code, w.Body.String())
+	}
+	items, _ := decode(t, w)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items: %v", items)
+	}
+	chat := items[0].(map[string]any)
+	msg := chat["messages"].([]any)[0].(map[string]any)
+	if chat["conversation_id"] != conv || msg["is_forwarded"] != true || msg["forwarded_from_user_id"] != "author" {
+		t.Fatalf("forwarded: %v", chat)
+	}
+	expect(t, e.do(http.MethodPost, "/api/messages/forward", tok, `{"conversation_ids":["`+conv+`"]}`), http.StatusBadRequest, "")
+}
+
+func TestUpdateSettingsReturnsSettings(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	w := e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"hide_forward_author":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", w.Code, w.Body.String())
+	}
+	if body := decode(t, w); body["hide_forward_author"] != true || body["show_online_status"] != true {
+		t.Fatalf("settings: %v", body)
 	}
 }

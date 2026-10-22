@@ -1,14 +1,17 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { useConversation, useMembers } from '@/entities/conversation'
-import { useMessages } from '@/entities/message'
-import type { Message } from '@/entities/message'
+import { MAX_FORWARD_MESSAGES, useMessages, usePins } from '@/entities/message'
+import type { Message, PinnedMessage } from '@/entities/message'
 import { useMe, useUser } from '@/entities/user'
 import { MessageComposer } from '@/features/compose-message'
 import type { ReplyTarget } from '@/features/compose-message'
 import { ChatActionsMenu, useOpenChatInfo } from '@/features/chat-actions'
 import { useDeleteMessage } from '@/features/delete-message'
 import { useMarkRead } from '@/features/mark-read'
+import { ForwardModal } from '@/features/forward-message'
+import { PinConfirmModal, usePinMessage } from '@/features/pin-message'
+import { notify } from '@/shared/lib'
 import { Button, Icon, IconButton } from '@/shared/ui'
 import type { MenuPosition } from '@/shared/ui'
 
@@ -18,6 +21,8 @@ import { ChatHeader } from './ChatHeader'
 import { HeaderSkeleton, MessagesSkeleton } from './ChatSkeleton'
 import styles from './ChatWindow.module.scss'
 import { MessageList } from './MessageList'
+import { PinnedBar } from './PinnedBar'
+import { SelectionBar } from './SelectionBar'
 
 interface Props {
     conversationId: string
@@ -38,6 +43,48 @@ export function ChatWindow({ conversationId }: Props) {
     const members = useMembers(conversationId)
     const remove = useDeleteMessage()
     const openInfo = useOpenChatInfo()
+    const pins = usePins(conversationId)
+    const pin = usePinMessage(conversationId)
+    // подтверждение закрепа или открепления в личном чате
+    const [pinDialog, setPinDialog] = useState<{ mode: 'pin' | 'unpin'; messageId: string } | null>(
+        null,
+    )
+    const [jumpRequest, setJumpRequest] = useState<{ id: string; n: number } | null>(null)
+    // режим выбора для пересылки: отмеченные сообщения; null - режим выключен
+    const [selected, setSelected] = useState<string[] | null>(null)
+    const [forwarding, setForwarding] = useState(false)
+
+    // Esc выходит из режима выбора (открытое окно пересылки Esc закрывает само)
+    useEffect(() => {
+        if (selected === null || forwarding) {
+            return
+        }
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setSelected(null)
+            }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [selected, forwarding])
+
+    function toggleSelect(message: Message) {
+        setSelected((ids) => {
+            const current = ids ?? []
+            if (current.includes(message.id)) {
+                return current.filter((id) => id !== message.id)
+            }
+            if (current.length >= MAX_FORWARD_MESSAGES) {
+                notify({
+                    id: 'forward-limit',
+                    icon: 'warn',
+                    title: `Можно выбрать не больше ${MAX_FORWARD_MESSAGES} сообщений`,
+                })
+                return current
+            }
+            return [...current, message.id]
+        })
+    }
 
     // меню «⋮» в шапке - под кнопкой
     const [menuAt, setMenuAt] = useState<MenuPosition | null>(null)
@@ -100,6 +147,41 @@ export function ChatWindow({ conversationId }: Props) {
         )
     }
 
+    const isGroup = chat.data.conversation_type === 'group'
+    const pinList = pins.data ?? []
+    // общий закреп в группе снимает админ, в личном - любой из двоих; личный - только владелец
+    const canUnpin = (p: PinnedMessage) =>
+        p.scope === 'me' || !isGroup || chat.data!.my_role === 'admin'
+
+    // закреп общий (виден обоим) - тогда в окне открепления есть флажок «...также для собеседника»
+    const sharedPin = (messageId: string) =>
+        pinList.some((p) => p.message.id === messageId && p.scope === 'all')
+
+    // кнопка в меню сообщения и крестик плашки: в группе админ действует сразу,
+    // в личном чате - через подтверждение
+    function togglePin(messageId: string) {
+        const pinned = pinList.some((p) => p.message.id === messageId)
+        // в «Избранном» спрашивать не о ком
+        if (!isGroup && !chat.data!.is_saved) {
+            setPinDialog({ mode: pinned ? 'unpin' : 'pin', messageId })
+        } else {
+            pin.mutate({ messageId, scope: 'all', pinned: !pinned })
+        }
+    }
+
+    // forBoth - отмечен ли флажок; сервер при all снимает и мой личный закреп,
+    // при me оставляет общий закреп собеседнику его личным
+    function confirmPin(forBoth: boolean) {
+        if (pinDialog) {
+            pin.mutate({
+                messageId: pinDialog.messageId,
+                scope: forBoth ? 'all' : 'me',
+                pinned: pinDialog.mode === 'pin',
+            })
+        }
+        setPinDialog(null)
+    }
+
     const replyTarget: ReplyTarget | null = reply
         ? {
               id: reply.id,
@@ -112,7 +194,7 @@ export function ChatWindow({ conversationId }: Props) {
         <div className={styles.root}>
             <ChatHeader
                 chat={chat.data}
-                onOpenInfo={() => openInfo(chat.data!)}
+                onOpenInfo={chat.data.is_saved ? undefined : () => openInfo(chat.data!)}
                 actions={
                     <IconButton
                         icon="menu-dot"
@@ -133,6 +215,22 @@ export function ChatWindow({ conversationId }: Props) {
                 }
             />
             <ChatActionsMenu chat={chat.data} position={menuAt} onClose={() => setMenuAt(null)} />
+            <PinnedBar
+                pins={pinList}
+                canUnpin={canUnpin}
+                onJump={(id) => setJumpRequest((r) => ({ id, n: (r?.n ?? 0) + 1 }))}
+                onUnpin={(p) => togglePin(p.message.id)}
+            />
+            {/* окно монтируется при открытии: флажок каждый раз снова выключен */}
+            {pinDialog && (
+                <PinConfirmModal
+                    mode={pinDialog.mode}
+                    peerId={peerId}
+                    withPeerOption={pinDialog.mode === 'pin' || sharedPin(pinDialog.messageId)}
+                    onClose={() => setPinDialog(null)}
+                    onConfirm={confirmPin}
+                />
+            )}
 
             {history.isPending ? (
                 <MessagesSkeleton />
@@ -173,11 +271,38 @@ export function ChatWindow({ conversationId }: Props) {
                         setEditing(message)
                     }}
                     onDelete={(message) => remove.mutate(message)}
+                    pins={pinList}
+                    onPin={(message) => togglePin(message.id)}
+                    jumpRequest={jumpRequest}
+                    onForward={(message) => {
+                        setReply(null)
+                        setEditing(null)
+                        setSelected([message.id])
+                    }}
+                    selected={selected}
+                    onToggleSelect={toggleSelect}
+                />
+            )}
+
+            {forwarding && selected && (
+                <ForwardModal
+                    messageIds={selected}
+                    onClose={() => setForwarding(false)}
+                    onDone={() => {
+                        setForwarding(false)
+                        setSelected(null)
+                    }}
                 />
             )}
 
             <div className={styles.composer}>
-                {canWrite || !peerId ? (
+                {selected !== null ? (
+                    <SelectionBar
+                        count={selected.length}
+                        onForward={() => setForwarding(true)}
+                        onCancel={() => setSelected(null)}
+                    />
+                ) : canWrite || !peerId ? (
                     <MessageComposer
                         key={editing?.id ?? 'new'}
                         conversationId={conversationId}

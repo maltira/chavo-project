@@ -81,6 +81,7 @@ type settingsJSON struct {
 	UserID            string    `json:"user_id"`
 	AllowGroupInvites bool      `json:"allow_group_invites"`
 	ShowOnlineStatus  bool      `json:"show_online_status"`
+	HideForwardAuthor bool      `json:"hide_forward_author"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -90,6 +91,7 @@ func toSettings(s *userv1.Settings) settingsJSON {
 		UserID:            s.GetUserId(),
 		AllowGroupInvites: s.GetAllowGroupInvites(),
 		ShowOnlineStatus:  s.GetShowOnlineStatus(),
+		HideForwardAuthor: s.GetHideForwardAuthor(),
 		CreatedAt:         s.GetCreatedAt().AsTime(),
 		UpdatedAt:         s.GetUpdatedAt().AsTime(),
 	}
@@ -168,6 +170,9 @@ type messageJSON struct {
 	Kind        string  `json:"kind"`
 	SystemEvent *string `json:"system_event"`
 	TargetID    *string `json:"target_id"`
+	// пересланная копия; forwarded_from_user_id - первый автор, null - автор скрыл имя
+	IsForwarded         bool    `json:"is_forwarded"`
+	ForwardedFromUserID *string `json:"forwarded_from_user_id"`
 }
 
 func toMessage(m *conversationv1.Message) *messageJSON {
@@ -187,6 +192,9 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		Kind:             m.GetKind(),
 		SystemEvent:      m.SystemEvent,
 		TargetID:         m.TargetId,
+
+		IsForwarded:         m.GetIsForwarded(),
+		ForwardedFromUserID: m.ForwardedFromUserId,
 	}
 }
 
@@ -201,6 +209,30 @@ type summaryJSON struct {
 	MembersCount    int32 `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы; только у её админов в GET /conversations/:id
 	InviteCode *string `json:"invite_code"`
+	// IsSaved - «Избранное»: личный чат с самим собой
+	IsSaved bool `json:"is_saved"`
+	chatSettingsJSON
+}
+
+// chatSettingsJSON - личные настройки чата вызывающего
+type chatSettingsJSON struct {
+	MutedUntil *time.Time `json:"muted_until"`
+	ArchivedAt *time.Time `json:"archived_at"`
+	PinnedAt   *time.Time `json:"pinned_at"`
+}
+
+type chatSettingsResponseJSON struct {
+	ConversationID string `json:"conversation_id"`
+	chatSettingsJSON
+}
+
+func toChatSettings(s *conversationv1.ChatSettings) chatSettingsResponseJSON {
+	return chatSettingsResponseJSON{
+		ConversationID: s.GetConversationId(),
+		chatSettingsJSON: chatSettingsJSON{
+			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
+		},
+	}
 }
 
 func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
@@ -213,6 +245,10 @@ func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 		LastMessageRead:  s.GetLastMessageRead(),
 		MembersCount:     s.GetMembersCount(),
 		InviteCode:       s.InviteCode,
+		IsSaved:          s.GetIsSaved(),
+		chatSettingsJSON: chatSettingsJSON{
+			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
+		},
 	}
 }
 

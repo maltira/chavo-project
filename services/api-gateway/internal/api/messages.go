@@ -45,6 +45,37 @@ func (h *Handler) sendMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, toMessage(resp.GetMessage()))
 }
 
+// forwardMessages: копии сообщений одного чата в мои чаты и/или «Избранное»;
+// ответ - созданные копии по чатам
+func (h *Handler) forwardMessages(c *gin.Context) {
+	var body struct {
+		MessageIDs      []string `json:"message_ids"`
+		ConversationIDs []string `json:"conversation_ids"`
+		ToSaved         bool     `json:"to_saved"`
+		HideAuthor      bool     `json:"hide_author"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.conversations.ForwardMessages(c.Request.Context(), &conversationv1.ForwardMessagesRequest{
+		MessageIds: body.MessageIDs, ConversationIds: body.ConversationIDs,
+		ToSaved: body.ToSaved, HideAuthor: body.HideAuthor,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	type forwardedJSON struct {
+		ConversationID string         `json:"conversation_id"`
+		Messages       []*messageJSON `json:"messages"`
+	}
+	items := make([]forwardedJSON, len(resp.GetItems()))
+	for i, chat := range resp.GetItems() {
+		items[i] = forwardedJSON{ConversationID: chat.GetConversationId(), Messages: mapSlice(chat.GetMessages(), toMessage)}
+	}
+	c.JSON(http.StatusCreated, gin.H{"items": items})
+}
+
 func (h *Handler) getMessage(c *gin.Context) {
 	resp, err := h.conversations.GetMessage(c.Request.Context(), &conversationv1.GetMessageRequest{MessageId: c.Param("message_id")})
 	if err != nil {

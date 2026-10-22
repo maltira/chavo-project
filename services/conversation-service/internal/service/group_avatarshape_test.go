@@ -47,7 +47,7 @@ func TestGroupAvatarShape(t *testing.T) {
 	if err != nil || got.AvatarShape == nil || got.AvatarShape.Shape != "soft-boom" {
 		t.Fatalf("get: %+v %v", got, err)
 	}
-	list, err := e.convs.List(ctx, member, 10, 0)
+	list, err := e.convs.List(ctx, member, false, 10, 0)
 	if err != nil || len(list) != 1 || list[0].AvatarShape == nil || list[0].AvatarShape.Color != "#F59E0B" {
 		t.Fatalf("list: %+v %v", list, err)
 	}
@@ -86,7 +86,7 @@ func TestGroupAvatarShape(t *testing.T) {
 	if _, err := e.groups.SetAvatarShape(ctx, admin, id, "circle", "#FFFFFF"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.groups.Delete(ctx, admin, id); err != nil {
+	if err := e.groups.Delete(ctx, admin, id, false); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM conversation_avatar_shapes WHERE conversation_id = $1`, id); n != 0 {

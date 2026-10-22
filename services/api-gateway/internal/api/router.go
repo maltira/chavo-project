@@ -191,6 +191,12 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 		conv.POST("/:id/avatar", append(uploadLimit, h.uploadGroupAvatar)...)
 		conv.DELETE("/:id/avatar", h.deleteGroupAvatar)
 	}
+	conv.POST("/:id/mute", h.muteChat)
+	conv.DELETE("/:id/mute", h.unmuteChat)
+	conv.POST("/:id/archive", h.archiveChat(true))
+	conv.DELETE("/:id/archive", h.archiveChat(false))
+	conv.POST("/:id/pin", h.pinChat(true))
+	conv.DELETE("/:id/pin", h.pinChat(false))
 	conv.POST("/:id/join", h.joinGroup)
 	conv.POST("/:id/invite-link/regenerate", h.regenerateInvite)
 	conv.POST("/:id/join-requests", h.requestJoin)
@@ -205,12 +211,17 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/bans/:user_id", h.unban)
 	conv.POST("/:id/read", h.markRead)
 	conv.GET("/:id/messages/:message_id/readers", h.listReaders)
+	conv.GET("/:id/pins", h.listPins)
+	conv.POST("/:id/pins", h.pinMessage)
+	conv.DELETE("/:id/pins/:message_id", h.unpinMessage)
 
 	p.GET("/invites/:token", h.inviteInfo)
 
 	msg := p.Group("/messages")
 	msg.GET("", h.listMessages)
 	msg.POST("", append(sendLimit, h.sendMessage)...)
+	// пересылка создаёт сообщения - под тем же лимитом, что и отправка
+	msg.POST("/forward", append(sendLimit, h.forwardMessages)...)
 	msg.GET("/:message_id", h.getMessage)
 	msg.PATCH("/:message_id", h.editMessage)
 	msg.DELETE("/:message_id", h.deleteMessage)

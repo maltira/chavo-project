@@ -2,7 +2,6 @@ export {
     createGroup,
     deleteConversation,
     getConversation,
-    getConversations,
     getMembers,
     joinGroup,
     searchGroups,
@@ -32,9 +31,22 @@ export { useGroupAvatar } from './model/useGroupAvatar'
 export { previewFromInvite, previewFromSearch, useGroupCard } from './model/groupCard'
 export type { GroupCardTarget, GroupPreview } from './model/groupCard'
 export {
+    getConversations,
+    muteChat,
+    setChatArchived,
+    setChatPinned,
+    unmuteChat,
+} from './api/conversations'
+export type { ChatSettingsResponse } from './api/conversations'
+export {
     applyConversationEvent,
+    archivedConversationsKey,
     conversationsKey,
     findDirectWith,
+    findInLists,
+    findSaved,
+    setChatSettings,
+    useArchivedConversations,
     useConversations,
     useDirectPeers,
 } from './model/useConversations'
@@ -57,5 +69,7 @@ export {
 export { slugSchema, SLUG_HINT } from './model/slug'
 export { applyToConversations } from './model/events'
 export type { ListUpdate } from './model/events'
-export type { Conversation, ConversationSummary } from './model/types'
+export { isMuted } from './model/types'
+export type { ChatSettings, Conversation, ConversationSummary } from './model/types'
 export { SlugField } from './ui/SlugField'
+export { SAVED_NAME, SavedAvatar } from './ui/SavedAvatar'

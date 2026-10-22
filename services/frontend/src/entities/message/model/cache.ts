@@ -81,6 +81,8 @@ interface MessageEventData {
     kind?: Message['kind']
     system_event?: Message['system_event']
     target_id?: string | null
+    is_forwarded?: boolean
+    forwarded_from_user_id?: string | null
 }
 
 // события сообщений дописывают историю открытых чатов
@@ -108,6 +110,8 @@ export function applyMessageEvent(queryClient: QueryClient, event: ServerEvent) 
                     kind: data.kind ?? 'user',
                     system_event: data.system_event ?? null,
                     target_id: data.target_id ?? null,
+                    is_forwarded: data.is_forwarded ?? false,
+                    forwarded_from_user_id: data.forwarded_from_user_id ?? null,
                 })
             }
             break

@@ -8,6 +8,7 @@
 }
 
 .empty {
+    position: relative;
     display: flex;
     flex: 1;
     flex-direction: column;
@@ -38,4 +39,12 @@
     width: auto;
     height: 36px;
     margin: 12px auto;
+}
+
+// строка «Архив» над пустым списком - вверху, а не по центру с текстом
+.top {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
 }

@@ -31,6 +31,9 @@ type SummaryRecord struct {
 	// LastMessageRead - кто-то кроме автора последнего сообщения дочитал до него (курсор прочтения)
 	LastMessageRead bool
 	MembersCount    int
+	Settings        models.ChatSettings
+	// IsSaved - «Избранное»: direct с самим собой
+	IsSaved bool
 }
 
 // conversationColumns и customJoins - чтение разговора со статусом и фигурой за аватаром; истёкший статус не читается
@@ -102,7 +105,16 @@ type ConversationRepository interface {
 	// DirectPeers — собеседники пользователя по всем его direct-чатам.
 	DirectPeers(ctx context.Context, q DBTX, userID uuid.UUID) ([]uuid.UUID, error)
 	TouchLastMessage(ctx context.Context, q DBTX, convID uuid.UUID, at time.Time) error
-	ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, limit, offset int) ([]SummaryRecord, error)
+	// ListSummaries: archived nil - без фильтра по архиву (нужно для одного чата по convID)
+	ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, archived *bool, limit, offset int) ([]SummaryRecord, error)
+	// UpdateChatSettings меняет личные настройки участника (nil - NULL); ErrNotMember, если он не участник
+	UpdateChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID, updates map[string]any) (*models.ChatSettings, error)
+	// ClearHistory - личный чат «удалён у меня»: история до этого момента скрыта, личные настройки сброшены
+	ClearHistory(ctx context.Context, q DBTX, convID, userID uuid.UUID) error
+	// LockChatSettings читает настройки участника с блокировкой строки; ErrNotMember, если он не участник
+	LockChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*models.ChatSettings, error)
+	// CountPinnedChats блокирует строки участия пользователя до конца транзакции: лимит закрепов не обходится параллельными запросами
+	CountPinnedChats(ctx context.Context, q DBTX, userID uuid.UUID) (int, error)
 
 	// Lock блокирует строку conversation (FOR UPDATE) и возвращает её: сериализует изменения состава и настроек.
 	Lock(ctx context.Context, q DBTX, convID uuid.UUID) (*models.Conversation, error)
@@ -232,25 +244,29 @@ func (r *conversationRepository) TouchLastMessage(ctx context.Context, q DBTX, c
 	return nil
 }
 
-// ListSummaries возвращает чаты пользователя (или один, если задан convID), свежие сверху.
-func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, limit, offset int) ([]SummaryRecord, error) {
+// ListSummaries возвращает чаты пользователя (или один, если задан convID): закреплённые сверху (новый закреп выше), дальше свежие.
+func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, userID uuid.UUID, convID *uuid.UUID, archived *bool, limit, offset int) ([]SummaryRecord, error) {
 	rows, err := q.Query(ctx,
 		`SELECT `+baseColumns+`,
 		        `+customColumns+`,
 		        cm.member_role, peer.user_id,
 		        lm.id, lm.sender_id, lm.content_enc, lm.reply_to_message_id, lm.is_edited,
 		        lm.kind, lm.system_event, lm.target_id, lm.created_at, lm.updated_at, lm.deleted_at,
+		        lm.is_forwarded, lm.forwarded_from_user_id,
 		        (SELECT COUNT(*) FROM messages m
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
 		            AND m.kind = 'user'
 		            AND m.created_at >= cm.joined_at
+		            AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at)
 		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))),
 		        COALESCE((SELECT TRUE FROM conversation_members om
 		          JOIN messages orm ON orm.id = om.last_read_message_id
 		          WHERE om.conversation_id = c.id AND om.user_id <> lm.sender_id
 		            AND (orm.created_at, orm.id) >= (lm.created_at, lm.id)
 		          LIMIT 1), FALSE),
-		        (SELECT COUNT(*) FROM conversation_members mc WHERE mc.conversation_id = c.id)
+		        (SELECT COUNT(*) FROM conversation_members mc WHERE mc.conversation_id = c.id),
+		        cm.muted_until, cm.archived_at, cm.pinned_at,
+		        (c.conversation_type = 'direct' AND peer.user_id IS NULL)
 		 FROM conversation_members cm
 		 JOIN conversations c ON c.id = cm.conversation_id
 		 `+customJoins+`
@@ -260,11 +276,15 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		 LEFT JOIN LATERAL (
 		        SELECT * FROM messages x WHERE x.conversation_id = c.id
 		           AND (cm.member_role = 'admin' OR x.created_at >= cm.joined_at)
+		           AND (cm.cleared_at IS NULL OR x.created_at > cm.cleared_at)
 		        ORDER BY x.created_at DESC, x.id DESC LIMIT 1) lm ON TRUE
 		 WHERE cm.user_id = $1 AND ($2::uuid IS NULL OR c.id = $2)
-		 ORDER BY c.last_message_at DESC, c.id DESC
+		   AND ($5::boolean IS NULL OR (cm.archived_at IS NOT NULL) = $5)
+		   -- очищенный «только у меня» чат пропадает из списка до следующего сообщения; карточка (convID) доступна
+		   AND ($2::uuid IS NOT NULL OR cm.cleared_at IS NULL OR c.last_message_at > cm.cleared_at)
+		 ORDER BY cm.pinned_at DESC NULLS LAST, c.last_message_at DESC, c.id DESC
 		 LIMIT $3 OFFSET $4`,
-		userID, convID, limit, offset,
+		userID, convID, limit, offset, archived,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list conversations: %w", err)
@@ -281,13 +301,16 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			lmKind, lmEvent                 *string
 			lmTarget                        *uuid.UUID
 			lmCreated, lmUpdated, lmDeleted *time.Time
+			lmForwarded                     *bool
+			lmFrom                          *uuid.UUID
 			cu                              customCols
 		)
 		dest := append(baseDest(&s.Conversation), cu.dest()...)
 		dest = append(dest, &s.MyRole, &s.PeerID,
 			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmKind, &lmEvent, &lmTarget,
-			&lmCreated, &lmUpdated, &lmDeleted,
-			&s.UnreadCount, &s.LastMessageRead, &s.MembersCount)
+			&lmCreated, &lmUpdated, &lmDeleted, &lmForwarded, &lmFrom,
+			&s.UnreadCount, &s.LastMessageRead, &s.MembersCount,
+			&s.Settings.MutedUntil, &s.Settings.ArchivedAt, &s.Settings.PinnedAt, &s.IsSaved)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
@@ -299,11 +322,86 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 				ContentEnc: lmEnc, ReplyToMessageID: lmReply, IsEdited: *lmEdited,
 				Kind: *lmKind, SystemEvent: lmEvent, TargetID: lmTarget,
 				CreatedAt: *lmCreated, UpdatedAt: lmUpdated, DeletedAt: lmDeleted,
+				IsForwarded: *lmForwarded, ForwardedFromUserID: lmFrom,
 			}
 		}
 		res = append(res, s)
 	}
 	return res, rows.Err()
+}
+
+var allowedChatSettingsColumns = map[string]bool{"muted_until": true, "archived_at": true, "pinned_at": true}
+
+func (r *conversationRepository) UpdateChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID, updates map[string]any) (*models.ChatSettings, error) {
+	setClauses := make([]string, 0, len(updates))
+	args := []any{convID, userID}
+	for col, val := range updates {
+		if !allowedChatSettingsColumns[col] {
+			return nil, fmt.Errorf("update chat settings: unknown column %q", col)
+		}
+		args = append(args, val)
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, len(args)))
+	}
+	if len(setClauses) == 0 {
+		return nil, fmt.Errorf("update chat settings: nothing to update")
+	}
+
+	var cs models.ChatSettings
+	err := q.QueryRow(ctx,
+		fmt.Sprintf(`UPDATE conversation_members SET %s WHERE conversation_id = $1 AND user_id = $2
+		 RETURNING muted_until, archived_at, pinned_at`, strings.Join(setClauses, ", ")), args...,
+	).Scan(&cs.MutedUntil, &cs.ArchivedAt, &cs.PinnedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotMember
+		}
+		return nil, fmt.Errorf("update chat settings: %w", err)
+	}
+	return &cs, nil
+}
+
+func (r *conversationRepository) ClearHistory(ctx context.Context, q DBTX, convID, userID uuid.UUID) error {
+	// clock_timestamp(), как у messages.created_at: граница точно отделяет уже отправленные сообщения
+	ct, err := q.Exec(ctx,
+		`UPDATE conversation_members
+		 SET cleared_at = clock_timestamp(), muted_until = NULL, archived_at = NULL, pinned_at = NULL
+		 WHERE conversation_id = $1 AND user_id = $2`, convID, userID)
+	if err != nil {
+		return fmt.Errorf("clear history: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return apperror.ErrNotMember
+	}
+	return nil
+}
+
+func (r *conversationRepository) LockChatSettings(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*models.ChatSettings, error) {
+	var cs models.ChatSettings
+	err := q.QueryRow(ctx,
+		`SELECT muted_until, archived_at, pinned_at FROM conversation_members
+		 WHERE conversation_id = $1 AND user_id = $2 FOR UPDATE`, convID, userID,
+	).Scan(&cs.MutedUntil, &cs.ArchivedAt, &cs.PinnedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotMember
+		}
+		return nil, fmt.Errorf("lock chat settings: %w", err)
+	}
+	return &cs, nil
+}
+
+func (r *conversationRepository) CountPinnedChats(ctx context.Context, q DBTX, userID uuid.UUID) (int, error) {
+	// блокировка и подсчёт - разные запросы: подсчёт берёт новый снимок и видит закрепы, закоммиченные,
+	// пока ждали блокировку (в одном запросе условие по pinned_at проверилось бы по старому снимку)
+	if _, err := q.Exec(ctx, `SELECT 1 FROM conversation_members WHERE user_id = $1 FOR UPDATE`, userID); err != nil {
+		return 0, fmt.Errorf("lock memberships: %w", err)
+	}
+	var n int
+	if err := q.QueryRow(ctx,
+		`SELECT COUNT(*) FROM conversation_members WHERE user_id = $1 AND pinned_at IS NOT NULL`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count pinned chats: %w", err)
+	}
+	return n, nil
 }
 
 func (r *conversationRepository) Lock(ctx context.Context, q DBTX, convID uuid.UUID) (*models.Conversation, error) {
@@ -422,11 +520,12 @@ func (r *conversationRepository) CountAdmins(ctx context.Context, q DBTX, convID
 	return n, nil
 }
 
+// ListMembers: сначала админы, внутри - по времени вступления
 func (r *conversationRepository) ListMembers(ctx context.Context, q DBTX, convID uuid.UUID, limit, offset int) ([]models.Member, error) {
 	rows, err := q.Query(ctx,
 		`SELECT conversation_id, user_id, member_role, last_read_message_id, joined_at
 		 FROM conversation_members WHERE conversation_id = $1
-		 ORDER BY joined_at, user_id LIMIT $2 OFFSET $3`, convID, limit, offset)
+		 ORDER BY member_role = 'admin' DESC, joined_at, user_id LIMIT $2 OFFSET $3`, convID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list members: %w", err)
 	}

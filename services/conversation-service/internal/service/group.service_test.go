@@ -305,16 +305,16 @@ func TestRemoveMemberLeaveAndDelete(t *testing.T) {
 	if _, err := e.msgs.Send(ctx, m1, service.SendMessageInput{ConversationID: &id2, Content: "hi"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.groups.Delete(ctx, m1, id2); err != nil {
+	if err := e.groups.Delete(ctx, m1, id2, false); err != nil {
 		t.Fatal(err)
 	}
 	if memberRole(t, e, id2, m1) != "" || count(t, e.pool, `SELECT COUNT(*) FROM conversations WHERE id=$1`, id2) != 1 {
 		t.Fatal("member DELETE must only leave the group")
 	}
-	if err := e.groups.Delete(ctx, m1, id2); !errors.Is(err, apperror.ErrNotMember) {
+	if err := e.groups.Delete(ctx, m1, id2, false); !errors.Is(err, apperror.ErrNotMember) {
 		t.Fatalf("delete after leave: %v", err)
 	}
-	if err := e.groups.Delete(ctx, admin, id2); err != nil {
+	if err := e.groups.Delete(ctx, admin, id2, false); err != nil {
 		t.Fatal(err)
 	}
 	if count(t, e.pool, `SELECT COUNT(*) FROM conversations WHERE id=$1`, id2) != 0 ||
@@ -325,12 +325,9 @@ func TestRemoveMemberLeaveAndDelete(t *testing.T) {
 		t.Fatalf("conversation.deleted events = %d", events(t, e, "conversation.deleted"))
 	}
 
-	// direct нельзя ни удалить, ни покинуть.
+	// direct нельзя покинуть как группу (удаление - TestDeleteDirect)
 	a, b := uuid.New(), uuid.New()
 	m, _ := e.msgs.Send(ctx, a, service.SendMessageInput{RecipientID: &b, Content: "hi"})
-	if err := e.groups.Delete(ctx, a, m.ConversationID); !errors.Is(err, apperror.ErrForbidden) {
-		t.Fatalf("delete direct: %v", err)
-	}
 	if err := e.groups.RemoveMember(ctx, a, m.ConversationID, a, false); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("leave direct: %v", err)
 	}
@@ -448,5 +445,32 @@ func TestAddMembersCannotCrossLimit(t *testing.T) {
 	}
 	if err := e.groups.AddMembers(ctx, admin, conv, []uuid.UUID{uuid.New()}); err != nil {
 		t.Fatalf("exactly one slot left: %v", err)
+	}
+}
+
+func TestListMembersAdminsFirst(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	admin, m1, m2 := uuid.New(), uuid.New(), uuid.New()
+	g := createGroup(t, e, admin, "private", m1, m2)
+	id := g.Conversation.ID
+	// m2 вступил позже m1, но как админ стоит выше
+	var later uuid.UUID
+	if err := e.pool.QueryRow(ctx, `SELECT user_id FROM conversation_members
+		WHERE conversation_id = $1 AND user_id <> $2 ORDER BY joined_at DESC, user_id DESC LIMIT 1`, id, admin).Scan(&later); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.groups.SetRole(ctx, admin, id, later, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	members, err := e.groups.ListMembers(ctx, admin, id, 10, 0)
+	if err != nil || len(members) != 3 {
+		t.Fatalf("members: %d %v", len(members), err)
+	}
+	if members[0].Role != "admin" || members[1].Role != "admin" || members[2].Role != "member" {
+		t.Fatalf("order: %+v", members)
+	}
+	if members[0].UserID != admin || members[1].UserID != later {
+		t.Fatalf("admins by join time: %v %v", members[0].UserID, members[1].UserID)
 	}
 }

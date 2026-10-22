@@ -1,3 +1,4 @@
+import { SAVED_NAME } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import type { Profile } from '@/entities/user'
 
@@ -6,7 +7,8 @@ export function normalizeQuery(raw: string): string {
     return raw.trim().replace(/^@+/, '')
 }
 
-// подходит ли мой чат под запрос: группа - по названию, личный - по имени и username собеседника
+// подходит ли мой чат под запрос: группа - по названию, «Избранное» - по этому слову,
+// личный - по имени и username собеседника
 export function matchChat(
     chat: ConversationSummary,
     query: string,
@@ -18,6 +20,9 @@ export function matchChat(
     }
     if (chat.conversation_type === 'group') {
         return (chat.name ?? '').toLowerCase().includes(q)
+    }
+    if (chat.is_saved) {
+        return SAVED_NAME.toLowerCase().includes(q)
     }
     return (
         !!peer &&

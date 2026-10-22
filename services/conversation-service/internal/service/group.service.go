@@ -56,7 +56,9 @@ type GroupResult struct {
 type GroupService interface {
 	Create(ctx context.Context, creatorID uuid.UUID, in CreateGroupInput) (*GroupResult, error)
 	Update(ctx context.Context, userID, convID uuid.UUID, in UpdateGroupInput) (*GroupResult, error)
-	Delete(ctx context.Context, userID, convID uuid.UUID) error
+	// Delete: группа - выход участника или удаление админом; личный чат - у себя (история скрыта, чат вернётся
+	// со следующим сообщением) или forEveryone - целиком у обоих
+	Delete(ctx context.Context, userID, convID uuid.UUID, forEveryone bool) error
 	Join(ctx context.Context, userID, convID uuid.UUID) error
 	ListMembers(ctx context.Context, userID, convID uuid.UUID, limit, offset int) ([]models.Member, error)
 	AddMembers(ctx context.Context, adminID, convID uuid.UUID, userIDs []uuid.UUID) error
@@ -410,8 +412,7 @@ func (s *groupService) Update(ctx context.Context, userID, convID uuid.UUID, in 
 	return res, nil
 }
 
-// Delete: участник группы выходит из неё, admin удаляет группу целиком; direct не удаляется.
-func (s *groupService) Delete(ctx context.Context, userID, convID uuid.UUID) error {
+func (s *groupService) Delete(ctx context.Context, userID, convID uuid.UUID, forEveryone bool) error {
 	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
 		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
 			return err
@@ -420,13 +421,19 @@ func (s *groupService) Delete(ctx context.Context, userID, convID uuid.UUID) err
 		if err != nil {
 			return err
 		}
-		if access.Type != models.ConversationGroup {
-			return apperror.ErrForbidden
+		if access.Type == models.ConversationDirect && !forEveryone {
+			if err = s.convs.ClearHistory(ctx, tx, convID, userID); err != nil {
+				return err
+			}
+			return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeConversationDeleted, events.ConversationDeletedPayload{
+				ConversationID: convID, ConversationType: access.Type, DeletedBy: userID, MemberIDs: []uuid.UUID{userID},
+			})
 		}
-		if access.Role == models.RoleMember {
+		if access.Type == models.ConversationGroup && access.Role == models.RoleMember {
 			return s.removeLocked(ctx, tx, convID, userID, userID, false)
 		}
 
+		// группа (admin) или личный чат для обоих: строка удаляется с историей, следующее сообщение создаст новый direct
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
 		if err != nil {
 			return err
@@ -435,7 +442,7 @@ func (s *groupService) Delete(ctx context.Context, userID, convID uuid.UUID) err
 			return err
 		}
 		return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeConversationDeleted, events.ConversationDeletedPayload{
-			ConversationID: convID, DeletedBy: userID, MemberIDs: memberIDs,
+			ConversationID: convID, ConversationType: access.Type, DeletedBy: userID, ForEveryone: true, MemberIDs: memberIDs,
 		})
 	})
 }

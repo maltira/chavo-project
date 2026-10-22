@@ -131,7 +131,7 @@ func TestLeftMemberLosesChatAndRejoinStartsNewHistory(t *testing.T) {
 	if _, err := e.msgs.List(ctx, m1, conv, nil, 50); !errors.Is(err, apperror.ErrNotMember) {
 		t.Fatalf("left member list: %v", err)
 	}
-	if chats, _ := e.convs.List(ctx, m1, 10, 0); len(chats) != 0 {
+	if chats, _ := e.convs.List(ctx, m1, false, 10, 0); len(chats) != 0 {
 		t.Fatalf("left member still sees %d chats", len(chats))
 	}
 	// Сообщения ушедшего остаются у остальных.

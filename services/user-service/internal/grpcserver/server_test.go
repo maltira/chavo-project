@@ -91,6 +91,8 @@ type fakeSettings struct {
 	service.SettingsService
 	invites map[uuid.UUID]bool // наличие ключа = настройки есть
 	show    map[uuid.UUID]bool
+	// hideForward - кто скрывает имя в пересланных
+	hideForward map[uuid.UUID]bool
 }
 
 func (f *fakeSettings) GetSettings(_ context.Context, id uuid.UUID) (*models.Settings, error) {
@@ -99,6 +101,16 @@ func (f *fakeSettings) GetSettings(_ context.Context, id uuid.UUID) (*models.Set
 		return nil, apperror.ErrNotFound
 	}
 	return &models.Settings{UserID: id, AllowGroupInvites: allowed}, nil
+}
+
+func (f *fakeSettings) ForwardAuthorsHidden(_ context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	res := []uuid.UUID{}
+	for _, id := range ids {
+		if f.hideForward[id] {
+			res = append(res, id)
+		}
+	}
+	return res, nil
 }
 
 func (f *fakeSettings) ShowOnlineStatus(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
@@ -524,5 +536,24 @@ func TestAvatarShapeSetClearAndBlockHiding(t *testing.T) {
 	// повторное удаление - не ошибка
 	if _, err := users.ClearAvatarShape(as(owner), &userv1.ClearAvatarShapeRequest{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestForwardAuthorsHidden(t *testing.T) {
+	d := newDeps()
+	open, hidden := uuid.New(), uuid.New()
+	d.settings.hideForward = map[uuid.UUID]bool{hidden: true}
+	_, internal := start(t, d)
+
+	resp, err := internal.ForwardAuthorsHidden(context.Background(), &userv1.ForwardAuthorsHiddenRequest{
+		UserIds: []string{open.String(), hidden.String()},
+	})
+	if err != nil || len(resp.GetHiddenUserIds()) != 1 || resp.GetHiddenUserIds()[0] != hidden.String() {
+		t.Fatalf("hidden: %v %v", resp.GetHiddenUserIds(), err)
+	}
+	if _, err := internal.ForwardAuthorsHidden(context.Background(), &userv1.ForwardAuthorsHiddenRequest{
+		UserIds: []string{"not-a-uuid"},
+	}); grpcxCode(err) != codes.InvalidArgument {
+		t.Fatalf("bad id: %v", err)
 	}
 }

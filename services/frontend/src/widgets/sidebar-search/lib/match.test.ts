@@ -21,4 +21,14 @@ describe('sidebar search', () => {
         expect(matchChat(direct, 'aref', undefined)).toBe(false)
         expect(matchChat(group, '', undefined)).toBe(false)
     })
+
+    it('finds «Избранное» by its name', () => {
+        const saved = {
+            conversation_type: 'direct',
+            name: null,
+            is_saved: true,
+        } as ConversationSummary
+        expect(matchChat(saved, 'избран', undefined)).toBe(true)
+        expect(matchChat(saved, 'клуб', undefined)).toBe(false)
+    })
 })

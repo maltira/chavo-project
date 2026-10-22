@@ -1,0 +1,21 @@
+.root {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 8px 8px 8px 20px;
+
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+.count {
+    @include type(main-regular);
+
+    flex: 1;
+}
+
+.button {
+    width: auto;
+    padding: 0 20px;
+}

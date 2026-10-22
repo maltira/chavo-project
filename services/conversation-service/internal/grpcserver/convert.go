@@ -137,18 +137,20 @@ func toMessage(m *models.Message) *conversationv1.Message {
 		return nil
 	}
 	return &conversationv1.Message{
-		Id:               m.ID.String(),
-		ConversationId:   m.ConversationID.String(),
-		SenderId:         m.SenderID.String(),
-		Content:          m.Content,
-		ReplyToMessageId: optStr(m.ReplyToMessageID),
-		IsEdited:         m.IsEdited,
-		IsDeleted:        m.IsDeleted,
-		CreatedAt:        ts(m.CreatedAt),
-		UpdatedAt:        optTS(m.UpdatedAt),
-		Kind:             m.Kind,
-		SystemEvent:      m.SystemEvent,
-		TargetId:         optStr(m.TargetID),
+		Id:                  m.ID.String(),
+		ConversationId:      m.ConversationID.String(),
+		SenderId:            m.SenderID.String(),
+		Content:             m.Content,
+		ReplyToMessageId:    optStr(m.ReplyToMessageID),
+		IsEdited:            m.IsEdited,
+		IsDeleted:           m.IsDeleted,
+		CreatedAt:           ts(m.CreatedAt),
+		UpdatedAt:           optTS(m.UpdatedAt),
+		Kind:                m.Kind,
+		SystemEvent:         m.SystemEvent,
+		TargetId:            optStr(m.TargetID),
+		IsForwarded:         m.IsForwarded,
+		ForwardedFromUserId: optStr(m.ForwardedFromUserID),
 	}
 }
 
@@ -162,6 +164,19 @@ func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummar
 		LastMessageRead: s.LastMessageRead,
 		MembersCount:    int32(s.MembersCount),
 		InviteCode:      s.InviteCode,
+		MutedUntil:      optTS(s.MutedUntil),
+		ArchivedAt:      optTS(s.ArchivedAt),
+		PinnedAt:        optTS(s.PinnedAt),
+		IsSaved:         s.IsSaved,
+	}
+}
+
+func toChatSettings(convID uuid.UUID, cs *models.ChatSettings) *conversationv1.ChatSettings {
+	return &conversationv1.ChatSettings{
+		ConversationId: convID.String(),
+		MutedUntil:     optTS(cs.MutedUntil),
+		ArchivedAt:     optTS(cs.ArchivedAt),
+		PinnedAt:       optTS(cs.PinnedAt),
 	}
 }
 
@@ -183,5 +198,14 @@ func toJoinRequest(j *models.JoinRequest) *conversationv1.JoinRequest {
 		Status:         j.Status,
 		CreatedAt:      ts(j.CreatedAt),
 		UpdatedAt:      ts(j.UpdatedAt),
+	}
+}
+
+func toPinnedMessage(p *models.PinnedMessage) *conversationv1.PinnedMessage {
+	return &conversationv1.PinnedMessage{
+		Message:  toMessage(&p.Message),
+		Scope:    p.Scope,
+		PinnedBy: p.PinnedBy.String(),
+		PinnedAt: ts(p.PinnedAt),
 	}
 }

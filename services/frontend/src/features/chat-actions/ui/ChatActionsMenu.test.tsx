@@ -53,7 +53,7 @@ describe('ChatActionsMenu', () => {
 
     it('a direct chat has info and read, but no leave', () => {
         renderMenu(direct)
-        expect(screen.queryByRole('menuitem', { name: /Покинуть|Удалить/ })).toBeNull()
+        expect(screen.queryByRole('menuitem', { name: 'Покинуть чат' })).toBeNull()
 
         fireEvent.click(screen.getByRole('menuitem', { name: 'Прочитать чат' }))
         expect(fetchMock).toHaveBeenCalledWith(
@@ -83,5 +83,82 @@ describe('ChatActionsMenu', () => {
         expect(screen.getByRole('menuitem', { name: 'Удалить чат' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('menuitem', { name: 'Сведения о чате' }))
         expect(useGroupCard.getState().target).toEqual({ kind: 'chat', id: 'g1' })
+    })
+
+    it('pins, archives and unmutes the chat', async () => {
+        renderMenu({
+            ...direct,
+            muted_until: '9999-12-31T00:00:00Z',
+            pinned_at: null,
+            archived_at: null,
+        })
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Закрепить чат' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'В архив' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Включить звук' }))
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+        const calls = fetchMock.mock.calls.map(([url, init]) => `${init.method} ${url}`)
+        expect(calls).toEqual([
+            'POST /api/conversations/d1/pin',
+            'POST /api/conversations/d1/archive',
+            'DELETE /api/conversations/d1/mute',
+        ])
+    })
+
+    it('mutes for the picked duration', async () => {
+        fetchMock.mockImplementation((url: string) =>
+            Promise.resolve(
+                new Response(
+                    url === '/api/customization'
+                        ? '{"status":{"icons":[],"durations":[]},"avatar_shapes":[],"mute_durations":["1h","8h","2d","forever"]}'
+                        : '{"conversation_id":"d1","muted_until":"2026-01-01T08:00:00Z","archived_at":null,"pinned_at":null}',
+                ),
+            ),
+        )
+        renderMenu({ ...direct, muted_until: null })
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Без звука' }))
+        const dialog = screen.getByRole('dialog', { name: 'Без звука' })
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'На 8 часов' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/d1/mute',
+                expect.objectContaining({ method: 'POST', body: '{"duration":"8h"}' }),
+            ),
+        )
+        await vi.waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: 'Без звука' })).toBeNull(),
+        )
+    })
+
+    it.each([
+        ['Только у меня', '/api/conversations/d1'],
+        ['У меня и у собеседника', '/api/conversations/d1?scope=all'],
+    ])('deletes a direct chat: %s', async (button, url) => {
+        renderMenu(direct)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Удалить чат' }))
+        const dialog = screen.getByRole('dialog', { name: 'Удалить чат?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: button }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                url,
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
+    })
+
+    it('«Избранное» has no info and is deleted whole after confirmation', async () => {
+        renderMenu({ ...direct, peer_id: null, is_saved: true })
+        expect(screen.queryByRole('menuitem', { name: 'Сведения о чате' })).toBeNull()
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Удалить чат' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        expect(
+            within(confirm).getByText('Все сообщения в «Избранном» будут удалены'),
+        ).toBeInTheDocument()
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/d1?scope=all',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
     })
 })

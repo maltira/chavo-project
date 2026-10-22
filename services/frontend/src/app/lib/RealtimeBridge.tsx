@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 
 import { applyConversationEvent, moveReadCursor, useGroupCard } from '@/entities/conversation'
-import { applyMessageEvent } from '@/entities/message'
+import { applyMessageEvent, applyPinsEvent, messagesKey } from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
@@ -75,7 +75,16 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
         }
         default: {
             const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
+            // удалённый чат (группа или личный, в том числе «только у меня» с другого устройства):
+            // его история в кеше больше не нужна и не должна снова показаться
+            const deletedId =
+                event.type === 'conversation.deleted' &&
+                (event.data as { conversation_id?: string } | undefined)?.conversation_id
+            if (deletedId) {
+                queryClient.removeQueries({ queryKey: messagesKey(deletedId) })
+            }
             applyMessageEvent(queryClient, event)
+            applyPinsEvent(queryClient, event)
             applyConversationEvent(queryClient, event, myId)
             applyGroupEvent(event, queryClient, myId)
             break
@@ -173,6 +182,13 @@ export function RealtimeBridge() {
                     return
                 }
                 applyEvent(event, queryClient)
+                // открытый удалённый чат закрывается
+                const deleted =
+                    event.type === 'conversation.deleted' &&
+                    (event.data as { conversation_id?: string } | undefined)?.conversation_id
+                if (deleted && window.location.pathname === chatPath(deleted)) {
+                    navigateRef.current('/', { replace: true })
+                }
                 const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
                 void notifyNewMessage(event, queryClient, myId, open)
                 void notifyGroupEvent(event, queryClient, myId, open)

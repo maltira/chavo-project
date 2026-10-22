@@ -7,6 +7,7 @@ import (
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
 	"github.com/maltira/chavo-project-backend/proto/media"
+	"github.com/maltira/chavo-project-backend/proto/mute"
 	"github.com/maltira/chavo-project-backend/proto/status"
 )
 
@@ -34,6 +35,8 @@ var (
 	ErrSlugInvalid           = errors.New("invalid chat link code")
 	ErrSlugRequired          = errors.New("public group requires a chat link code")
 	ErrSlugTaken             = errors.New("chat link code is taken")
+	ErrPinLimit              = errors.New("too many pinned chats")
+	ErrMessagePinLimit       = errors.New("too many pinned messages")
 )
 
 func HTTPCode(err error) int {
@@ -57,6 +60,8 @@ func HTTPCode(err error) int {
 		errors.Is(err, ErrGroupFull),
 		errors.Is(err, ErrJoinRequestsLimit),
 		errors.Is(err, ErrSlugTaken),
+		errors.Is(err, ErrPinLimit),
+		errors.Is(err, ErrMessagePinLimit),
 		errors.Is(err, ErrMessageDeleted):
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidUUID),
@@ -70,7 +75,8 @@ func HTTPCode(err error) int {
 		errors.Is(err, status.ErrInvalidColor),
 		errors.Is(err, avatarshape.ErrUnknownShape),
 		errors.Is(err, avatarshape.ErrInvalidColor),
-		errors.Is(err, media.ErrInvalidAvatarURL):
+		errors.Is(err, media.ErrInvalidAvatarURL),
+		errors.Is(err, mute.ErrUnknownDuration):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrUserServiceError):
 		return http.StatusServiceUnavailable
@@ -121,6 +127,12 @@ func Reason(err error) string {
 		return "SLUG_REQUIRED"
 	case errors.Is(err, ErrSlugTaken):
 		return "SLUG_TAKEN"
+	case errors.Is(err, ErrPinLimit):
+		return "PIN_LIMIT"
+	case errors.Is(err, ErrMessagePinLimit):
+		return "MESSAGE_PIN_LIMIT"
+	case errors.Is(err, mute.ErrUnknownDuration):
+		return "MUTE_DURATION_INVALID"
 	default:
 		return ""
 	}
@@ -186,6 +198,12 @@ func UserMessage(err error) string {
 		return "У открытой группы должна быть ссылка на чат"
 	case errors.Is(err, ErrSlugTaken):
 		return "Эта ссылка на чат уже занята"
+	case errors.Is(err, ErrPinLimit):
+		return "Можно закрепить не больше 5 чатов"
+	case errors.Is(err, ErrMessagePinLimit):
+		return "Можно закрепить не больше 10 сообщений"
+	case errors.Is(err, mute.ErrUnknownDuration):
+		return "Неизвестный срок отключения звука"
 	case errors.Is(err, ErrUserServiceError):
 		return "Сервис временно недоступен"
 	default:

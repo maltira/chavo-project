@@ -328,6 +328,7 @@ func (s *Server) GetSettings(ctx context.Context, _ *userv1.GetSettingsRequest) 
 		UserId:            st.UserID.String(),
 		AllowGroupInvites: st.AllowGroupInvites,
 		ShowOnlineStatus:  st.ShowOnlineStatus,
+		HideForwardAuthor: st.HideForwardAuthor,
 		CreatedAt:         ts(st.CreatedAt),
 		UpdatedAt:         ts(st.UpdatedAt),
 	}}, nil
@@ -344,6 +345,9 @@ func (s *Server) UpdateSettings(ctx context.Context, req *userv1.UpdateSettingsR
 	}
 	if req.ShowOnlineStatus != nil {
 		data["show_online_status"] = req.GetShowOnlineStatus()
+	}
+	if req.HideForwardAuthor != nil {
+		data["hide_forward_author"] = req.GetHideForwardAuthor()
 	}
 	if err = s.settings.UpdateSettings(ctx, userID, data); err != nil {
 		return nil, err
@@ -481,6 +485,27 @@ func (s *Server) BlockedIDs(ctx context.Context, req *userv1.BlockedIDsRequest) 
 		out[i] = b.String()
 	}
 	return &userv1.BlockedIDsResponse{UserIds: out}, nil
+}
+
+// ForwardAuthorsHidden - кто из авторов скрывает имя в пересланных сообщениях (для conversation-service)
+func (s *Server) ForwardAuthorsHidden(ctx context.Context, req *userv1.ForwardAuthorsHiddenRequest) (*userv1.ForwardAuthorsHiddenResponse, error) {
+	ids := make([]uuid.UUID, 0, len(req.GetUserIds()))
+	for _, raw := range req.GetUserIds() {
+		id, err := parseID(raw)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	hidden, err := s.settings.ForwardAuthorsHidden(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(hidden))
+	for i, id := range hidden {
+		out[i] = id.String()
+	}
+	return &userv1.ForwardAuthorsHiddenResponse{HiddenUserIds: out}, nil
 }
 
 func (s *Server) SetStatus(ctx context.Context, req *userv1.SetStatusRequest) (*userv1.SetStatusResponse, error) {

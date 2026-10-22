@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import type { ConversationSummary } from '@/entities/conversation'
@@ -35,10 +35,18 @@ const base: ConversationSummary = {
     unread_count: 0,
     last_message_read: true,
     members_count: 2,
+    muted_until: null,
+    archived_at: null,
+    pinned_at: null,
+    is_saved: false,
     slug: null,
 }
 
-function renderList(chats: ConversationSummary[] | undefined, compact = false) {
+function renderList(
+    chats: ConversationSummary[] | undefined,
+    compact = false,
+    archived: ConversationSummary[] = [],
+) {
     // данные заданы заранее и свежие: сетевых запросов нет
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -47,6 +55,7 @@ function renderList(chats: ConversationSummary[] | undefined, compact = false) {
     if (chats) {
         client.setQueryData(['conversations'], { pages: [chats], pageParams: [0] })
     }
+    client.setQueryData(['conversations', 'archived'], { pages: [archived], pageParams: [0] })
     return render(
         <QueryClientProvider client={client}>
             <MemoryRouter initialEntries={['/chats/c1']}>
@@ -101,6 +110,44 @@ describe('ChatList', () => {
         expect(screen.getByText('3')).toBeInTheDocument()
     })
 
+    it('marks pinned and muted chats, a muted counter is grey', () => {
+        renderList([
+            { ...base, id: 'p', name: 'Закреплённый', pinned_at: '2026-10-14T10:00:00Z' },
+            {
+                ...base,
+                id: 'm',
+                name: 'Тихий',
+                unread_count: 4,
+                muted_until: '9999-12-31T00:00:00Z',
+            },
+        ])
+        expect(
+            within(screen.getByRole('link', { name: /Закреплённый/ })).getByRole('img', {
+                name: 'Закреплён',
+            }),
+        ).toBeInTheDocument()
+        const quiet = screen.getByRole('link', { name: /Тихий/ })
+        expect(within(quiet).getByRole('img', { name: 'Без звука' })).toBeInTheDocument()
+        expect(within(quiet).getByText('4').className).toMatch(/muted/)
+    })
+
+    it('opens the archive from the row above the list and goes back', () => {
+        renderList([base], false, [
+            { ...base, id: 'a1', name: 'Старый', unread_count: 2 },
+            { ...base, id: 'a2', name: 'Ещё старее' },
+        ])
+        const row = screen.getByRole('button', { name: /Архив/ })
+        expect(within(row).getByText('2 чата')).toBeInTheDocument()
+        expect(screen.queryByText('Старый')).toBeNull()
+
+        fireEvent.click(row)
+        expect(screen.getByText('Старый')).toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: /Команда/ })).toBeNull()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Назад к чатам' }))
+        expect(screen.getByRole('link', { name: /Команда/ })).toBeInTheDocument()
+    })
+
     it('shows the empty state', () => {
         renderList([])
         expect(screen.getByText('Здесь пока что пусто')).toBeInTheDocument()
@@ -140,5 +187,22 @@ describe('ChatList', () => {
     it('shows the skeleton while loading', () => {
         renderList(undefined)
         expect(screen.getByLabelText('Загрузка чатов')).toHaveAttribute('aria-busy', 'true')
+    })
+
+    it('shows «Избранное» with a star and without read marks', () => {
+        renderList([
+            {
+                ...base,
+                conversation_type: 'direct',
+                name: null,
+                peer_id: null,
+                is_saved: true,
+                last_message_read: true,
+            },
+        ])
+        const link = screen.getByRole('link', { name: /Избранное/ })
+        // в «Избранном» все сообщения свои - без «Вы:»
+        expect(within(link).getByText('Привет всем')).toBeInTheDocument()
+        expect(link.querySelector('img')).toBeNull()
     })
 })

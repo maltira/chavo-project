@@ -32,13 +32,23 @@ type MessageService interface {
 	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
+	Forward(ctx context.Context, userID uuid.UUID, in ForwardInput) ([]ForwardResult, error)
 	Readers(ctx context.Context, userID, convID, messageID uuid.UUID) ([]uuid.UUID, error)
+
+	// закреплённые сообщения: scope all - для всех (в группе только админы), me - только для себя (личный чат);
+	// закреп удалённого сообщения снимается вместе с ним. В личном чате UnpinMessage all снимает и мой личный
+	// закреп, me при общем закрепе оставляет сообщение закреплённым у собеседника
+	PinMessage(ctx context.Context, userID, convID, messageID uuid.UUID, scope string) (*models.PinnedMessage, error)
+	UnpinMessage(ctx context.Context, userID, convID, messageID uuid.UUID, scope string) error
+	// ListPins - новые сверху; только сообщения, которые участник видит
+	ListPins(ctx context.Context, userID, convID uuid.UUID) ([]models.PinnedMessage, error)
 }
 
 type messageService struct {
 	db     *repository.DB
 	convs  repository.ConversationRepository
 	msgs   repository.MessageRepository
+	pins   repository.PinRepository
 	outbox repository.OutboxRepository
 	users  userclient.Client
 	cipher *crypto.Cipher
@@ -49,12 +59,13 @@ func NewMessageService(
 	db *repository.DB,
 	convs repository.ConversationRepository,
 	msgs repository.MessageRepository,
+	pins repository.PinRepository,
 	outbox repository.OutboxRepository,
 	users userclient.Client,
 	cipher *crypto.Cipher,
 	log *zap.Logger,
 ) MessageService {
-	return &messageService{db: db, convs: convs, msgs: msgs, outbox: outbox, users: users, cipher: cipher, log: log}
+	return &messageService{db: db, convs: convs, msgs: msgs, pins: pins, outbox: outbox, users: users, cipher: cipher, log: log}
 }
 
 func validateContent(content string) error {
@@ -94,6 +105,9 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 		TargetID:         rec.TargetID,
 		CreatedAt:        rec.CreatedAt,
 		UpdatedAt:        rec.UpdatedAt,
+
+		IsForwarded:         rec.IsForwarded,
+		ForwardedFromUserID: rec.ForwardedFromUserID,
 	}
 	if m.Kind == "" {
 		m.Kind = models.MessageUser
@@ -118,13 +132,11 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		return nil, err
 	}
 
-	// Сетевые проверки user-service выполняются до транзакции.
+	// Сетевые проверки user-service выполняются до транзакции. Себе («Избранное») писать можно всегда:
+	// проверять существование и блокировки не с кем.
 	var peerID uuid.UUID
-	if in.RecipientID != nil {
+	if in.RecipientID != nil && *in.RecipientID != senderID {
 		peerID = *in.RecipientID
-		if peerID == senderID {
-			return nil, apperror.ErrIncorrectData
-		}
 		exists, err := s.users.UserExists(ctx, peerID)
 		if err != nil {
 			return nil, err
@@ -132,7 +144,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		if !exists {
 			return nil, apperror.ErrUserNotFound
 		}
-	} else {
+	} else if in.ConversationID != nil {
 		access, err := s.convs.Access(ctx, s.db.Q(), *in.ConversationID, senderID)
 		if err != nil {
 			return nil, err
@@ -214,7 +226,8 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 	return result, nil
 }
 
-// resolveConversation возвращает id существующей conversation или лениво создаёт direct.
+// resolveConversation возвращает id существующей conversation или лениво создаёт direct;
+// direct с самим собой («Избранное») - ключ <id>:<id> и одна строка участника
 func (s *messageService) resolveConversation(ctx context.Context, tx repository.DBTX, senderID uuid.UUID, in SendMessageInput) (uuid.UUID, error) {
 	if in.ConversationID != nil {
 		return *in.ConversationID, nil
@@ -294,8 +307,8 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 		if _, err = s.msgs.FindVisible(ctx, tx, messageID, userID); err != nil {
 			return err
 		}
-		// системное сообщение не правится: у него нет текста
-		if rec.SenderID != userID || rec.Kind == models.MessageSystem {
+		// системное сообщение не правится: у него нет текста; пересланное - копия чужого текста
+		if rec.SenderID != userID || rec.Kind == models.MessageSystem || rec.IsForwarded {
 			return apperror.ErrForbidden
 		}
 		if rec.DeletedAt != nil {
@@ -369,6 +382,16 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 		}
 		if err = s.outbox.ScrubMessageContent(ctx, tx, messageID); err != nil {
 			return err
+		}
+		// удалённое сообщение не остаётся закреплённым ни у кого
+		owners, err := s.pins.DeleteForMessage(ctx, tx, messageID)
+		if err != nil {
+			return err
+		}
+		if len(owners) > 0 {
+			if err = s.publishPinsChanged(ctx, tx, rec.ConversationID, owners); err != nil {
+				return err
+			}
 		}
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, rec.ConversationID)
 		if err != nil {

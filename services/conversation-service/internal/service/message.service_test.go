@@ -24,6 +24,21 @@ type fakeUsers struct {
 	blockedBySender map[[2]uuid.UUID]bool // {sender, recipient}: sender заблокировал recipient
 	missing         map[uuid.UUID]bool    // пользователя нет в user-service
 	noInvites       map[uuid.UUID]bool    // пользователь запретил приглашения в группы
+	hideForward     map[uuid.UUID]bool    // пользователь скрывает имя в пересланных
+	down            bool                  // user-service недоступен
+}
+
+func (f *fakeUsers) ForwardAuthorsHidden(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
+	if f.down {
+		return nil, apperror.ErrUserServiceError
+	}
+	res := map[uuid.UUID]bool{}
+	for _, id := range ids {
+		if f.hideForward[id] {
+			res[id] = true
+		}
+	}
+	return res, nil
 }
 
 func (f *fakeUsers) CheckMessagingAllowed(_ context.Context, s, r uuid.UUID) error {
@@ -64,11 +79,12 @@ func setup(t *testing.T) *env {
 		blockedBySender: map[[2]uuid.UUID]bool{},
 		missing:         map[uuid.UUID]bool{},
 		noInvites:       map[uuid.UUID]bool{},
+		hideForward:     map[uuid.UUID]bool{},
 	}
 	return &env{
 		pool:   pool,
-		msgs:   service.NewMessageService(db, cr, mr, or, users, cipher, zap.NewNop()),
-		convs:  service.NewConversationService(db, cr, cipher),
+		msgs:   service.NewMessageService(db, cr, mr, repository.NewPinRepository(), or, users, cipher, zap.NewNop()),
+		convs:  service.NewConversationService(db, cr, or, cipher),
 		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), cipher, mr),
 		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository(), cipher, mr),
 		users:  users,
@@ -152,7 +168,6 @@ func TestSendValidation(t *testing.T) {
 		"no ids":   {Content: "x"},
 		"blank":    {RecipientID: &b, Content: "   "},
 		"too long": {RecipientID: &b, Content: strings.Repeat("я", 4097)},
-		"to self":  {RecipientID: &a, Content: "x"},
 	} {
 		if _, err := e.msgs.Send(ctx, a, in); !errors.Is(err, apperror.ErrIncorrectData) {
 			t.Errorf("%s: %v", name, err)
@@ -334,7 +349,7 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 		t.Fatalf("readers of ids[3] = %v", readers)
 	}
 
-	list, _ := e.convs.List(ctx, a, 10, 0)
+	list, _ := e.convs.List(ctx, a, false, 10, 0)
 	if len(list) != 1 || list[0].UnreadCount != 0 {
 		t.Fatalf("list for a: %+v", list)
 	}
@@ -346,7 +361,7 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 	if err = e.msgs.MarkRead(ctx, b, conv, ids[4]); err != nil {
 		t.Fatal(err)
 	}
-	list, _ = e.convs.List(ctx, a, 10, 0)
+	list, _ = e.convs.List(ctx, a, false, 10, 0)
 	if !list[0].LastMessageRead {
 		t.Fatal("last message must be read after b's cursor reaches it")
 	}
@@ -365,7 +380,7 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 
 func mustConv(t *testing.T, e *env, user uuid.UUID) uuid.UUID {
 	t.Helper()
-	list, err := e.convs.List(context.Background(), user, 1, 0)
+	list, err := e.convs.List(context.Background(), user, false, 1, 0)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list: %v %v", list, err)
 	}

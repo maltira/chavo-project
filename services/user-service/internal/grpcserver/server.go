@@ -30,12 +30,15 @@ type Server struct {
 	settings service.SettingsService
 	statuses service.StatusService
 	shapes   service.AvatarShapeService
+	avatars  service.AvatarHistoryService
 	presence presence.Checker
 }
 
 func New(profiles service.ProfileService, blocks service.BlockService, settings service.SettingsService,
-	statuses service.StatusService, shapes service.AvatarShapeService, presence presence.Checker) *Server {
-	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, shapes: shapes, presence: presence}
+	statuses service.StatusService, shapes service.AvatarShapeService, avatars service.AvatarHistoryService,
+	presence presence.Checker) *Server {
+	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, shapes: shapes,
+		avatars: avatars, presence: presence}
 }
 
 // avatarShapeToProto - фигура, убранная из каталога после установки, считается отсутствующей
@@ -555,4 +558,71 @@ func (s *Server) ClearAvatarShape(ctx context.Context, _ *userv1.ClearAvatarShap
 		return nil, err
 	}
 	return &userv1.ClearAvatarShapeResponse{}, nil
+}
+
+func (s *Server) ListAvatars(ctx context.Context, req *userv1.ListAvatarsRequest) (*userv1.ListAvatarsResponse, error) {
+	viewer, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	owner, err := parseID(req.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	photos, err := s.avatars.List(ctx, viewer, owner)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*userv1.AvatarPhoto, len(photos))
+	for i, p := range photos {
+		out[i] = &userv1.AvatarPhoto{Id: p.ID.String(), AvatarUrl: p.URL, CreatedAt: ts(p.CreatedAt), IsCurrent: p.IsCurrent}
+	}
+	return &userv1.ListAvatarsResponse{Items: out}, nil
+}
+
+func (s *Server) AddAvatar(ctx context.Context, req *userv1.AddAvatarRequest) (*userv1.AddAvatarResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	evicted, err := s.avatars.Add(ctx, userID, req.GetAvatarUrl())
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.AddAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (s *Server) SelectAvatar(ctx context.Context, req *userv1.SelectAvatarRequest) (*userv1.SelectAvatarResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	photoID, err := parseID(req.GetAvatarId())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.avatars.Select(ctx, userID, photoID); err != nil {
+		return nil, err
+	}
+	return &userv1.SelectAvatarResponse{}, nil
+}
+
+func (s *Server) DeleteAvatar(ctx context.Context, req *userv1.DeleteAvatarRequest) (*userv1.DeleteAvatarResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var photoID *uuid.UUID
+	if req.AvatarId != nil {
+		id, err := parseID(req.GetAvatarId())
+		if err != nil {
+			return nil, err
+		}
+		photoID = &id
+	}
+	removed, err := s.avatars.Delete(ctx, userID, photoID)
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.DeleteAvatarResponse{RemovedUrl: &removed}, nil
 }

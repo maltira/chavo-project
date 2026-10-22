@@ -25,6 +25,16 @@ service ConversationService {
   // DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+
+  // История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
+  // и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
+  // (fields: ["avatar_url"]).
+  rpc ListGroupAvatars(ListGroupAvatarsRequest) returns (ListGroupAvatarsResponse);
+  // AddGroupAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+  rpc AddGroupAvatar(AddGroupAvatarRequest) returns (AddGroupAvatarResponse);
+  rpc SelectGroupAvatar(SelectGroupAvatarRequest) returns (SelectGroupAvatarResponse);
+  // DeleteGroupAvatar - убрать фото; если оно было текущим, текущим становится предыдущее.
+  rpc DeleteGroupAvatar(DeleteGroupAvatarRequest) returns (DeleteGroupAvatarResponse);
   // личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
   // архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
   rpc SetChatMute(SetChatMuteRequest) returns (SetChatMuteResponse);
@@ -297,6 +307,39 @@ message JoinGroupRequest {
   string conversation_id = 1;
 }
 message JoinGroupResponse {}
+
+message AvatarPhoto {
+  string id = 1;
+  string avatar_url = 2;
+  google.protobuf.Timestamp created_at = 3;
+  bool is_current = 4;
+}
+message ListGroupAvatarsRequest {
+  string conversation_id = 1;
+}
+message ListGroupAvatarsResponse {
+  repeated AvatarPhoto items = 1;
+}
+message AddGroupAvatarRequest {
+  string conversation_id = 1;
+  string avatar_url = 2;
+}
+message AddGroupAvatarResponse {
+  repeated string evicted_urls = 1;
+}
+message SelectGroupAvatarRequest {
+  string conversation_id = 1;
+  string avatar_id = 2;
+}
+message SelectGroupAvatarResponse {}
+message DeleteGroupAvatarRequest {
+  string conversation_id = 1;
+  // пусто - текущее фото
+  optional string avatar_id = 2;
+}
+message DeleteGroupAvatarResponse {
+  optional string removed_url = 1;
+}
 
 message SetChatMuteRequest {
   string conversation_id = 1;

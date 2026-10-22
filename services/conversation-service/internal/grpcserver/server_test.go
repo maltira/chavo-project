@@ -51,7 +51,7 @@ func start(t *testing.T) clients {
 
 	impl := grpcserver.New(
 		service.NewConversationService(db, cr, or, cipher),
-		service.NewGroupService(db, cr, or, users, br, cipher, mr),
+		service.NewGroupService(db, cr, or, users, br, repository.NewAvatarHistoryRepository(), cipher, mr),
 		service.NewJoinService(db, cr, jr, or, br, cipher, mr),
 		service.NewMessageService(db, cr, mr, repository.NewPinRepository(), or, users, cipher, log),
 	)

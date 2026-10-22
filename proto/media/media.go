@@ -21,6 +21,9 @@ const (
 	AvatarsDir = "avatars/"
 	// AvatarExt - аватарка всегда перекодируется в JPEG
 	AvatarExt = ".jpg"
+	// MaxAvatarHistory - сколько последних фото хранится в истории аватарок профиля или группы (с текущим);
+	// старые сверх этого удаляются вместе с файлами
+	MaxAvatarHistory = 5
 )
 
 var (

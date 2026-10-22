@@ -167,11 +167,15 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	p.DELETE("/users/me/status", h.clearMyStatus)
 	p.POST("/users/me/avatar-shape", h.setMyAvatarShape)
 	p.DELETE("/users/me/avatar-shape", h.clearMyAvatarShape)
+	p.GET("/users/me/avatars", h.listMyAvatars)
+	p.POST("/users/me/avatars/:id/select", h.selectMyAvatar)
 	if d.Media != nil {
 		p.POST("/users/me/avatar", append(uploadLimit, h.uploadMyAvatar)...)
 		p.DELETE("/users/me/avatar", h.deleteMyAvatar)
+		p.DELETE("/users/me/avatars/:id", h.deleteMyAvatarPhoto)
 	}
 	p.GET("/users/:user_id", h.getProfile)
+	p.GET("/users/:user_id/avatars", h.listUserAvatars)
 	p.GET("/users/:user_id/block-status", h.blockStatus)
 	p.POST("/users/:user_id/block", h.block)
 	p.DELETE("/users/:user_id/block", h.unblock)
@@ -189,6 +193,7 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/avatar-shape", h.clearGroupAvatarShape)
 	if d.Media != nil {
 		conv.POST("/:id/avatar", append(uploadLimit, h.uploadGroupAvatar)...)
+		conv.DELETE("/:id/avatars/:photo_id", h.deleteGroupAvatarPhoto)
 		conv.DELETE("/:id/avatar", h.deleteGroupAvatar)
 	}
 	conv.POST("/:id/mute", h.muteChat)
@@ -197,6 +202,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/archive", h.archiveChat(false))
 	conv.POST("/:id/pin", h.pinChat(true))
 	conv.DELETE("/:id/pin", h.pinChat(false))
+	conv.GET("/:id/avatars", h.listGroupAvatars)
+	conv.POST("/:id/avatars/:photo_id/select", h.selectGroupAvatar)
 	conv.POST("/:id/join", h.joinGroup)
 	conv.POST("/:id/invite-link/regenerate", h.regenerateInvite)
 	conv.POST("/:id/join-requests", h.requestJoin)

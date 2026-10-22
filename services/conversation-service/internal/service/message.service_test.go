@@ -85,7 +85,7 @@ func setup(t *testing.T) *env {
 		pool:   pool,
 		msgs:   service.NewMessageService(db, cr, mr, repository.NewPinRepository(), or, users, cipher, zap.NewNop()),
 		convs:  service.NewConversationService(db, cr, or, cipher),
-		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), cipher, mr),
+		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), repository.NewAvatarHistoryRepository(), cipher, mr),
 		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository(), cipher, mr),
 		users:  users,
 	}

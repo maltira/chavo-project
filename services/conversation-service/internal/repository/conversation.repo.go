@@ -129,6 +129,8 @@ type ConversationRepository interface {
 	CountMembers(ctx context.Context, q DBTX, convID uuid.UUID) (int, error)
 	AdminIDs(ctx context.Context, q DBTX, convID uuid.UUID) ([]uuid.UUID, error)
 	FindByInviteHash(ctx context.Context, q DBTX, hash string) (*models.Conversation, error)
+	// IsPublicGroup - открытая ли это группа (её фото видно и не участникам)
+	IsPublicGroup(ctx context.Context, q DBTX, convID uuid.UUID) (bool, error)
 	// FindBySlug ищет открытую группу по коду ссылки без учёта регистра; ErrNotFound, если такой нет
 	FindBySlug(ctx context.Context, q DBTX, slug string) (*models.Conversation, error)
 	SearchPublicGroups(ctx context.Context, q DBTX, userID uuid.UUID, query string, limit, offset int) ([]models.PublicGroup, error)
@@ -583,6 +585,16 @@ func (r *conversationRepository) FindByInviteHash(ctx context.Context, q DBTX, h
 		return nil, fmt.Errorf("find by invite hash: %w", err)
 	}
 	return c, nil
+}
+
+func (r *conversationRepository) IsPublicGroup(ctx context.Context, q DBTX, convID uuid.UUID) (bool, error) {
+	var public bool
+	if err := q.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM conversations WHERE id = $1 AND conversation_type = 'group' AND visibility = 'public')`,
+		convID).Scan(&public); err != nil {
+		return false, fmt.Errorf("is public group: %w", err)
+	}
+	return public, nil
 }
 
 func (r *conversationRepository) FindBySlug(ctx context.Context, q DBTX, slug string) (*models.Conversation, error) {

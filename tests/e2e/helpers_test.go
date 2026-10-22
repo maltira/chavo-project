@@ -358,12 +358,15 @@ func (w *world) cleanup(t testing.TB) {
 	// загруженные фото тестовых пользователей и их групп - до удаления строк, где записаны пути
 	var objects []string
 	for _, p := range strings.Fields(psql(t, cfg.userDB, fmt.Sprintf(
-		`SELECT avatar_url FROM profiles WHERE user_id::text IN (%s) AND avatar_url LIKE '/media/avatars/%%'`, quoted))) {
+		`SELECT avatar_url FROM profile_avatars WHERE user_id::text IN (%s) AND avatar_url LIKE '/media/avatars/%%'
+		 UNION SELECT avatar_url FROM profiles WHERE user_id::text IN (%[1]s) AND avatar_url LIKE '/media/avatars/%%'`, quoted))) {
 		objects = append(objects, strings.TrimPrefix(p, "/media/"), strings.TrimSuffix(strings.TrimPrefix(p, "/media/"), ".jpg")+"_l.jpg")
 	}
 	for _, p := range strings.Fields(psql(t, cfg.convDB, fmt.Sprintf(
-		`SELECT c.avatar_url FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id
-		 WHERE m.user_id::text IN (%s) AND c.avatar_url LIKE '/media/avatars/%%'`, quoted))) {
+		`SELECT a.avatar_url FROM conversation_avatars a JOIN conversation_members m ON m.conversation_id = a.conversation_id
+		 WHERE m.user_id::text IN (%s) AND a.avatar_url LIKE '/media/avatars/%%'
+		 UNION SELECT c.avatar_url FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id
+		 WHERE m.user_id::text IN (%[1]s) AND c.avatar_url LIKE '/media/avatars/%%'`, quoted))) {
 		objects = append(objects, strings.TrimPrefix(p, "/media/"), strings.TrimSuffix(strings.TrimPrefix(p, "/media/"), ".jpg")+"_l.jpg")
 	}
 	minioRemove(t, objects)

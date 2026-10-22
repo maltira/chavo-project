@@ -140,6 +140,89 @@ type fakeUsers struct {
 	avatars     map[string]string
 	existsCalls atomic.Int32
 	hideForward bool
+	// history - история аватарок пользователя, новые первыми
+	history map[string][]fakePhoto
+}
+
+// fakePhoto - фото в истории аватарок (пользователя или группы)
+type fakePhoto struct{ id, url string }
+
+// historyAdd кладёт фото наверх и возвращает выпавшие сверх пяти; current - адрес нового текущего ("" - нет)
+func historyAdd(list []fakePhoto, url string) ([]fakePhoto, []string) {
+	list = append([]fakePhoto{{id: uuid.NewString(), url: url}}, list...)
+	var evicted []string
+	for len(list) > 5 {
+		evicted = append(evicted, list[len(list)-1].url)
+		list = list[:len(list)-1]
+	}
+	return list, evicted
+}
+
+func historyFind(list []fakePhoto, id string) int {
+	for i, p := range list {
+		if p.id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func historyProto(list []fakePhoto) []*userv1.AvatarPhoto {
+	out := make([]*userv1.AvatarPhoto, len(list))
+	for i, p := range list {
+		out[i] = &userv1.AvatarPhoto{Id: p.id, AvatarUrl: p.url, CreatedAt: timestamppb.Now(), IsCurrent: i == 0}
+	}
+	return out
+}
+
+func (u *fakeUsers) AddAvatar(ctx context.Context, req *userv1.AddAvatarRequest) (*userv1.AddAvatarResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	id := grpcx.IncomingUserID(ctx)
+	list, evicted := historyAdd(u.history[id], req.GetAvatarUrl())
+	u.history[id] = list
+	u.avatars[id] = list[0].url
+	return &userv1.AddAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (u *fakeUsers) ListAvatars(_ context.Context, req *userv1.ListAvatarsRequest) (*userv1.ListAvatarsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return &userv1.ListAvatarsResponse{Items: historyProto(u.history[req.GetUserId()])}, nil
+}
+
+func (u *fakeUsers) SelectAvatar(ctx context.Context, req *userv1.SelectAvatarRequest) (*userv1.SelectAvatarResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	id := grpcx.IncomingUserID(ctx)
+	i := historyFind(u.history[id], req.GetAvatarId())
+	if i < 0 {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	p := u.history[id][i]
+	u.history[id] = append([]fakePhoto{p}, append(append([]fakePhoto{}, u.history[id][:i]...), u.history[id][i+1:]...)...)
+	u.avatars[id] = p.url
+	return &userv1.SelectAvatarResponse{}, nil
+}
+
+func (u *fakeUsers) DeleteAvatar(ctx context.Context, req *userv1.DeleteAvatarRequest) (*userv1.DeleteAvatarResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	id := grpcx.IncomingUserID(ctx)
+	i := 0
+	if req.AvatarId != nil {
+		i = historyFind(u.history[id], req.GetAvatarId())
+	}
+	if i < 0 || i >= len(u.history[id]) {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	removed := u.history[id][i].url
+	u.history[id] = append(append([]fakePhoto{}, u.history[id][:i]...), u.history[id][i+1:]...)
+	u.avatars[id] = ""
+	if len(u.history[id]) > 0 {
+		u.avatars[id] = u.history[id][0].url
+	}
+	return &userv1.DeleteAvatarResponse{RemovedUrl: &removed}, nil
 }
 
 func (u *fakeUsers) has(id string) bool {
@@ -238,8 +321,9 @@ type fakeConversations struct {
 	conversationv1.UnimplementedConversationServiceServer
 	sendErr error
 	mu      sync.Mutex
-	avatars map[string]string // группа -> путь аватарки
-	admins  map[string]string // группа -> её админ
+	avatars map[string]string      // группа -> путь текущей аватарки
+	admins  map[string]string      // группа -> её админ
+	history map[string][]fakePhoto // группа -> история аватарок, новые первыми
 	// lastArchived - фильтр архива в последнем ListConversations
 	lastArchived bool
 	// lastForEveryone - for_everyone последнего DeleteConversation
@@ -302,6 +386,80 @@ func (f *fakeConversations) GetConversation(_ context.Context, req *conversation
 		c.AvatarUrl = &a
 	}
 	return &conversationv1.GetConversationResponse{Conversation: &conversationv1.ConversationSummary{Conversation: c}}, nil
+}
+
+func (f *fakeConversations) adminOnly(ctx context.Context, group string) error {
+	if _, ok := f.admins[group]; !ok {
+		return grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	if f.admins[group] != grpcx.IncomingUserID(ctx) {
+		return grpcx.Error(codes.PermissionDenied, "", "Недостаточно прав")
+	}
+	return nil
+}
+
+func (f *fakeConversations) AddGroupAvatar(ctx context.Context, req *conversationv1.AddGroupAvatarRequest) (*conversationv1.AddGroupAvatarResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := req.GetConversationId()
+	if err := f.adminOnly(ctx, g); err != nil {
+		return nil, err
+	}
+	list, evicted := historyAdd(f.history[g], req.GetAvatarUrl())
+	f.history[g] = list
+	f.avatars[g] = list[0].url
+	return &conversationv1.AddGroupAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (f *fakeConversations) ListGroupAvatars(_ context.Context, req *conversationv1.ListGroupAvatarsRequest) (*conversationv1.ListGroupAvatarsResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	list := f.history[req.GetConversationId()]
+	out := make([]*conversationv1.AvatarPhoto, len(list))
+	for i, p := range list {
+		out[i] = &conversationv1.AvatarPhoto{Id: p.id, AvatarUrl: p.url, CreatedAt: timestamppb.Now(), IsCurrent: i == 0}
+	}
+	return &conversationv1.ListGroupAvatarsResponse{Items: out}, nil
+}
+
+func (f *fakeConversations) SelectGroupAvatar(ctx context.Context, req *conversationv1.SelectGroupAvatarRequest) (*conversationv1.SelectGroupAvatarResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := req.GetConversationId()
+	if err := f.adminOnly(ctx, g); err != nil {
+		return nil, err
+	}
+	i := historyFind(f.history[g], req.GetAvatarId())
+	if i < 0 {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	p := f.history[g][i]
+	f.history[g] = append([]fakePhoto{p}, append(append([]fakePhoto{}, f.history[g][:i]...), f.history[g][i+1:]...)...)
+	f.avatars[g] = p.url
+	return &conversationv1.SelectGroupAvatarResponse{}, nil
+}
+
+func (f *fakeConversations) DeleteGroupAvatar(ctx context.Context, req *conversationv1.DeleteGroupAvatarRequest) (*conversationv1.DeleteGroupAvatarResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := req.GetConversationId()
+	if err := f.adminOnly(ctx, g); err != nil {
+		return nil, err
+	}
+	i := 0
+	if req.AvatarId != nil {
+		i = historyFind(f.history[g], req.GetAvatarId())
+	}
+	if i < 0 || i >= len(f.history[g]) {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	removed := f.history[g][i].url
+	f.history[g] = append(append([]fakePhoto{}, f.history[g][:i]...), f.history[g][i+1:]...)
+	f.avatars[g] = ""
+	if len(f.history[g]) > 0 {
+		f.avatars[g] = f.history[g][0].url
+	}
+	return &conversationv1.DeleteGroupAvatarResponse{RemovedUrl: &removed}, nil
 }
 
 func (f *fakeConversations) UpdateGroup(ctx context.Context, req *conversationv1.UpdateGroupRequest) (*conversationv1.UpdateGroupResponse, error) {
@@ -399,10 +557,10 @@ func newEnvWithLimits(t *testing.T, limits api.Limits) *env {
 		sessions: &fakeSessions{owners: map[string]string{}},
 		cache:    &fakeCache{set: map[string]bool{}},
 		seen:     &seenMD{},
-		convs:    &fakeConversations{avatars: map[string]string{}, admins: map[string]string{}},
+		convs:    &fakeConversations{avatars: map[string]string{}, admins: map[string]string{}, history: map[string][]fakePhoto{}},
 		media:    &memStore{objects: map[string][]byte{}},
 	}
-	e.users = &fakeUsers{seen: e.seen, profiles: map[string]bool{}, avatars: map[string]string{}}
+	e.users = &fakeUsers{seen: e.seen, profiles: map[string]bool{}, avatars: map[string]string{}, history: map[string][]fakePhoto{}}
 
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()

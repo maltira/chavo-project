@@ -19,6 +19,16 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 CREATE INDEX idx_profiles_username_trgm ON profiles USING GIN (username gin_trgm_ops);
 
+-- История аватарок: до MaxAvatarHistory последних фото. Текущая аватарка - самая новая строка, её адрес
+-- дублируется в profiles.avatar_url; «сделать главной» поднимает фото наверх (created_at = сейчас).
+CREATE TABLE IF NOT EXISTS profile_avatars (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES profiles (user_id) ON DELETE CASCADE,
+    avatar_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS idx_profile_avatars_user ON profile_avatars (user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS user_settings (
     user_id             UUID PRIMARY KEY,
     allow_group_invites BOOLEAN NOT NULL DEFAULT TRUE,

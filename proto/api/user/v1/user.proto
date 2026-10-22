@@ -16,6 +16,16 @@ service UserService {
   rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
   rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
+  // История аватарок: до 5 последних фото, первое (самое новое) - текущее. Список другого пользователя
+  // пуст, если он заблокировал вызывающего.
+  rpc ListAvatars(ListAvatarsRequest) returns (ListAvatarsResponse);
+  // AddAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+  rpc AddAvatar(AddAvatarRequest) returns (AddAvatarResponse);
+  // SelectAvatar - сделать фото из истории текущим.
+  rpc SelectAvatar(SelectAvatarRequest) returns (SelectAvatarResponse);
+  // DeleteAvatar - убрать фото из истории; если оно было текущим, текущим становится предыдущее.
+  rpc DeleteAvatar(DeleteAvatarRequest) returns (DeleteAvatarResponse);
+
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc GetBlockStatus(GetBlockStatusRequest) returns (GetBlockStatusResponse);
   rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
@@ -61,6 +71,37 @@ message Profile {
   status.v1.Status status = 10;
   // не задана - фигуры нет или она скрыта от заблокированного
   avatarshape.v1.AvatarShape avatar_shape = 11;
+}
+
+message AvatarPhoto {
+  string id = 1;
+  string avatar_url = 2;
+  google.protobuf.Timestamp created_at = 3;
+  bool is_current = 4;
+}
+message ListAvatarsRequest {
+  string user_id = 1;
+}
+message ListAvatarsResponse {
+  repeated AvatarPhoto items = 1;
+}
+message AddAvatarRequest {
+  string avatar_url = 1;
+}
+message AddAvatarResponse {
+  repeated string evicted_urls = 1;
+}
+message SelectAvatarRequest {
+  string avatar_id = 1;
+}
+message SelectAvatarResponse {}
+message DeleteAvatarRequest {
+  // пусто - текущее фото
+  optional string avatar_id = 1;
+}
+message DeleteAvatarResponse {
+  // адрес удалённого фото: его файлы удаляет Gateway; пусто, если удалять было нечего
+  optional string removed_url = 1;
 }
 
 message Settings {

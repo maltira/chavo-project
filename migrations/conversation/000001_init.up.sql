@@ -112,6 +112,17 @@ CREATE INDEX idx_messages_conversation_cursor ON messages (conversation_id, crea
 
 CREATE INDEX idx_messages_reply_to ON messages (reply_to_message_id);
 
+-- История аватарок группы: до MaxAvatarHistory последних фото. Текущая - самая новая строка, её адрес
+-- дублируется в conversations.avatar_url; «сделать главной» поднимает фото наверх (created_at = сейчас).
+CREATE TABLE conversation_avatars (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+    avatar_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp ()
+);
+
+CREATE INDEX idx_conversation_avatars_conv ON conversation_avatars (conversation_id, created_at DESC);
+
 CREATE TABLE conversation_members (
     conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
     user_id UUID NOT NULL,

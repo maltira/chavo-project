@@ -4,6 +4,8 @@ package grpcserver
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
 	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
@@ -744,4 +746,83 @@ func (s *Server) ForwardMessages(ctx context.Context, req *conversationv1.Forwar
 		out[i] = &conversationv1.ForwardedChat{ConversationId: results[i].ConversationID.String(), Messages: msgs}
 	}
 	return &conversationv1.ForwardMessagesResponse{Items: out}, nil
+}
+
+func (s *Server) ListGroupAvatars(ctx context.Context, req *conversationv1.ListGroupAvatarsRequest) (*conversationv1.ListGroupAvatarsResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	photos, err := s.groups.ListAvatars(ctx, user, convID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*conversationv1.AvatarPhoto, len(photos))
+	for i, p := range photos {
+		out[i] = &conversationv1.AvatarPhoto{Id: p.ID.String(), AvatarUrl: p.URL, CreatedAt: ts(p.CreatedAt), IsCurrent: p.IsCurrent}
+	}
+	return &conversationv1.ListGroupAvatarsResponse{Items: out}, nil
+}
+
+func (s *Server) AddGroupAvatar(ctx context.Context, req *conversationv1.AddGroupAvatarRequest) (*conversationv1.AddGroupAvatarResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	evicted, err := s.groups.AddAvatar(ctx, user, convID, req.GetAvatarUrl())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.AddGroupAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (s *Server) SelectGroupAvatar(ctx context.Context, req *conversationv1.SelectGroupAvatarRequest) (*conversationv1.SelectGroupAvatarResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	photoID, err := parseID(req.GetAvatarId())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.groups.SelectAvatar(ctx, user, convID, photoID); err != nil {
+		return nil, err
+	}
+	return &conversationv1.SelectGroupAvatarResponse{}, nil
+}
+
+func (s *Server) DeleteGroupAvatar(ctx context.Context, req *conversationv1.DeleteGroupAvatarRequest) (*conversationv1.DeleteGroupAvatarResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	var photoID *uuid.UUID
+	if req.AvatarId != nil {
+		id, err := parseID(req.GetAvatarId())
+		if err != nil {
+			return nil, err
+		}
+		photoID = &id
+	}
+	removed, err := s.groups.DeleteAvatar(ctx, user, convID, photoID)
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.DeleteGroupAvatarResponse{RemovedUrl: &removed}, nil
 }

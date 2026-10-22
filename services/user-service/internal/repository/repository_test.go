@@ -3,13 +3,17 @@ package repository_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/maltira/chavo-project-backend/proto/media"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/repository"
@@ -351,5 +355,161 @@ func TestAvatarShapes(t *testing.T) {
 	var n int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_avatar_shapes WHERE user_id = $1`, other).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("cascade: %d %v", n, err)
+	}
+}
+
+func avatarPath(n int) string {
+	return media.AvatarURL(fmt.Sprintf("%032x.jpg", n))
+}
+
+func currentAvatar(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) *string {
+	t.Helper()
+	var url *string
+	if err := pool.QueryRow(context.Background(), `SELECT avatar_url FROM profiles WHERE user_id = $1`, id).Scan(&url); err != nil {
+		t.Fatal(err)
+	}
+	return url
+}
+
+func TestAvatarHistory(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	repo := repository.NewAvatarHistoryRepository(pool)
+	ctx := context.Background()
+	me, other := createProfile(t, pool, "hist_me"), createProfile(t, pool, "hist_other")
+	urls := func(items []models.AvatarPhoto) []string {
+		res := make([]string, len(items))
+		for i, p := range items {
+			res[i] = p.URL
+		}
+		return res
+	}
+
+	// новое фото становится текущим, адрес дублируется в профиле
+	for n := 1; n <= 3; n++ {
+		if evicted, err := repo.Add(ctx, me, avatarPath(n), 5); err != nil || len(evicted) != 0 {
+			t.Fatalf("add %d: %v %v", n, evicted, err)
+		}
+	}
+	list, _ := repo.List(ctx, me)
+	if !slices.Equal(urls(list), []string{avatarPath(3), avatarPath(2), avatarPath(1)}) || !list[0].IsCurrent || list[1].IsCurrent {
+		t.Fatalf("list: %+v", list)
+	}
+	if got := currentAvatar(t, pool, me); got == nil || *got != avatarPath(3) {
+		t.Fatalf("profile avatar: %v", got)
+	}
+	// чужая история не смешивается
+	if l, _ := repo.List(ctx, other); len(l) != 0 {
+		t.Fatalf("other user sees %v", urls(l))
+	}
+
+	// «сделать главной»: старое фото встаёт наверх, профиль следует за ним
+	if err := repo.Select(ctx, me, list[2].ID); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = repo.List(ctx, me)
+	if !slices.Equal(urls(list), []string{avatarPath(1), avatarPath(3), avatarPath(2)}) {
+		t.Fatalf("after select: %v", urls(list))
+	}
+	if got := currentAvatar(t, pool, me); *got != avatarPath(1) {
+		t.Fatalf("profile after select: %v", *got)
+	}
+	if err := repo.Select(ctx, me, uuid.New()); !errors.Is(err, apperror.ErrNotFound) {
+		t.Fatalf("select unknown: %v", err)
+	}
+	// чужое фото не выбрать
+	otherPhoto, _ := repo.Add(ctx, other, avatarPath(100), 5)
+	_ = otherPhoto
+	ol, _ := repo.List(ctx, other)
+	if err := repo.Select(ctx, me, ol[0].ID); !errors.Is(err, apperror.ErrNotFound) {
+		t.Fatalf("select foreign photo: %v", err)
+	}
+	if _, err := repo.Delete(ctx, me, &ol[0].ID); !errors.Is(err, apperror.ErrNotFound) {
+		t.Fatalf("delete foreign photo: %v", err)
+	}
+
+	// лимит: шестое фото вытесняет самое старое (его адрес возвращается для удаления файла)
+	for n := 4; n <= 5; n++ {
+		if _, err := repo.Add(ctx, me, avatarPath(n), 5); err != nil {
+			t.Fatal(err)
+		}
+	}
+	evicted, err := repo.Add(ctx, me, avatarPath(6), 5)
+	if err != nil || !slices.Equal(evicted, []string{avatarPath(2)}) {
+		t.Fatalf("evicted: %v %v", evicted, err)
+	}
+	list, _ = repo.List(ctx, me)
+	if len(list) != 5 || list[0].URL != avatarPath(6) {
+		t.Fatalf("after limit: %v", urls(list))
+	}
+
+	// удаление текущего: текущим становится предыдущее; удаление из середины текущее не трогает
+	removed, err := repo.Delete(ctx, me, nil)
+	if err != nil || removed != avatarPath(6) {
+		t.Fatalf("delete current: %q %v", removed, err)
+	}
+	if got := currentAvatar(t, pool, me); *got != avatarPath(5) {
+		t.Fatalf("profile after delete current: %v", *got)
+	}
+	list, _ = repo.List(ctx, me)
+	if removed, err = repo.Delete(ctx, me, &list[2].ID); err != nil || removed != list[2].URL {
+		t.Fatalf("delete middle: %q %v", removed, err)
+	}
+	if got := currentAvatar(t, pool, me); *got != avatarPath(5) {
+		t.Fatalf("profile after delete middle: %v", *got)
+	}
+
+	// удалены все - аватарки нет; удалять больше нечего
+	for {
+		if _, err = repo.Delete(ctx, me, nil); errors.Is(err, apperror.ErrNotFound) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := currentAvatar(t, pool, me); got != nil {
+		t.Fatalf("profile avatar must be NULL: %v", *got)
+	}
+}
+
+func TestAvatarHistoryConcurrentAddsKeepTheLimit(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	repo := repository.NewAvatarHistoryRepository(pool)
+	ctx := context.Background()
+	me := createProfile(t, pool, "hist_conc")
+
+	var wg sync.WaitGroup
+	for n := 1; n <= 12; n++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := repo.Add(ctx, me, avatarPath(1000+n), 5); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	list, _ := repo.List(ctx, me)
+	if len(list) != 5 {
+		t.Fatalf("history = %d, want 5", len(list))
+	}
+	if got := currentAvatar(t, pool, me); got == nil || *got != list[0].URL {
+		t.Fatalf("profile avatar %v must be the newest %s", got, list[0].URL)
+	}
+}
+
+func TestAvatarHistoryDeletedWithProfile(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	repo := repository.NewAvatarHistoryRepository(pool)
+	ctx := context.Background()
+	me := createProfile(t, pool, "hist_gone")
+	if _, err := repo.Add(ctx, me, avatarPath(7), 5); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM profiles WHERE user_id = $1`, me); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM profile_avatars WHERE user_id = $1`, me).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("history rows after profile delete: %d %v", n, err)
 	}
 }

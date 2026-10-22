@@ -74,17 +74,28 @@ type GroupService interface {
 	// SetAvatarShape ставит новую фигуру за аватаром группы целиком; только admin, direct - ErrForbidden
 	SetAvatarShape(ctx context.Context, adminID, convID uuid.UUID, shape, color string) (*models.AvatarShape, error)
 	ClearAvatarShape(ctx context.Context, adminID, convID uuid.UUID) error
+
+	// История аватарок: до media.MaxAvatarHistory последних фото, текущее - самое новое. Менять - только admin,
+	// участники узнают по conversation.updated (fields: avatar_url). Файлы хранит и удаляет Gateway: сервис лишь
+	// возвращает адреса выпавших и удалённых фото
+	// ListAvatars видят участники и все - у открытой группы
+	ListAvatars(ctx context.Context, userID, convID uuid.UUID) ([]repository.AvatarPhoto, error)
+	AddAvatar(ctx context.Context, adminID, convID uuid.UUID, url string) ([]string, error)
+	SelectAvatar(ctx context.Context, adminID, convID, photoID uuid.UUID) error
+	// DeleteAvatar убирает фото (nil - текущее) и возвращает его адрес
+	DeleteAvatar(ctx context.Context, adminID, convID uuid.UUID, photoID *uuid.UUID) (string, error)
 }
 
 type groupService struct {
-	db     *repository.DB
-	convs  repository.ConversationRepository
-	outbox repository.OutboxRepository
-	users  userclient.Client
-	bans   repository.BanRepository
-	cipher *crypto.Cipher
-	system systemPoster
-	now    func() time.Time
+	db      *repository.DB
+	convs   repository.ConversationRepository
+	outbox  repository.OutboxRepository
+	users   userclient.Client
+	bans    repository.BanRepository
+	avatars repository.AvatarHistoryRepository
+	cipher  *crypto.Cipher
+	system  systemPoster
+	now     func() time.Time
 }
 
 func NewGroupService(
@@ -93,11 +104,12 @@ func NewGroupService(
 	outbox repository.OutboxRepository,
 	users userclient.Client,
 	bans repository.BanRepository,
+	avatars repository.AvatarHistoryRepository,
 	cipher *crypto.Cipher,
 	msgs repository.MessageRepository,
 ) GroupService {
 	return &groupService{
-		db: db, convs: convs, outbox: outbox, users: users, bans: bans, cipher: cipher,
+		db: db, convs: convs, outbox: outbox, users: users, bans: bans, avatars: avatars, cipher: cipher,
 		system: systemPoster{msgs: msgs, convs: convs, outbox: outbox}, now: time.Now,
 	}
 }

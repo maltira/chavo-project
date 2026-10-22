@@ -30,6 +30,10 @@ const (
 	ConversationService_ClearGroupAvatarShape_FullMethodName = "/conversation.v1.ConversationService/ClearGroupAvatarShape"
 	ConversationService_DeleteConversation_FullMethodName    = "/conversation.v1.ConversationService/DeleteConversation"
 	ConversationService_JoinGroup_FullMethodName             = "/conversation.v1.ConversationService/JoinGroup"
+	ConversationService_ListGroupAvatars_FullMethodName      = "/conversation.v1.ConversationService/ListGroupAvatars"
+	ConversationService_AddGroupAvatar_FullMethodName        = "/conversation.v1.ConversationService/AddGroupAvatar"
+	ConversationService_SelectGroupAvatar_FullMethodName     = "/conversation.v1.ConversationService/SelectGroupAvatar"
+	ConversationService_DeleteGroupAvatar_FullMethodName     = "/conversation.v1.ConversationService/DeleteGroupAvatar"
 	ConversationService_SetChatMute_FullMethodName           = "/conversation.v1.ConversationService/SetChatMute"
 	ConversationService_SetChatArchived_FullMethodName       = "/conversation.v1.ConversationService/SetChatArchived"
 	ConversationService_SetChatPinned_FullMethodName         = "/conversation.v1.ConversationService/SetChatPinned"
@@ -78,6 +82,15 @@ type ConversationServiceClient interface {
 	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
 	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
+	// История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
+	// и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
+	// (fields: ["avatar_url"]).
+	ListGroupAvatars(ctx context.Context, in *ListGroupAvatarsRequest, opts ...grpc.CallOption) (*ListGroupAvatarsResponse, error)
+	// AddGroupAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+	AddGroupAvatar(ctx context.Context, in *AddGroupAvatarRequest, opts ...grpc.CallOption) (*AddGroupAvatarResponse, error)
+	SelectGroupAvatar(ctx context.Context, in *SelectGroupAvatarRequest, opts ...grpc.CallOption) (*SelectGroupAvatarResponse, error)
+	// DeleteGroupAvatar - убрать фото; если оно было текущим, текущим становится предыдущее.
+	DeleteGroupAvatar(ctx context.Context, in *DeleteGroupAvatarRequest, opts ...grpc.CallOption) (*DeleteGroupAvatarResponse, error)
 	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
 	// архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
 	SetChatMute(ctx context.Context, in *SetChatMuteRequest, opts ...grpc.CallOption) (*SetChatMuteResponse, error)
@@ -223,6 +236,46 @@ func (c *conversationServiceClient) JoinGroup(ctx context.Context, in *JoinGroup
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(JoinGroupResponse)
 	err := c.cc.Invoke(ctx, ConversationService_JoinGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) ListGroupAvatars(ctx context.Context, in *ListGroupAvatarsRequest, opts ...grpc.CallOption) (*ListGroupAvatarsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGroupAvatarsResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ListGroupAvatars_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) AddGroupAvatar(ctx context.Context, in *AddGroupAvatarRequest, opts ...grpc.CallOption) (*AddGroupAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddGroupAvatarResponse)
+	err := c.cc.Invoke(ctx, ConversationService_AddGroupAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SelectGroupAvatar(ctx context.Context, in *SelectGroupAvatarRequest, opts ...grpc.CallOption) (*SelectGroupAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelectGroupAvatarResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SelectGroupAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) DeleteGroupAvatar(ctx context.Context, in *DeleteGroupAvatarRequest, opts ...grpc.CallOption) (*DeleteGroupAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteGroupAvatarResponse)
+	err := c.cc.Invoke(ctx, ConversationService_DeleteGroupAvatar_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -509,6 +562,15 @@ type ConversationServiceServer interface {
 	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
 	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
+	// История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
+	// и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
+	// (fields: ["avatar_url"]).
+	ListGroupAvatars(context.Context, *ListGroupAvatarsRequest) (*ListGroupAvatarsResponse, error)
+	// AddGroupAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+	AddGroupAvatar(context.Context, *AddGroupAvatarRequest) (*AddGroupAvatarResponse, error)
+	SelectGroupAvatar(context.Context, *SelectGroupAvatarRequest) (*SelectGroupAvatarResponse, error)
+	// DeleteGroupAvatar - убрать фото; если оно было текущим, текущим становится предыдущее.
+	DeleteGroupAvatar(context.Context, *DeleteGroupAvatarRequest) (*DeleteGroupAvatarResponse, error)
 	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
 	// архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
 	SetChatMute(context.Context, *SetChatMuteRequest) (*SetChatMuteResponse, error)
@@ -582,6 +644,18 @@ func (UnimplementedConversationServiceServer) DeleteConversation(context.Context
 }
 func (UnimplementedConversationServiceServer) JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinGroup not implemented")
+}
+func (UnimplementedConversationServiceServer) ListGroupAvatars(context.Context, *ListGroupAvatarsRequest) (*ListGroupAvatarsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListGroupAvatars not implemented")
+}
+func (UnimplementedConversationServiceServer) AddGroupAvatar(context.Context, *AddGroupAvatarRequest) (*AddGroupAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddGroupAvatar not implemented")
+}
+func (UnimplementedConversationServiceServer) SelectGroupAvatar(context.Context, *SelectGroupAvatarRequest) (*SelectGroupAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectGroupAvatar not implemented")
+}
+func (UnimplementedConversationServiceServer) DeleteGroupAvatar(context.Context, *DeleteGroupAvatarRequest) (*DeleteGroupAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteGroupAvatar not implemented")
 }
 func (UnimplementedConversationServiceServer) SetChatMute(context.Context, *SetChatMuteRequest) (*SetChatMuteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetChatMute not implemented")
@@ -876,6 +950,78 @@ func _ConversationService_JoinGroup_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).JoinGroup(ctx, req.(*JoinGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_ListGroupAvatars_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGroupAvatarsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ListGroupAvatars(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ListGroupAvatars_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ListGroupAvatars(ctx, req.(*ListGroupAvatarsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_AddGroupAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddGroupAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).AddGroupAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_AddGroupAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).AddGroupAvatar(ctx, req.(*AddGroupAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SelectGroupAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectGroupAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SelectGroupAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SelectGroupAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SelectGroupAvatar(ctx, req.(*SelectGroupAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_DeleteGroupAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteGroupAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).DeleteGroupAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_DeleteGroupAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).DeleteGroupAvatar(ctx, req.(*DeleteGroupAvatarRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1398,6 +1544,22 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinGroup",
 			Handler:    _ConversationService_JoinGroup_Handler,
+		},
+		{
+			MethodName: "ListGroupAvatars",
+			Handler:    _ConversationService_ListGroupAvatars_Handler,
+		},
+		{
+			MethodName: "AddGroupAvatar",
+			Handler:    _ConversationService_AddGroupAvatar_Handler,
+		},
+		{
+			MethodName: "SelectGroupAvatar",
+			Handler:    _ConversationService_SelectGroupAvatar_Handler,
+		},
+		{
+			MethodName: "DeleteGroupAvatar",
+			Handler:    _ConversationService_DeleteGroupAvatar_Handler,
 		},
 		{
 			MethodName: "SetChatMute",

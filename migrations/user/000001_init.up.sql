@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
     show_online_status  BOOLEAN NOT NULL DEFAULT TRUE,
     -- при пересылке моих сообщений вместо имени - «скрытый автор»
     hide_forward_author BOOLEAN NOT NULL DEFAULT FALSE,
+    -- избранные эмодзи для панели в поле ввода: до 30, в порядке добавления
+    favorite_emojis     TEXT[] NOT NULL DEFAULT '{}',
     
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),    
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()

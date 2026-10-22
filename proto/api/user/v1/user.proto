@@ -112,6 +112,8 @@ message Settings {
   google.protobuf.Timestamp updated_at = 5;
   // при пересылке моих сообщений вместо имени - «скрытый автор»
   bool hide_forward_author = 6;
+  // избранные эмодзи панели в поле ввода: до 30, в порядке добавления
+  repeated string favorite_emojis = 7;
 }
 
 message BlockedEntry {
@@ -196,6 +198,11 @@ message UpdateSettingsRequest {
   optional bool allow_group_invites = 1;
   optional bool show_online_status = 2;
   optional bool hide_forward_author = 3;
+  // весь список целиком (пустой очищает); не задан - не меняется
+  optional EmojiList favorite_emojis = 4;
+}
+message EmojiList {
+  repeated string items = 1;
 }
 message UpdateSettingsResponse {}
 

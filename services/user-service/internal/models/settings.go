@@ -11,6 +11,7 @@ type Settings struct {
 	AllowGroupInvites bool      `json:"allow_group_invites"`
 	ShowOnlineStatus  bool      `json:"show_online_status"`
 	HideForwardAuthor bool      `json:"hide_forward_author"`
+	FavoriteEmojis    []string  `json:"favorite_emojis"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }

@@ -332,6 +332,7 @@ func (s *Server) GetSettings(ctx context.Context, _ *userv1.GetSettingsRequest) 
 		AllowGroupInvites: st.AllowGroupInvites,
 		ShowOnlineStatus:  st.ShowOnlineStatus,
 		HideForwardAuthor: st.HideForwardAuthor,
+		FavoriteEmojis:    st.FavoriteEmojis,
 		CreatedAt:         ts(st.CreatedAt),
 		UpdatedAt:         ts(st.UpdatedAt),
 	}}, nil
@@ -351,6 +352,9 @@ func (s *Server) UpdateSettings(ctx context.Context, req *userv1.UpdateSettingsR
 	}
 	if req.HideForwardAuthor != nil {
 		data["hide_forward_author"] = req.GetHideForwardAuthor()
+	}
+	if req.FavoriteEmojis != nil {
+		data["favorite_emojis"] = req.GetFavoriteEmojis().GetItems()
 	}
 	if err = s.settings.UpdateSettings(ctx, userID, data); err != nil {
 		return nil, err

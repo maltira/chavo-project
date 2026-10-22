@@ -127,6 +127,8 @@ func (h *Handler) updateSettings(c *gin.Context) {
 		AllowGroupInvites *bool `json:"allow_group_invites"`
 		ShowOnlineStatus  *bool `json:"show_online_status"`
 		HideForwardAuthor *bool `json:"hide_forward_author"`
+		// весь список целиком; не передан - не меняется, [] - очищает
+		FavoriteEmojis *[]string `json:"favorite_emojis"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
@@ -134,6 +136,7 @@ func (h *Handler) updateSettings(c *gin.Context) {
 	if _, err := h.users.UpdateSettings(c.Request.Context(), &userv1.UpdateSettingsRequest{
 		AllowGroupInvites: body.AllowGroupInvites, ShowOnlineStatus: body.ShowOnlineStatus,
 		HideForwardAuthor: body.HideForwardAuthor,
+		FavoriteEmojis:    emojiList(body.FavoriteEmojis),
 	}); err != nil {
 		h.fail(c, err)
 		return
@@ -145,4 +148,20 @@ func (h *Handler) updateSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toSettings(resp.GetSettings()))
+}
+
+// emojiList: nil - поле не передано; пустой список (очистка) отличается от отсутствия
+func emojiList(v *[]string) *userv1.EmojiList {
+	if v == nil {
+		return nil
+	}
+	return &userv1.EmojiList{Items: *v}
+}
+
+// nonNil: в JSON пустой список - [], а не null
+func nonNil(items []string) []string {
+	if items == nil {
+		return []string{}
+	}
+	return items
 }

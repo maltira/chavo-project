@@ -140,6 +140,7 @@ type fakeUsers struct {
 	avatars     map[string]string
 	existsCalls atomic.Int32
 	hideForward bool
+	favorites   []string
 	// history - история аватарок пользователя, новые первыми
 	history map[string][]fakePhoto
 }
@@ -299,7 +300,7 @@ func (u *fakeUsers) GetSettings(context.Context, *userv1.GetSettingsRequest) (*u
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return &userv1.GetSettingsResponse{Settings: &userv1.Settings{
-		AllowGroupInvites: true, ShowOnlineStatus: true, HideForwardAuthor: u.hideForward,
+		AllowGroupInvites: true, ShowOnlineStatus: true, HideForwardAuthor: u.hideForward, FavoriteEmojis: u.favorites,
 	}}, nil
 }
 
@@ -308,6 +309,9 @@ func (u *fakeUsers) UpdateSettings(_ context.Context, req *userv1.UpdateSettings
 	defer u.mu.Unlock()
 	if req.HideForwardAuthor != nil {
 		u.hideForward = req.GetHideForwardAuthor()
+	}
+	if req.FavoriteEmojis != nil {
+		u.favorites = req.GetFavoriteEmojis().GetItems()
 	}
 	return &userv1.UpdateSettingsResponse{}, nil
 }
@@ -1182,5 +1186,31 @@ func TestUpdateSettingsReturnsSettings(t *testing.T) {
 	}
 	if body := decode(t, w); body["hide_forward_author"] != true || body["show_online_status"] != true {
 		t.Fatalf("settings: %v", body)
+	}
+}
+
+func TestFavoriteEmojisSettings(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+
+	// по умолчанию - пустой список, а не null
+	w := e.do(http.MethodGet, "/api/users/me/settings", tok, "")
+	if list, ok := decode(t, w)["favorite_emojis"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("default: %s", w.Body.String())
+	}
+	// список целиком; другие поля не затрагиваются
+	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"favorite_emojis":["🔥","👍"]}`)
+	body := decode(t, w)
+	if list, _ := body["favorite_emojis"].([]any); len(list) != 2 || list[0] != "🔥" || body["show_online_status"] != true {
+		t.Fatalf("saved: %s", w.Body.String())
+	}
+	// настройка без списка список не трогает; пустой список очищает
+	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"hide_forward_author":true}`)
+	if list, _ := decode(t, w)["favorite_emojis"].([]any); len(list) != 2 {
+		t.Fatalf("untouched: %s", w.Body.String())
+	}
+	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"favorite_emojis":[]}`)
+	if list, ok := decode(t, w)["favorite_emojis"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("cleared: %s", w.Body.String())
 	}
 }

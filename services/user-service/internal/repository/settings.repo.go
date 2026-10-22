@@ -35,11 +35,11 @@ func NewSettingsRepository(pool *pgxpool.Pool) SettingsRepository {
 func (r *settingsRepository) GetSettings(ctx context.Context, userID uuid.UUID) (*models.Settings, error) {
 	var s models.Settings
 	err := r.pool.QueryRow(ctx,
-		`SELECT user_id, allow_group_invites, show_online_status, hide_forward_author, created_at, updated_at
+		`SELECT user_id, allow_group_invites, show_online_status, hide_forward_author, favorite_emojis, created_at, updated_at
 		 FROM user_settings WHERE user_id = $1`, userID,
 	).Scan(
 		&s.UserID,
-		&s.AllowGroupInvites, &s.ShowOnlineStatus, &s.HideForwardAuthor,
+		&s.AllowGroupInvites, &s.ShowOnlineStatus, &s.HideForwardAuthor, &s.FavoriteEmojis,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
@@ -52,7 +52,7 @@ func (r *settingsRepository) GetSettings(ctx context.Context, userID uuid.UUID) 
 }
 
 var allowedSettingsColumns = map[string]bool{
-	"allow_group_invites": true, "show_online_status": true, "hide_forward_author": true,
+	"allow_group_invites": true, "show_online_status": true, "hide_forward_author": true, "favorite_emojis": true,
 }
 
 func (r *settingsRepository) UpdateSettings(ctx context.Context, userID uuid.UUID, updates map[string]any) error {

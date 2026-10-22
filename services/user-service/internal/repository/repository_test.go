@@ -166,6 +166,17 @@ func TestSettings(t *testing.T) {
 		t.Fatalf("visibility: %v %v", visible, err)
 	}
 
+	// избранные эмодзи: по умолчанию пусто, сохраняются целиком и в порядке
+	if s, _ := repo.GetSettings(ctx, a); s.FavoriteEmojis == nil || len(s.FavoriteEmojis) != 0 {
+		t.Fatalf("favorites default: %#v", s.FavoriteEmojis)
+	}
+	if err := repo.UpdateSettings(ctx, a, map[string]any{"favorite_emojis": []string{"🔥", "👍"}}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := repo.GetSettings(ctx, a); !slices.Equal(s.FavoriteEmojis, []string{"🔥", "👍"}) {
+		t.Fatalf("favorites saved: %v", s.FavoriteEmojis)
+	}
+
 	// имя в пересланных по умолчанию видно; скрывают только включившие настройку
 	if s, _ := repo.GetSettings(ctx, b); s.HideForwardAuthor {
 		t.Fatal("hide_forward_author is on by default")

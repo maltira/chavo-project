@@ -72,8 +72,35 @@ export function uploadMyAvatar(photo: Blob): Promise<{ avatar_url: string }> {
     })
 }
 
+// убирает текущее фото; текущим становится предыдущее из истории
 export function deleteMyAvatar(): Promise<void> {
     return request<void>('/users/me/avatar', { method: 'DELETE' })
+}
+
+// фото из истории аватарок: до 5 последних, первое (самое новое) - текущее
+export interface AvatarPhoto {
+    id: string
+    avatar_url: string
+    created_at: string
+    is_current: boolean
+}
+
+// историю видят все, кто видит аватар; у заблокировавшего меня она пуста
+export async function getAvatarPhotos(userId: string): Promise<AvatarPhoto[]> {
+    const res = await request<{ items: AvatarPhoto[] }>(
+        `/users/${encodeURIComponent(userId)}/avatars`,
+    )
+    return res.items
+}
+
+// сделать фото из истории главным (текущим)
+export function selectAvatarPhoto(id: string): Promise<void> {
+    return request<void>(`/users/me/avatars/${encodeURIComponent(id)}/select`, { method: 'POST' })
+}
+
+// убрать именно это фото из истории
+export function deleteAvatarPhoto(id: string): Promise<void> {
+    return request<void>(`/users/me/avatars/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 export interface Settings {

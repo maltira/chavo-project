@@ -153,6 +153,34 @@ export function uploadGroupAvatar(id: string, photo: Blob): Promise<{ avatar_url
     })
 }
 
+// убирает текущее фото группы; текущим становится предыдущее из истории
 export function deleteGroupAvatar(id: string): Promise<void> {
     return request<void>(`${base(id)}/avatar`, { method: 'DELETE' })
+}
+
+// фото из истории аватарок группы: до 5 последних, первое (самое новое) - текущее
+export interface GroupAvatarPhoto {
+    id: string
+    avatar_url: string
+    created_at: string
+    is_current: boolean
+}
+
+// историю видят участники, а у открытой группы - все
+export async function getGroupAvatarPhotos(id: string): Promise<GroupAvatarPhoto[]> {
+    const res = await request<{ items: GroupAvatarPhoto[] }>(`${base(id)}/avatars`)
+    return res.items
+}
+
+// только админ: сделать фото из истории главным и убрать именно это фото
+export function selectGroupAvatarPhoto(id: string, photoId: string): Promise<void> {
+    return request<void>(`${base(id)}/avatars/${encodeURIComponent(photoId)}/select`, {
+        method: 'POST',
+    })
+}
+
+export function deleteGroupAvatarPhoto(id: string, photoId: string): Promise<void> {
+    return request<void>(`${base(id)}/avatars/${encodeURIComponent(photoId)}`, {
+        method: 'DELETE',
+    })
 }

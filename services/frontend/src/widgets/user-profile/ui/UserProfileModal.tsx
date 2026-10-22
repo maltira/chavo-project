@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router'
 
 import { findDirectWith } from '@/entities/conversation'
 import {
+    useAvatarPhotos,
     useBlockStatus,
     useMe,
     useMyAvatar,
@@ -81,13 +82,19 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
     // свой профиль: просмотр или редактирование, и окно выбора фигуры за аватаром
     const [editing, setEditing] = useState(false)
     const [pickingShape, setPickingShape] = useState(false)
-    // фото на весь экран; свой аватар можно и удалить оттуда
+    // фото на весь экран с историей аватарок; своими фото можно управлять оттуда
     const [viewing, setViewing] = useState(false)
     const myPhoto = useMyAvatar()
+    const photos = useAvatarPhotos(userId, viewing)
     // редактор статуса - экран в этом же окне, со стрелкой «назад» к профилю
     const [editingStatus, setEditingStatus] = useState(false)
     const queryClient = useQueryClient()
     const navigate = useNavigate()
+
+    // все фото удалены - просмотру показывать нечего, и при новой аватарке он сам не откроется
+    if (viewing && profile && !profile.avatar_url) {
+        setViewing(false)
+    }
 
     if (!profile) {
         return (
@@ -245,18 +252,27 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
                         </span>
                         {viewing && profile.avatar_url && (
                             <PhotoViewer
-                                src={profile.avatar_url}
+                                // пока история грузится, показывается текущее фото
+                                photos={
+                                    photos.data?.length
+                                        ? photos.data.map((p) => ({ id: p.id, src: p.avatar_url }))
+                                        : [{ id: 'current', src: profile.avatar_url }]
+                                }
                                 title={profile.display_name}
                                 onClose={() => setViewing(false)}
+                                onSelect={
+                                    isMe ? (photo) => myPhoto.select.mutate(photo.id) : undefined
+                                }
                                 onDelete={
                                     isMe
-                                        ? () =>
-                                              myPhoto.remove.mutate(undefined, {
-                                                  onSuccess: () => setViewing(false),
-                                              })
+                                        ? (photo) =>
+                                              // последнее фото убрано - историю смотреть больше не на что
+                                              photo.id === 'current'
+                                                  ? myPhoto.remove.mutate()
+                                                  : myPhoto.removePhoto.mutate(photo.id)
                                         : undefined
                                 }
-                                deleting={myPhoto.remove.isPending}
+                                busy={myPhoto.pending}
                             />
                         )}
                         <div className={styles.names}>

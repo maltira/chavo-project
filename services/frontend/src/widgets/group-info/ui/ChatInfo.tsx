@@ -1,6 +1,11 @@
 import { useState } from 'react'
 
-import { useConversation, useGroupAvatar, useGroupMembers } from '@/entities/conversation'
+import {
+    useConversation,
+    useGroupAvatar,
+    useGroupAvatarPhotos,
+    useGroupMembers,
+} from '@/entities/conversation'
 import { ChatLink, inviteCodeOf } from '@/features/group/invite-link'
 import { AddMembersPicker } from '@/features/group/members'
 import { GroupSettingsForm } from '@/features/group/settings'
@@ -46,9 +51,15 @@ export function ChatInfo({ id, open, onClose }: Props) {
     const isAdmin = data?.my_role === 'admin'
     // кто уже в группе - для выбора новых участников
     const members = useGroupMembers(id, screen === 'add')
-    // фото группы на весь экран; удалить его может админ
+    // фото группы на весь экран с историей аватарок; менять её может админ
     const [viewing, setViewing] = useState(false)
     const photo = useGroupAvatar(id)
+    const photos = useGroupAvatarPhotos(id, viewing)
+
+    // все фото удалены - просмотру показывать нечего, и при новой аватарке он сам не откроется
+    if (viewing && data && !data.avatar_url) {
+        setViewing(false)
+    }
 
     if (!data) {
         return (
@@ -194,18 +205,24 @@ export function ChatInfo({ id, open, onClose }: Props) {
             />
             {viewing && data.avatar_url && (
                 <PhotoViewer
-                    src={data.avatar_url}
+                    // пока история грузится, показывается текущее фото
+                    photos={
+                        photos.data?.length
+                            ? photos.data.map((p) => ({ id: p.id, src: p.avatar_url }))
+                            : [{ id: 'current', src: data.avatar_url }]
+                    }
                     title={name}
                     onClose={() => setViewing(false)}
+                    onSelect={isAdmin ? (p) => photo.select.mutate(p.id) : undefined}
                     onDelete={
                         isAdmin
-                            ? () =>
-                                  photo.remove.mutate(undefined, {
-                                      onSuccess: () => setViewing(false),
-                                  })
+                            ? (p) =>
+                                  p.id === 'current'
+                                      ? photo.remove.mutate()
+                                      : photo.removePhoto.mutate(p.id)
                             : undefined
                     }
-                    deleting={photo.remove.isPending}
+                    busy={photo.pending}
                 />
             )}
             <div className={styles.content}>

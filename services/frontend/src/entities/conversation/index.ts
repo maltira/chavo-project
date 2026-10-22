@@ -13,11 +13,14 @@ export {
     clearGroupAvatarShape,
     clearGroupStatus,
     deleteGroupAvatar,
+    deleteGroupAvatarPhoto,
+    getGroupAvatarPhotos,
     getInviteInfo,
     regenerateInvite,
     rejectJoinRequest,
     removeMember,
     requestJoin,
+    selectGroupAvatarPhoto,
     setGroupAvatarShape,
     setGroupStatus,
     setMemberRole,
@@ -25,9 +28,9 @@ export {
     updateGroup,
     uploadGroupAvatar,
 } from './api/groups'
-export type { Ban, GroupUpdate, InviteInfo, JoinRequest } from './api/groups'
+export type { Ban, GroupAvatarPhoto, GroupUpdate, InviteInfo, JoinRequest } from './api/groups'
 export { useGroupSearch } from './model/useGroupSearch'
-export { useGroupAvatar } from './model/useGroupAvatar'
+export { groupAvatarPhotosKey, useGroupAvatar, useGroupAvatarPhotos } from './model/useGroupAvatar'
 export { previewFromInvite, previewFromSearch, useGroupCard } from './model/groupCard'
 export type { GroupCardTarget, GroupPreview } from './model/groupCard'
 export {

@@ -3,12 +3,15 @@ export {
     blockUser,
     clearMyAvatarShape,
     clearMyStatus,
+    deleteAvatarPhoto,
     deleteMyAvatar,
+    getAvatarPhotos,
     getBlocked,
     getBlockStatus,
     getSettings,
     getUser,
     searchUsers,
+    selectAvatarPhoto,
     setMyAvatarShape,
     setMyStatus,
     unblockUser,
@@ -16,7 +19,15 @@ export {
     updateSettings,
     uploadMyAvatar,
 } from './api/user'
-export type { BlockedUser, BlockStatus, ProfileUpdate, Settings, StatusInput } from './api/user'
+export type {
+    AvatarPhoto,
+    BlockedUser,
+    BlockStatus,
+    ProfileUpdate,
+    Settings,
+    StatusInput,
+} from './api/user'
+export { avatarPhotosKey, useAvatarPhotos } from './model/useAvatarPhotos'
 export { blockedKey, settingsKey, useBlocked, useSettings } from './model/useMyData'
 export { useMe } from './model/useMe'
 export { useMyAvatar } from './model/useMyAvatar'

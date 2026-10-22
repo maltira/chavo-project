@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 
 import { applyConversationEvent, moveReadCursor, useGroupCard } from '@/entities/conversation'
-import { applyMessageEvent, messagesKey } from '@/entities/message'
+import { applyMessageEvent, applyPinsEvent, messagesKey } from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
@@ -84,6 +84,7 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
                 queryClient.removeQueries({ queryKey: messagesKey(deletedId) })
             }
             applyMessageEvent(queryClient, event)
+            applyPinsEvent(queryClient, event)
             applyConversationEvent(queryClient, event, myId)
             applyGroupEvent(event, queryClient, myId)
             break

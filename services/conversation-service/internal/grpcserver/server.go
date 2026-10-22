@@ -656,3 +656,62 @@ func (s *Server) SetChatPinned(ctx context.Context, req *conversationv1.SetChatP
 	}
 	return &conversationv1.SetChatPinnedResponse{Settings: toChatSettings(convID, cs)}, nil
 }
+
+func (s *Server) ListPins(ctx context.Context, req *conversationv1.ListPinsRequest) (*conversationv1.ListPinsResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	pins, err := s.msgs.ListPins(ctx, user, convID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*conversationv1.PinnedMessage, len(pins))
+	for i := range pins {
+		out[i] = toPinnedMessage(&pins[i])
+	}
+	return &conversationv1.ListPinsResponse{Items: out}, nil
+}
+
+func (s *Server) PinMessage(ctx context.Context, req *conversationv1.PinMessageRequest) (*conversationv1.PinMessageResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := parseID(req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	pin, err := s.msgs.PinMessage(ctx, user, convID, msgID, req.GetScope())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.PinMessageResponse{Pin: toPinnedMessage(pin)}, nil
+}
+
+func (s *Server) UnpinMessage(ctx context.Context, req *conversationv1.UnpinMessageRequest) (*conversationv1.UnpinMessageResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := parseID(req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.msgs.UnpinMessage(ctx, user, convID, msgID, req.GetScope()); err != nil {
+		return nil, err
+	}
+	return &conversationv1.UnpinMessageResponse{}, nil
+}

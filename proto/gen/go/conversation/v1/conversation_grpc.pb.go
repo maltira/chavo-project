@@ -52,6 +52,9 @@ const (
 	ConversationService_DeleteMessage_FullMethodName         = "/conversation.v1.ConversationService/DeleteMessage"
 	ConversationService_MarkRead_FullMethodName              = "/conversation.v1.ConversationService/MarkRead"
 	ConversationService_ListReaders_FullMethodName           = "/conversation.v1.ConversationService/ListReaders"
+	ConversationService_ListPins_FullMethodName              = "/conversation.v1.ConversationService/ListPins"
+	ConversationService_PinMessage_FullMethodName            = "/conversation.v1.ConversationService/PinMessage"
+	ConversationService_UnpinMessage_FullMethodName          = "/conversation.v1.ConversationService/UnpinMessage"
 )
 
 // ConversationServiceClient is the client API for ConversationService service.
@@ -99,6 +102,10 @@ type ConversationServiceClient interface {
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	ListReaders(ctx context.Context, in *ListReadersRequest, opts ...grpc.CallOption) (*ListReadersResponse, error)
+	// закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
+	ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error)
+	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
+	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
 }
 
 type conversationServiceClient struct {
@@ -439,6 +446,36 @@ func (c *conversationServiceClient) ListReaders(ctx context.Context, in *ListRea
 	return out, nil
 }
 
+func (c *conversationServiceClient) ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPinsResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ListPins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PinMessageResponse)
+	err := c.cc.Invoke(ctx, ConversationService_PinMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnpinMessageResponse)
+	err := c.cc.Invoke(ctx, ConversationService_UnpinMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConversationServiceServer is the server API for ConversationService service.
 // All implementations must embed UnimplementedConversationServiceServer
 // for forward compatibility.
@@ -484,6 +521,10 @@ type ConversationServiceServer interface {
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	ListReaders(context.Context, *ListReadersRequest) (*ListReadersResponse, error)
+	// закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
+	ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error)
+	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
+	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
 	mustEmbedUnimplementedConversationServiceServer()
 }
 
@@ -592,6 +633,15 @@ func (UnimplementedConversationServiceServer) MarkRead(context.Context, *MarkRea
 }
 func (UnimplementedConversationServiceServer) ListReaders(context.Context, *ListReadersRequest) (*ListReadersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListReaders not implemented")
+}
+func (UnimplementedConversationServiceServer) ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPins not implemented")
+}
+func (UnimplementedConversationServiceServer) PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PinMessage not implemented")
+}
+func (UnimplementedConversationServiceServer) UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnpinMessage not implemented")
 }
 func (UnimplementedConversationServiceServer) mustEmbedUnimplementedConversationServiceServer() {}
 func (UnimplementedConversationServiceServer) testEmbeddedByValue()                             {}
@@ -1208,6 +1258,60 @@ func _ConversationService_ListReaders_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConversationService_ListPins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPinsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ListPins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ListPins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ListPins(ctx, req.(*ListPinsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_PinMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PinMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).PinMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_PinMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).PinMessage(ctx, req.(*PinMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_UnpinMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpinMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).UnpinMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_UnpinMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).UnpinMessage(ctx, req.(*UnpinMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConversationService_ServiceDesc is the grpc.ServiceDesc for ConversationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1346,6 +1450,18 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListReaders",
 			Handler:    _ConversationService_ListReaders_Handler,
+		},
+		{
+			MethodName: "ListPins",
+			Handler:    _ConversationService_ListPins_Handler,
+		},
+		{
+			MethodName: "PinMessage",
+			Handler:    _ConversationService_PinMessage_Handler,
+		},
+		{
+			MethodName: "UnpinMessage",
+			Handler:    _ConversationService_UnpinMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

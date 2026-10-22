@@ -225,6 +225,29 @@ type fakeConversations struct {
 	lastArchived bool
 	// lastForEveryone - for_everyone последнего DeleteConversation
 	lastForEveryone bool
+	// lastUnpinScope - scope последнего UnpinMessage
+	lastUnpinScope string
+}
+
+func (*fakeConversations) ListPins(context.Context, *conversationv1.ListPinsRequest) (*conversationv1.ListPinsResponse, error) {
+	return &conversationv1.ListPinsResponse{}, nil
+}
+
+func (*fakeConversations) PinMessage(_ context.Context, req *conversationv1.PinMessageRequest) (*conversationv1.PinMessageResponse, error) {
+	if req.GetScope() != "all" && req.GetScope() != "me" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.PinMessageResponse{Pin: &conversationv1.PinnedMessage{
+		Message: &conversationv1.Message{Id: req.GetMessageId(), ConversationId: req.GetConversationId(), CreatedAt: timestamppb.Now()},
+		Scope:   req.GetScope(), PinnedBy: "me", PinnedAt: timestamppb.Now(),
+	}}, nil
+}
+
+func (f *fakeConversations) UnpinMessage(_ context.Context, req *conversationv1.UnpinMessageRequest) (*conversationv1.UnpinMessageResponse, error) {
+	f.mu.Lock()
+	f.lastUnpinScope = req.GetScope()
+	f.mu.Unlock()
+	return &conversationv1.UnpinMessageResponse{}, nil
 }
 
 func (f *fakeConversations) DeleteConversation(_ context.Context, req *conversationv1.DeleteConversationRequest) (*conversationv1.DeleteConversationResponse, error) {
@@ -901,5 +924,37 @@ func TestChatSettingsEndpoints(t *testing.T) {
 	e.do(http.MethodGet, "/api/conversations", tok, "")
 	if e.convs.lastArchived {
 		t.Fatal("main list asked for archive")
+	}
+}
+
+func TestPinEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv, msg := uuid.NewString(), uuid.NewString()
+
+	// пустой список - массив, а не null
+	if w := e.do(http.MethodGet, "/api/conversations/"+conv+"/pins", tok, ""); w.Code != http.StatusOK ||
+		!strings.Contains(w.Body.String(), `"items":[]`) {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	w := e.do(http.MethodPost, "/api/conversations/"+conv+"/pins", tok, `{"message_id":"`+msg+`","scope":"me"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("pin: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["scope"] != "me" || body["message"].(map[string]any)["id"] != msg {
+		t.Fatalf("pin body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+conv+"/pins", tok, `{"message_id":"`+msg+`","scope":"x"}`),
+		http.StatusBadRequest, "")
+
+	// без scope снимается общий закреп
+	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg, tok, "")
+	if e.convs.lastUnpinScope != "all" {
+		t.Fatalf("default scope = %q", e.convs.lastUnpinScope)
+	}
+	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg+"?scope=me", tok, "")
+	if e.convs.lastUnpinScope != "me" {
+		t.Fatalf("scope = %q", e.convs.lastUnpinScope)
 	}
 }

@@ -89,7 +89,7 @@ func New() (*App, error) {
 		service.NewConversationService(db, convRepo, outboxRepo, cipher),
 		service.NewGroupService(db, convRepo, outboxRepo, users, banRepo, cipher, msgRepo),
 		service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo, cipher, msgRepo),
-		service.NewMessageService(db, convRepo, msgRepo, outboxRepo, users, cipher, log),
+		service.NewMessageService(db, convRepo, msgRepo, repository.NewPinRepository(), outboxRepo, users, cipher, log),
 	)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
 	conversationv1.RegisterConversationServiceServer(server, srv)

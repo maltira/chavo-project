@@ -50,7 +50,7 @@ func start(t *testing.T) clients {
 		service.NewConversationService(db, cr, or, cipher),
 		service.NewGroupService(db, cr, or, users, br, cipher, mr),
 		service.NewJoinService(db, cr, jr, or, br, cipher, mr),
-		service.NewMessageService(db, cr, mr, or, users, cipher, log),
+		service.NewMessageService(db, cr, mr, repository.NewPinRepository(), or, users, cipher, log),
 	)
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))

@@ -211,6 +211,9 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/bans/:user_id", h.unban)
 	conv.POST("/:id/read", h.markRead)
 	conv.GET("/:id/messages/:message_id/readers", h.listReaders)
+	conv.GET("/:id/pins", h.listPins)
+	conv.POST("/:id/pins", h.pinMessage)
+	conv.DELETE("/:id/pins/:message_id", h.unpinMessage)
 
 	p.GET("/invites/:token", h.inviteInfo)
 

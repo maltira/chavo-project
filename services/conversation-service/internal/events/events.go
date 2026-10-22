@@ -15,6 +15,8 @@ const (
 	TypeConversationDeleted = "conversation.deleted"
 	// TypeChatSettingsUpdated - личные настройки чата участника, только его вкладкам
 	TypeChatSettingsUpdated = "conversation.settings.updated"
+	// TypePinsChanged - список закреплённых сообщений чата изменился: клиенты его перечитывают
+	TypePinsChanged = "conversation.pins.changed"
 
 	TypeMemberAdded   = "conversation.member.added"
 	TypeMemberRemoved = "conversation.member.removed"

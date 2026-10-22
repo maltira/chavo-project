@@ -197,3 +197,12 @@ func toJoinRequest(j *models.JoinRequest) *conversationv1.JoinRequest {
 		UpdatedAt:      ts(j.UpdatedAt),
 	}
 }
+
+func toPinnedMessage(p *models.PinnedMessage) *conversationv1.PinnedMessage {
+	return &conversationv1.PinnedMessage{
+		Message:  toMessage(&p.Message),
+		Scope:    p.Scope,
+		PinnedBy: p.PinnedBy.String(),
+		PinnedAt: ts(p.PinnedAt),
+	}
+}

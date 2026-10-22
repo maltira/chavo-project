@@ -49,6 +49,9 @@ function renderList(conversation_type: 'group' | 'direct') {
                 onReply={vi.fn()}
                 onEdit={vi.fn()}
                 onDelete={vi.fn()}
+                pins={[]}
+                onPin={vi.fn()}
+                jumpRequest={null}
             />
         </QueryClientProvider>,
     )
@@ -140,6 +143,9 @@ describe('MessageList system messages', () => {
                     onReply={vi.fn()}
                     onEdit={vi.fn()}
                     onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    jumpRequest={null}
                 />
             </QueryClientProvider>,
         )
@@ -196,6 +202,9 @@ describe('MessageList appearing messages', () => {
                     onReply={vi.fn()}
                     onEdit={vi.fn()}
                     onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    jumpRequest={null}
                 />
             </QueryClientProvider>
         )

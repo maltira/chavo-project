@@ -21,11 +21,14 @@ interface Props {
     replyTo: Message | null | undefined
     canEdit: boolean
     canDelete: boolean
+    // закреп: null - закреплять нельзя (не админ группы), иначе закреплено ли сообщение
+    pinned: boolean | null
     highlighted: boolean // подсветка после перехода по цитате
     appear: boolean // пришло при открытом чате: въезжает снизу
     onReply: (message: Message) => void
     onEdit: (message: Message) => void
     onDelete: (message: Message) => void
+    onPin: (message: Message) => void
     onJump: (messageId: string) => void
 }
 
@@ -66,11 +69,13 @@ export function MessageBubble({
     replyTo,
     canEdit,
     canDelete,
+    pinned,
     highlighted,
     appear,
     onReply,
     onEdit,
     onDelete,
+    onPin,
     onJump,
 }: Props) {
     const [open, setOpen] = useState(false)
@@ -217,6 +222,14 @@ export function MessageBubble({
                             aria-label="Копировать"
                             onClick={() => act(copy)}
                         />
+                        {pinned !== null && (
+                            <IconButton
+                                role="menuitem"
+                                icon="pinned"
+                                aria-label={pinned ? 'Открепить' : 'Закрепить'}
+                                onClick={() => act(() => onPin(message))}
+                            />
+                        )}
                         {canEdit && (
                             <IconButton
                                 role="menuitem"

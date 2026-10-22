@@ -28,6 +28,7 @@ const (
 	SystemAdded   = "added"   // админ добавил участника
 	SystemLeft    = "left"    // вышел сам (sender == target)
 	SystemRemoved = "removed" // админ исключил (в том числе с блокировкой)
+	SystemPinned  = "pinned"  // закрепил сообщение для всех (ссылка - ReplyToMessageID, TargetID нет)
 )
 
 type Conversation struct {
@@ -88,6 +89,20 @@ type Message struct {
 	TargetID         *uuid.UUID `json:"target_id"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        *time.Time `json:"updated_at"`
+}
+
+// Закреп сообщения: для всех участников или только для себя (личный чат)
+const (
+	PinScopeAll = "all"
+	PinScopeMe  = "me"
+)
+
+// PinnedMessage - закреплённое сообщение в том виде, в каком его видит участник
+type PinnedMessage struct {
+	Message  Message   `json:"message"`
+	Scope    string    `json:"scope"`
+	PinnedBy uuid.UUID `json:"pinned_by"`
+	PinnedAt time.Time `json:"pinned_at"`
 }
 
 type JoinRequest struct {

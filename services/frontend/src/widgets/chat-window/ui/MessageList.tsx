@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import type { ConversationSummary } from '@/entities/conversation'
 import { isSystem } from '@/entities/message'
-import type { Message } from '@/entities/message'
+import type { Message, PinnedMessage } from '@/entities/message'
 import { dayKey, formatDay, notify } from '@/shared/lib'
 import { IconButton } from '@/shared/ui'
 
@@ -29,6 +29,10 @@ interface Props {
     onReply: (message: Message) => void
     onEdit: (message: Message) => void
     onDelete: (message: Message) => void
+    pins: PinnedMessage[]
+    onPin: (message: Message) => void
+    // переход к сообщению снаружи (плашка закрепов); n отличает повторный переход к тому же сообщению
+    jumpRequest: { id: string; n: number } | null
 }
 
 // одна серия - подряд идущие сообщения одного автора; системное серию прерывает
@@ -56,6 +60,9 @@ export function MessageList({
     onReply,
     onEdit,
     onDelete,
+    pins,
+    onPin,
+    jumpRequest,
 }: Props) {
     const sentinelRef = useRef<HTMLDivElement>(null)
     const scrollerRef = useRef<HTMLDivElement>(null)
@@ -181,6 +188,17 @@ export function MessageList({
         })
     }
 
+    useEffect(() => {
+        if (jumpRequest) {
+            void jumpTo(jumpRequest.id)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- переход только по новому запросу
+    }, [jumpRequest])
+
+    // в группе закрепляют только админы; в личном чате - любой из двоих
+    const canPin = !isGroup || isAdmin
+    const pinnedIds = new Set(pins.map((p) => p.message.id))
+
     return (
         <div className={styles.root}>
             <div
@@ -213,7 +231,16 @@ export function MessageList({
                         <Fragment key={message.local_key ?? message.id}>
                             <AppearRow appear={appears(message)} continued={continued}>
                                 {isSystem(message) ? (
-                                    <SystemMessage message={message} appear={appears(message)} />
+                                    <SystemMessage
+                                        message={message}
+                                        appear={appears(message)}
+                                        quoted={
+                                            message.reply_to_message_id
+                                                ? byId.get(message.reply_to_message_id)
+                                                : undefined
+                                        }
+                                        onJump={(id) => void jumpTo(id)}
+                                    />
                                 ) : (
                                     <MessageBubble
                                         message={message}
@@ -231,6 +258,8 @@ export function MessageList({
                                         }
                                         canEdit={mine}
                                         canDelete={mine || (isGroup && isAdmin)}
+                                        pinned={canPin ? pinnedIds.has(message.id) : null}
+                                        onPin={onPin}
                                         highlighted={highlighted === message.id}
                                         appear={appears(message)}
                                         onReply={onReply}

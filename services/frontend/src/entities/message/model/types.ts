@@ -8,8 +8,8 @@ export interface Message {
     is_deleted: boolean
     created_at: string
     updated_at: string | null
-    // system - событие состава группы: текста нет, его собирает клиент по system_event,
-    // sender_id (кто совершил) и target_id (кого касается); без поля - обычное сообщение
+    // system - событие чата: текста нет, его собирает клиент по system_event, sender_id (кто совершил)
+    // и target_id (кого касается); у pinned закреплённое сообщение - reply_to_message_id; без поля - обычное
     kind?: 'user' | 'system'
     system_event?: SystemEvent | null
     target_id?: string | null
@@ -20,8 +20,9 @@ export interface Message {
     local_key?: string
 }
 
-// joined - вступил сам или по заявке, added - админ добавил, left - вышел сам, removed - админ исключил
-export type SystemEvent = 'joined' | 'added' | 'left' | 'removed'
+// joined - вступил сам или по заявке, added - админ добавил, left - вышел сам, removed - админ исключил,
+// pinned - закрепил сообщение для всех
+export type SystemEvent = 'joined' | 'added' | 'left' | 'removed' | 'pinned'
 
 export interface MessagesPage {
     items: Message[]

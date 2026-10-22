@@ -5,10 +5,18 @@ import { cn } from '@/shared/lib'
 
 import styles from './MessageList.module.scss'
 
-// событие состава группы посреди истории: строка по центру, без пузыря, меню и галочек;
-// имена - ссылки на профили
-export function SystemMessage({ message, appear }: { message: Message; appear: boolean }) {
-    const parts = useSystemParts(message)
+interface Props {
+    message: Message
+    appear: boolean
+    // закреплённое сообщение строки «закрепил», если оно уже в загруженной истории
+    quoted?: Message
+    onJump: (messageId: string) => void
+}
+
+// событие чата посреди истории: строка по центру, без пузыря, меню и галочек;
+// имена - ссылки на профили, начало закреплённого сообщения - переход к нему
+export function SystemMessage({ message, appear, quoted, onJump }: Props) {
+    const parts = useSystemParts(message, quoted)
     const openProfile = useProfileCard((state) => state.open)
 
     return (
@@ -24,6 +32,16 @@ export function SystemMessage({ message, appear }: { message: Message; appear: b
                             onClick={() => openProfile(part.userId)}
                         >
                             {part.name}
+                        </button>
+                    ) : part.type === 'quote' && part.messageId ? (
+                        <button
+                            key={i}
+                            type="button"
+                            className={styles.systemName}
+                            aria-label="Перейти к закреплённому сообщению"
+                            onClick={() => onJump(part.messageId)}
+                        >
+                            {part.text}
                         </button>
                     ) : (
                         part.text

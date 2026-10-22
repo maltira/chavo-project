@@ -53,6 +53,11 @@ service ConversationService {
   rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc ListReaders(ListReadersRequest) returns (ListReadersResponse);
+
+  // закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
+  rpc ListPins(ListPinsRequest) returns (ListPinsResponse);
+  rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
+  rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
 }
 
 // Вызовы между сервисами; Gateway их наружу не открывает.
@@ -112,6 +117,36 @@ message ConversationSummary {
   optional google.protobuf.Timestamp archived_at = 10;
   optional google.protobuf.Timestamp pinned_at = 11;
 }
+
+message PinnedMessage {
+  Message message = 1;
+  string scope = 2;
+  string pinned_by = 3;
+  google.protobuf.Timestamp pinned_at = 4;
+}
+
+message ListPinsRequest {
+  string conversation_id = 1;
+}
+message ListPinsResponse {
+  repeated PinnedMessage items = 1;
+}
+
+message PinMessageRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+  string scope = 3;
+}
+message PinMessageResponse {
+  PinnedMessage pin = 1;
+}
+
+message UnpinMessageRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+  string scope = 3;
+}
+message UnpinMessageResponse {}
 
 // ChatSettings - личные настройки чата участника
 message ChatSettings {

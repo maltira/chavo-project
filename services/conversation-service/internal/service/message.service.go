@@ -33,12 +33,21 @@ type MessageService interface {
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
 	Readers(ctx context.Context, userID, convID, messageID uuid.UUID) ([]uuid.UUID, error)
+
+	// закреплённые сообщения: scope all - для всех (в группе только админы), me - только для себя (личный чат);
+	// закреп удалённого сообщения снимается вместе с ним. В личном чате UnpinMessage all снимает и мой личный
+	// закреп, me при общем закрепе оставляет сообщение закреплённым у собеседника
+	PinMessage(ctx context.Context, userID, convID, messageID uuid.UUID, scope string) (*models.PinnedMessage, error)
+	UnpinMessage(ctx context.Context, userID, convID, messageID uuid.UUID, scope string) error
+	// ListPins - новые сверху; только сообщения, которые участник видит
+	ListPins(ctx context.Context, userID, convID uuid.UUID) ([]models.PinnedMessage, error)
 }
 
 type messageService struct {
 	db     *repository.DB
 	convs  repository.ConversationRepository
 	msgs   repository.MessageRepository
+	pins   repository.PinRepository
 	outbox repository.OutboxRepository
 	users  userclient.Client
 	cipher *crypto.Cipher
@@ -49,12 +58,13 @@ func NewMessageService(
 	db *repository.DB,
 	convs repository.ConversationRepository,
 	msgs repository.MessageRepository,
+	pins repository.PinRepository,
 	outbox repository.OutboxRepository,
 	users userclient.Client,
 	cipher *crypto.Cipher,
 	log *zap.Logger,
 ) MessageService {
-	return &messageService{db: db, convs: convs, msgs: msgs, outbox: outbox, users: users, cipher: cipher, log: log}
+	return &messageService{db: db, convs: convs, msgs: msgs, pins: pins, outbox: outbox, users: users, cipher: cipher, log: log}
 }
 
 func validateContent(content string) error {
@@ -369,6 +379,16 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 		}
 		if err = s.outbox.ScrubMessageContent(ctx, tx, messageID); err != nil {
 			return err
+		}
+		// удалённое сообщение не остаётся закреплённым ни у кого
+		owners, err := s.pins.DeleteForMessage(ctx, tx, messageID)
+		if err != nil {
+			return err
+		}
+		if len(owners) > 0 {
+			if err = s.publishPinsChanged(ctx, tx, rec.ConversationID, owners); err != nil {
+				return err
+			}
 		}
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, rec.ConversationID)
 		if err != nil {

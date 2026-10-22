@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import type { ConversationSummary, Member } from '@/entities/conversation'
@@ -218,5 +218,127 @@ describe('ChatWindow', () => {
                 ([url, init]) => url.endsWith('/read') && String(init?.body).includes('m3'),
             ),
         ).toBe(false)
+    })
+
+    it('pins a message in a direct chat only for me', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')))
+        vi.stubGlobal('fetch', fetchMock)
+        const { client } = renderWindow()
+        client.setQueryData(['pins', 'c1'], [])
+
+        fireEvent.contextMenu(screen.getAllByText('Привет! Как дела?').at(-1)!)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Закрепить' }))
+        const dialog = screen.getByRole('dialog', { name: 'Закрепить сообщение' })
+        expect(within(dialog).getByText('Закрепить это сообщение?')).toBeInTheDocument()
+        // по умолчанию закреп только у меня; для собеседника - флажком
+        expect(
+            within(dialog).getByRole('checkbox', { name: 'Также закрепить для Дорофей Гришин' }),
+        ).not.toBeChecked()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Закрепить' }))
+
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/c1/pins',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: '{"message_id":"m1","scope":"me"}',
+                }),
+            ),
+        )
+    })
+
+    it('shows pinned messages above the history, cycles them and unpins', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')))
+        vi.stubGlobal('fetch', fetchMock)
+        const { client } = renderWindow()
+        client.setQueryData(
+            ['pins', 'c1'],
+            [
+                {
+                    message: msg('m3', 'me', 'Отвечаю'),
+                    scope: 'me',
+                    pinned_by: 'me',
+                    pinned_at: now,
+                },
+                {
+                    message: msg('m1', 'peer', 'Привет! Как дела?'),
+                    scope: 'all',
+                    pinned_by: 'peer',
+                    pinned_at: now,
+                },
+            ],
+        )
+
+        const bar = await screen.findByRole('button', { name: /Закреплённое сообщение 1 из 2/ })
+        expect(within(bar).getByText(/только у вас/)).toBeInTheDocument()
+        fireEvent.click(bar)
+        expect(
+            screen.getByRole('button', { name: /Закреплённое сообщение 2 из 2/ }),
+        ).toBeInTheDocument()
+
+        // в личном чате общий закреп снимает любой из двоих; у обоих - если отмечен флажок
+        fireEvent.click(screen.getByRole('button', { name: 'Открепить' }))
+        const dialog = screen.getByRole('dialog', { name: 'Открепить сообщение' })
+        const forBoth = within(dialog).getByRole('checkbox', {
+            name: 'Открепить также для Дорофей Гришин',
+        })
+        expect(forBoth).not.toBeChecked()
+        fireEvent.click(forBoth)
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Открепить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/c1/pins/m1?scope=all',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
+    })
+
+    it('unpins a personal pin without the peer option', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')))
+        vi.stubGlobal('fetch', fetchMock)
+        const { client } = renderWindow()
+        client.setQueryData(
+            ['pins', 'c1'],
+            [{ message: msg('m3', 'me', 'Отвечаю'), scope: 'me', pinned_by: 'me', pinned_at: now }],
+        )
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Открепить' }))
+        const dialog = screen.getByRole('dialog', { name: 'Открепить сообщение' })
+        expect(within(dialog).getByText('Открепить это сообщение?')).toBeInTheDocument()
+        expect(within(dialog).queryByRole('checkbox')).toBeNull()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Открепить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/c1/pins/m3?scope=me',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
+    })
+
+    it('shows who pinned which message with a link to it', async () => {
+        const { client } = renderWindow()
+        client.setQueryData(['messages', 'c1'], {
+            pages: [
+                {
+                    items: [
+                        msg('s1', 'peer', null, {
+                            kind: 'system',
+                            system_event: 'pinned',
+                            reply_to_message_id: 'm1',
+                        }),
+                        msg('m1', 'peer', 'Привет! Как дела?'),
+                    ],
+                    limit: 50,
+                    next_before: null,
+                },
+            ],
+            pageParams: [undefined],
+        })
+        expect(await screen.findByText(/закрепил сообщение/)).toHaveTextContent(
+            'Дорофей Гришин закрепил сообщение «Привет! Как дела?»',
+        )
+        expect(
+            screen.getByRole('button', { name: 'Перейти к закреплённому сообщению' }),
+        ).toBeInTheDocument()
     })
 })

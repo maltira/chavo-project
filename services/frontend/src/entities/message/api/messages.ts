@@ -38,6 +38,11 @@ export function editMessage(id: string, content: string): Promise<Message> {
     })
 }
 
+// одно сообщение: видимое мне или то, на которое ссылается видимое (цитата, закреп)
+export function getMessage(id: string): Promise<Message> {
+    return request<Message>(`/messages/${encodeURIComponent(id)}`)
+}
+
 export function deleteMessage(id: string): Promise<void> {
     return request<void>(`/messages/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

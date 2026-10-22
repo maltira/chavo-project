@@ -118,3 +118,9 @@ type ChatSettingsUpdatedPayload struct {
 	PinnedAt       *time.Time  `json:"pinned_at"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
+
+// PinsChangedPayload: MemberIDs - все участники при общем закрепе, только владелец - при личном
+type PinsChangedPayload struct {
+	ConversationID uuid.UUID   `json:"conversation_id"`
+	MemberIDs      []uuid.UUID `json:"member_ids"`
+}

@@ -1,14 +1,15 @@
 import { useCallback, useState } from 'react'
 
 import { useConversation, useMembers } from '@/entities/conversation'
-import { useMessages } from '@/entities/message'
-import type { Message } from '@/entities/message'
+import { useMessages, usePins } from '@/entities/message'
+import type { Message, PinnedMessage } from '@/entities/message'
 import { useMe, useUser } from '@/entities/user'
 import { MessageComposer } from '@/features/compose-message'
 import type { ReplyTarget } from '@/features/compose-message'
 import { ChatActionsMenu, useOpenChatInfo } from '@/features/chat-actions'
 import { useDeleteMessage } from '@/features/delete-message'
 import { useMarkRead } from '@/features/mark-read'
+import { PinConfirmModal, usePinMessage } from '@/features/pin-message'
 import { Button, Icon, IconButton } from '@/shared/ui'
 import type { MenuPosition } from '@/shared/ui'
 
@@ -18,6 +19,7 @@ import { ChatHeader } from './ChatHeader'
 import { HeaderSkeleton, MessagesSkeleton } from './ChatSkeleton'
 import styles from './ChatWindow.module.scss'
 import { MessageList } from './MessageList'
+import { PinnedBar } from './PinnedBar'
 
 interface Props {
     conversationId: string
@@ -38,6 +40,13 @@ export function ChatWindow({ conversationId }: Props) {
     const members = useMembers(conversationId)
     const remove = useDeleteMessage()
     const openInfo = useOpenChatInfo()
+    const pins = usePins(conversationId)
+    const pin = usePinMessage(conversationId)
+    // подтверждение закрепа или открепления в личном чате
+    const [pinDialog, setPinDialog] = useState<{ mode: 'pin' | 'unpin'; messageId: string } | null>(
+        null,
+    )
+    const [jumpRequest, setJumpRequest] = useState<{ id: string; n: number } | null>(null)
 
     // меню «⋮» в шапке - под кнопкой
     const [menuAt, setMenuAt] = useState<MenuPosition | null>(null)
@@ -100,6 +109,40 @@ export function ChatWindow({ conversationId }: Props) {
         )
     }
 
+    const isGroup = chat.data.conversation_type === 'group'
+    const pinList = pins.data ?? []
+    // общий закреп в группе снимает админ, в личном - любой из двоих; личный - только владелец
+    const canUnpin = (p: PinnedMessage) =>
+        p.scope === 'me' || !isGroup || chat.data!.my_role === 'admin'
+
+    // закреп общий (виден обоим) - тогда в окне открепления есть флажок «...также для собеседника»
+    const sharedPin = (messageId: string) =>
+        pinList.some((p) => p.message.id === messageId && p.scope === 'all')
+
+    // кнопка в меню сообщения и крестик плашки: в группе админ действует сразу,
+    // в личном чате - через подтверждение
+    function togglePin(messageId: string) {
+        const pinned = pinList.some((p) => p.message.id === messageId)
+        if (!isGroup) {
+            setPinDialog({ mode: pinned ? 'unpin' : 'pin', messageId })
+        } else {
+            pin.mutate({ messageId, scope: 'all', pinned: !pinned })
+        }
+    }
+
+    // forBoth - отмечен ли флажок; сервер при all снимает и мой личный закреп,
+    // при me оставляет общий закреп собеседнику его личным
+    function confirmPin(forBoth: boolean) {
+        if (pinDialog) {
+            pin.mutate({
+                messageId: pinDialog.messageId,
+                scope: forBoth ? 'all' : 'me',
+                pinned: pinDialog.mode === 'pin',
+            })
+        }
+        setPinDialog(null)
+    }
+
     const replyTarget: ReplyTarget | null = reply
         ? {
               id: reply.id,
@@ -133,6 +176,22 @@ export function ChatWindow({ conversationId }: Props) {
                 }
             />
             <ChatActionsMenu chat={chat.data} position={menuAt} onClose={() => setMenuAt(null)} />
+            <PinnedBar
+                pins={pinList}
+                canUnpin={canUnpin}
+                onJump={(id) => setJumpRequest((r) => ({ id, n: (r?.n ?? 0) + 1 }))}
+                onUnpin={(p) => togglePin(p.message.id)}
+            />
+            {/* окно монтируется при открытии: флажок каждый раз снова выключен */}
+            {pinDialog && (
+                <PinConfirmModal
+                    mode={pinDialog.mode}
+                    peerId={peerId}
+                    withPeerOption={pinDialog.mode === 'pin' || sharedPin(pinDialog.messageId)}
+                    onClose={() => setPinDialog(null)}
+                    onConfirm={confirmPin}
+                />
+            )}
 
             {history.isPending ? (
                 <MessagesSkeleton />
@@ -173,6 +232,9 @@ export function ChatWindow({ conversationId }: Props) {
                         setEditing(message)
                     }}
                     onDelete={(message) => remove.mutate(message)}
+                    pins={pinList}
+                    onPin={(message) => togglePin(message.id)}
+                    jumpRequest={jumpRequest}
                 />
             )}
 

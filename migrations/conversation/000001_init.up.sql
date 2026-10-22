@@ -62,8 +62,9 @@ CREATE TABLE messages (
     sender_id UUID NOT NULL,
     -- AES-256-GCM: [nonce 12B][ciphertext][tag 16B]. NULL после удаления сообщения и у системных.
     content_enc BYTEA,
-    -- system - событие состава группы («вступил», «покинул», «исключил»): текста нет, его собирает клиент
-    -- по system_event, sender_id (кто совершил) и target_id (кого касается)
+    -- system - событие чата («вступил», «покинул», «исключил», «закрепил»): текста нет, его собирает клиент
+    -- по system_event, sender_id (кто совершил) и target_id (кого касается); у pinned вместо target_id
+    -- reply_to_message_id - закреплённое сообщение (NULL, если его строку удалили)
     kind VARCHAR(10) NOT NULL DEFAULT 'user' CHECK (kind IN ('user', 'system')),
     system_event VARCHAR(20),
     target_id UUID,
@@ -89,6 +90,12 @@ CREATE TABLE messages (
             AND target_id IS NOT NULL
             AND content_enc IS NULL
             AND reply_to_message_id IS NULL
+        )
+        OR (
+            kind = 'system'
+            AND system_event = 'pinned'
+            AND target_id IS NULL
+            AND content_enc IS NULL
         )
     )
 );
@@ -117,6 +124,21 @@ CREATE TABLE conversation_members (
 );
 
 CREATE INDEX idx_conversation_members_user ON conversation_members (user_id);
+
+-- Закреплённые сообщения: owner_id NULL - закреп для всех участников, иначе виден только владельцу
+-- (так можно только в личном чате). Удаление сообщения или чата убирает закреп каскадом.
+CREATE TABLE pinned_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+    message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+    owner_id UUID,
+    pinned_by UUID NOT NULL,
+    pinned_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp ()
+);
+
+CREATE UNIQUE INDEX idx_pinned_messages_shared ON pinned_messages (message_id) WHERE owner_id IS NULL;
+CREATE UNIQUE INDEX idx_pinned_messages_own ON pinned_messages (message_id, owner_id) WHERE owner_id IS NOT NULL;
+CREATE INDEX idx_pinned_messages_conversation ON pinned_messages (conversation_id);
 
 -- Чёрный список группы: забаненный не может вступить ни в открытую группу, ни подать заявку в закрытую.
 CREATE TABLE conversation_bans (

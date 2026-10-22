@@ -90,14 +90,14 @@ func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageReco
 	return nil
 }
 
-// CreateSystem вставляет системное сообщение о составе группы (rec.Kind и текст не нужны)
+// CreateSystem вставляет системное сообщение (rec.Kind и текст не нужны); у pinned задан ReplyToMessageID
 func (r *messageRepository) CreateSystem(ctx context.Context, q DBTX, rec *MessageRecord) error {
 	rec.Kind = models.MessageSystem
 	err := q.QueryRow(ctx,
-		`INSERT INTO messages (conversation_id, sender_id, kind, system_event, target_id, created_at)
-		 VALUES ($1, $2, 'system', $3, $4, clock_timestamp())
+		`INSERT INTO messages (conversation_id, sender_id, kind, system_event, target_id, reply_to_message_id, created_at)
+		 VALUES ($1, $2, 'system', $3, $4, $5, clock_timestamp())
 		 RETURNING id, created_at`,
-		rec.ConversationID, rec.SenderID, rec.SystemEvent, rec.TargetID,
+		rec.ConversationID, rec.SenderID, rec.SystemEvent, rec.TargetID, rec.ReplyToMessageID,
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create system message: %w", err)

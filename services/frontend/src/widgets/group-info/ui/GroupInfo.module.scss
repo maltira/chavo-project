@@ -152,3 +152,24 @@
 .footerButton {
     margin-top: auto;
 }
+
+// фото группы нажимается: открывается на весь экран
+.avatarButton {
+    display: inline-flex;
+    padding: 0;
+
+    border: none;
+    border-radius: $radius-full;
+    background: none;
+    cursor: pointer;
+    transition: opacity $transition-fast;
+
+    &:hover {
+        opacity: 0.85;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 4px;
+    }
+}

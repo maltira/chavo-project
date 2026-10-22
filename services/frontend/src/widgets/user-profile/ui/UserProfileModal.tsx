@@ -6,6 +6,7 @@ import { findDirectWith } from '@/entities/conversation'
 import {
     useBlockStatus,
     useMe,
+    useMyAvatar,
     usePresence,
     useProfileCard,
     UserAvatar,
@@ -18,7 +19,16 @@ import { StatusButton, StatusEditor } from '@/features/set-status'
 import { chatPath, newChatPath } from '@/shared/config'
 import { formatDate, formatLastSeen } from '@/shared/lib'
 import type { InfoItem } from '@/shared/ui'
-import { Button, ConfirmModal, Icon, InfoList, Loader, Modal, Status } from '@/shared/ui'
+import {
+    Button,
+    ConfirmModal,
+    Icon,
+    InfoList,
+    Loader,
+    Modal,
+    PhotoViewer,
+    Status,
+} from '@/shared/ui'
 
 import styles from './UserProfileModal.module.scss'
 
@@ -71,6 +81,9 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
     // свой профиль: просмотр или редактирование, и окно выбора фигуры за аватаром
     const [editing, setEditing] = useState(false)
     const [pickingShape, setPickingShape] = useState(false)
+    // фото на весь экран; свой аватар можно и удалить оттуда
+    const [viewing, setViewing] = useState(false)
+    const myPhoto = useMyAvatar()
     // редактор статуса - экран в этом же окне, со стрелкой «назад» к профилю
     const [editingStatus, setEditingStatus] = useState(false)
     const queryClient = useQueryClient()
@@ -187,25 +200,63 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
             ) : (
                 <>
                     <div className={styles.head}>
-                        {isMe ? (
-                            // свой аватар - кнопка: по нажатию выбор фигуры за ним
-                            <button
-                                type="button"
-                                className={styles.avatarButton}
-                                aria-label="Изменить фигуру за аватаром"
-                                onClick={() => setPickingShape(true)}
-                            >
+                        <span className={styles.avatarWrap}>
+                            {profile.avatar_url || isMe ? (
+                                // аватар - кнопка: с фото открывает его на весь экран, у своего без фото -
+                                // выбор фигуры за ним
+                                <button
+                                    type="button"
+                                    className={styles.avatarButton}
+                                    aria-label={
+                                        profile.avatar_url
+                                            ? 'Открыть фото'
+                                            : 'Изменить фигуру за аватаром'
+                                    }
+                                    onClick={() =>
+                                        profile.avatar_url
+                                            ? setViewing(true)
+                                            : setPickingShape(true)
+                                    }
+                                >
+                                    <UserAvatar
+                                        src={profile.avatar_url}
+                                        shape={profile.avatar_shape}
+                                        size={96}
+                                    />
+                                </button>
+                            ) : (
                                 <UserAvatar
                                     src={profile.avatar_url}
                                     shape={profile.avatar_shape}
                                     size={96}
                                 />
-                            </button>
-                        ) : (
-                            <UserAvatar
+                            )}
+                            {/* у своего аватара с фото выбор фигуры - отдельная кнопка рядом */}
+                            {isMe && profile.avatar_url && (
+                                <button
+                                    type="button"
+                                    className={styles.shapeButton}
+                                    aria-label="Изменить фигуру за аватаром"
+                                    onClick={() => setPickingShape(true)}
+                                >
+                                    <Icon name="pallete" size={16} color="inherit" />
+                                </button>
+                            )}
+                        </span>
+                        {viewing && profile.avatar_url && (
+                            <PhotoViewer
                                 src={profile.avatar_url}
-                                shape={profile.avatar_shape}
-                                size={96}
+                                title={profile.display_name}
+                                onClose={() => setViewing(false)}
+                                onDelete={
+                                    isMe
+                                        ? () =>
+                                              myPhoto.remove.mutate(undefined, {
+                                                  onSuccess: () => setViewing(false),
+                                              })
+                                        : undefined
+                                }
+                                deleting={myPhoto.remove.isPending}
                             />
                         )}
                         <div className={styles.names}>

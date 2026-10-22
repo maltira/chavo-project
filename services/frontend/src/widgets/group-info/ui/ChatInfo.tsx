@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { useConversation, useGroupMembers } from '@/entities/conversation'
+import { useConversation, useGroupAvatar, useGroupMembers } from '@/entities/conversation'
 import { ChatLink, inviteCodeOf } from '@/features/group/invite-link'
 import { AddMembersPicker } from '@/features/group/members'
 import { GroupSettingsForm } from '@/features/group/settings'
@@ -8,7 +8,7 @@ import { AvatarShapeEditor } from '@/features/set-avatar-shape'
 import { StatusButton, StatusEditor } from '@/features/set-status'
 import { formatDate } from '@/shared/lib'
 import type { InfoItem } from '@/shared/ui'
-import { Button, Icon, InfoList, Loader, Modal, Status } from '@/shared/ui'
+import { Button, Icon, InfoList, Loader, Modal, PhotoViewer, Status } from '@/shared/ui'
 
 import { GroupHead, statusProps } from './GroupHead'
 import styles from './GroupInfo.module.scss'
@@ -46,6 +46,9 @@ export function ChatInfo({ id, open, onClose }: Props) {
     const isAdmin = data?.my_role === 'admin'
     // кто уже в группе - для выбора новых участников
     const members = useGroupMembers(id, screen === 'add')
+    // фото группы на весь экран; удалить его может админ
+    const [viewing, setViewing] = useState(false)
+    const photo = useGroupAvatar(id)
 
     if (!data) {
         return (
@@ -187,7 +190,24 @@ export function ChatInfo({ id, open, onClose }: Props) {
                 avatarUrl={data.avatar_url}
                 shape={data.avatar_shape}
                 membersCount={data.members_count}
+                onOpenPhoto={() => setViewing(true)}
             />
+            {viewing && data.avatar_url && (
+                <PhotoViewer
+                    src={data.avatar_url}
+                    title={name}
+                    onClose={() => setViewing(false)}
+                    onDelete={
+                        isAdmin
+                            ? () =>
+                                  photo.remove.mutate(undefined, {
+                                      onSuccess: () => setViewing(false),
+                                  })
+                            : undefined
+                    }
+                    deleting={photo.remove.isPending}
+                />
+            )}
             <div className={styles.content}>
                 <div className={styles.actions}>
                     {isAdmin && (

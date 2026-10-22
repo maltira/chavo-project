@@ -28,16 +28,19 @@ function renderModal() {
     client.setQueryData(['me'], { ...peer, user_id: 'me', username: 'enemybye', display_name: 'Я' })
     client.setQueryData(['user', 'peer'], peer)
     client.setQueryData(['block-status', 'peer'], { blocked_by_me: false, blocked_by_them: false })
-    return render(
-        <QueryClientProvider client={client}>
-            <MemoryRouter initialEntries={['/']}>
-                <Routes>
-                    <Route path="/" element={<UserProfileModal />} />
-                    <Route path="/chats/new/:userId" element={<p>новый чат</p>} />
-                </Routes>
-            </MemoryRouter>
-        </QueryClientProvider>,
-    )
+    return {
+        client,
+        ...render(
+            <QueryClientProvider client={client}>
+                <MemoryRouter initialEntries={['/']}>
+                    <Routes>
+                        <Route path="/" element={<UserProfileModal />} />
+                        <Route path="/chats/new/:userId" element={<p>новый чат</p>} />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        ),
+    }
 }
 
 describe('UserProfileModal', () => {
@@ -106,5 +109,55 @@ describe('UserProfileModal', () => {
         expect(screen.getByRole('heading', { name: 'Я' })).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Написать сообщение' })).toBeNull()
         expect(useRecentUsers.getState().ids).toEqual([])
+    })
+
+    it('opens the photo of another person full-screen without a delete button', () => {
+        const { client } = renderModal()
+        client.setQueryData(['user', 'peer'], {
+            ...peer,
+            avatar_url: '/media/avatars/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg',
+        })
+        act(() => useProfileCard.getState().open('peer'))
+        fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
+        const viewer = screen.getByRole('dialog', { name: 'Фото: Василиса Мамонтова' })
+        // на весь экран - крупная версия фото
+        expect(within(viewer).getByRole('img')).toHaveAttribute(
+            'src',
+            '/media/avatars/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_l.jpg',
+        )
+        expect(within(viewer).getByRole('button', { name: 'Скачать' })).toBeInTheDocument()
+        expect(within(viewer).queryByRole('button', { name: 'Удалить фото' })).toBeNull()
+
+        // Esc закрывает только просмотр, профиль остаётся
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(screen.queryByRole('dialog', { name: /^Фото/ })).toBeNull()
+        expect(screen.getByRole('dialog', { name: /Профиль: Василиса/ })).toBeInTheDocument()
+    })
+
+    it('my own photo can be deleted from the viewer, the shape stays one click away', async () => {
+        const { client } = renderModal()
+        client.setQueryData(['me'], {
+            ...peer,
+            user_id: 'me',
+            display_name: 'Я',
+            avatar_url: '/media/avatars/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg',
+        })
+        act(() => useProfileCard.getState().open('me', { remember: false }))
+        expect(
+            screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить фото' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/users/me/avatar',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
+        // после удаления просмотр закрывается
+        await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: /^Фото/ })).toBeNull())
     })
 })

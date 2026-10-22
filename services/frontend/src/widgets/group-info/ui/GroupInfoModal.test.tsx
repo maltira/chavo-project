@@ -317,4 +317,29 @@ describe('GroupInfoModal reopening', () => {
         expect(screen.getByRole('dialog', { name: 'Группа: Крутые перцы' })).toBeInTheDocument()
         expect(screen.queryByRole('dialog', { name: 'Участники' })).toBeNull()
     })
+
+    it('opens the group photo full-screen; only an admin can delete it', async () => {
+        renderModal({ ...chat, avatar_url: '/media/avatars/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg' })
+        act(() => useGroupCard.getState().openChat('g1'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Открыть фото группы' }))
+        expect(screen.getByRole('dialog', { name: /^Фото: / })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить фото' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(calls('DELETE', '/api/conversations/g1/avatar')).toHaveLength(1),
+        )
+    })
+
+    it('a member can look at the group photo but not delete it', async () => {
+        renderModal({
+            ...chat,
+            my_role: 'member',
+            avatar_url: '/media/avatars/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg',
+        })
+        act(() => useGroupCard.getState().openChat('g1'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Открыть фото группы' }))
+        expect(screen.getByRole('button', { name: 'Скачать' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Удалить фото' })).toBeNull()
+    })
 })

@@ -170,6 +170,9 @@ type messageJSON struct {
 	Kind        string  `json:"kind"`
 	SystemEvent *string `json:"system_event"`
 	TargetID    *string `json:"target_id"`
+	// пересланная копия; forwarded_from_user_id - первый автор, null - автор скрыл имя
+	IsForwarded         bool    `json:"is_forwarded"`
+	ForwardedFromUserID *string `json:"forwarded_from_user_id"`
 }
 
 func toMessage(m *conversationv1.Message) *messageJSON {
@@ -189,6 +192,9 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		Kind:             m.GetKind(),
 		SystemEvent:      m.SystemEvent,
 		TargetID:         m.TargetId,
+
+		IsForwarded:         m.GetIsForwarded(),
+		ForwardedFromUserID: m.ForwardedFromUserId,
 	}
 }
 

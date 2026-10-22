@@ -51,6 +51,8 @@ service ConversationService {
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
   rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
   rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+  // ForwardMessages - копии сообщений одного чата (до 20) в мои чаты (до 5) и/или в «Избранное»
+  rpc ForwardMessages(ForwardMessagesRequest) returns (ForwardMessagesResponse);
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc ListReaders(ListReadersRequest) returns (ListReadersResponse);
 
@@ -99,6 +101,9 @@ message Message {
   string kind = 10;
   optional string system_event = 11;
   optional string target_id = 12;
+  // пересланная копия; forwarded_from_user_id - первый автор, без него - автор скрыл имя
+  bool is_forwarded = 13;
+  optional string forwarded_from_user_id = 14;
 }
 
 message ConversationSummary {
@@ -118,6 +123,22 @@ message ConversationSummary {
   optional google.protobuf.Timestamp pinned_at = 11;
   // «Избранное» - личный чат с самим собой (peer_id нет)
   bool is_saved = 12;
+}
+
+message ForwardMessagesRequest {
+  repeated string message_ids = 1;
+  repeated string conversation_ids = 2;
+  // также в «Избранное» (создаётся, если его ещё нет)
+  bool to_saved = 3;
+  // без указания автора: копия - обычное сообщение пересылающего
+  bool hide_author = 4;
+}
+message ForwardedChat {
+  string conversation_id = 1;
+  repeated Message messages = 2;
+}
+message ForwardMessagesResponse {
+  repeated ForwardedChat items = 1;
 }
 
 message PinnedMessage {

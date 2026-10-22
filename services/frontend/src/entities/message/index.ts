@@ -1,13 +1,16 @@
 export {
     deleteMessage,
     editMessage,
+    forwardMessages,
     getMessage,
+    MAX_FORWARD_CHATS,
+    MAX_FORWARD_MESSAGES,
     getMessages,
     markRead,
     MAX_MESSAGE_LENGTH,
     sendMessage,
 } from './api/messages'
-export type { SendMessageInput } from './api/messages'
+export type { ForwardedChat, ForwardInput, SendMessageInput } from './api/messages'
 export {
     addMessage,
     applyMessageEvent,

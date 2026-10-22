@@ -84,10 +84,7 @@ func (r *pinRepository) List(ctx context.Context, q DBTX, convID, viewer uuid.UU
 	res := make([]PinRecord, 0)
 	for rows.Next() {
 		var p PinRecord
-		m := &p.Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
-			&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
-			&p.OwnerID, &p.PinnedBy, &p.PinnedAt); err != nil {
+		if err := rows.Scan(append(messageDest(&p.Message), &p.OwnerID, &p.PinnedBy, &p.PinnedAt)...); err != nil {
 			return nil, fmt.Errorf("scan pin: %w", err)
 		}
 		res = append(res, p)

@@ -137,18 +137,20 @@ func toMessage(m *models.Message) *conversationv1.Message {
 		return nil
 	}
 	return &conversationv1.Message{
-		Id:               m.ID.String(),
-		ConversationId:   m.ConversationID.String(),
-		SenderId:         m.SenderID.String(),
-		Content:          m.Content,
-		ReplyToMessageId: optStr(m.ReplyToMessageID),
-		IsEdited:         m.IsEdited,
-		IsDeleted:        m.IsDeleted,
-		CreatedAt:        ts(m.CreatedAt),
-		UpdatedAt:        optTS(m.UpdatedAt),
-		Kind:             m.Kind,
-		SystemEvent:      m.SystemEvent,
-		TargetId:         optStr(m.TargetID),
+		Id:                  m.ID.String(),
+		ConversationId:      m.ConversationID.String(),
+		SenderId:            m.SenderID.String(),
+		Content:             m.Content,
+		ReplyToMessageId:    optStr(m.ReplyToMessageID),
+		IsEdited:            m.IsEdited,
+		IsDeleted:           m.IsDeleted,
+		CreatedAt:           ts(m.CreatedAt),
+		UpdatedAt:           optTS(m.UpdatedAt),
+		Kind:                m.Kind,
+		SystemEvent:         m.SystemEvent,
+		TargetId:            optStr(m.TargetID),
+		IsForwarded:         m.IsForwarded,
+		ForwardedFromUserId: optStr(m.ForwardedFromUserID),
 	}
 }
 

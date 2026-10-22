@@ -328,3 +328,86 @@ $tail-height: 14px;
 .continued {
     margin-top: -8px;
 }
+
+// «Переслано от …» первой строкой пузыря
+.forwarded {
+    @include type(xs-regular);
+
+    padding: 8px 16px 0;
+    color: alpha(var(--color-text), 0.6);
+
+    & + .body {
+        padding-top: 2px;
+    }
+}
+
+.forwardedName {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-accent);
+    font: inherit;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
+// режим выбора: строка нажимается целиком, отмеченная подсвечена
+.selecting {
+    cursor: pointer;
+    user-select: none;
+
+    // внутри строки ничего не нажимается отдельно: нажатие отмечает сообщение
+    & .bubble,
+    & .avatar {
+        pointer-events: none;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
+.selected .bubble {
+    box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+// кружок выбора слева от строки
+.selectMark {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    width: 22px;
+    height: 22px;
+
+    border: 2px solid alpha(var(--color-text), 0.3);
+    border-radius: $radius-full;
+    color: var(--color-bg-primary);
+
+    transition: $transition-fast;
+
+    .selected & {
+        border-color: var(--color-accent);
+        background-color: var(--color-accent);
+    }
+
+    // у своих сообщений кружок всё равно слева: строка прижата вправо
+    .mine & {
+        margin-right: auto;
+    }
+}
+
+// удалённое и неотправленное выбрать нельзя
+.selectMarkOff {
+    visibility: hidden;
+}

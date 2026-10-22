@@ -341,4 +341,103 @@ describe('ChatWindow', () => {
             screen.getByRole('button', { name: 'Перейти к закреплённому сообщению' }),
         ).toBeInTheDocument()
     })
+
+    it('forwards selected messages to chosen chats and «Избранное»', async () => {
+        // второй аргумент - тело запроса, по нему проверяется пересылка
+        const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+            Promise.resolve(
+                new Response(
+                    url === '/api/messages/forward' && init
+                        ? '{"items":[{"conversation_id":"g2","messages":[]},{"conversation_id":"s1","messages":[]}]}'
+                        : '{}',
+                ),
+            ),
+        )
+        vi.stubGlobal('fetch', fetchMock)
+        const { client } = renderWindow()
+        client.setQueryData(['conversations'], {
+            pages: [
+                [
+                    { ...chat, is_saved: false },
+                    { id: 'g2', conversation_type: 'group', name: 'Команда', is_saved: false },
+                ],
+            ],
+            pageParams: [0],
+        })
+        client.setQueryData(['conversations', 'archived'], { pages: [[]], pageParams: [0] })
+
+        fireEvent.contextMenu(screen.getAllByText('Привет! Как дела?').at(-1)!)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Переслать' }))
+        expect(screen.getByText('Выбрано: 1')).toBeInTheDocument()
+        // удалённое выбрать нельзя, своё - можно
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать сообщение: Отвечаю' }))
+        expect(screen.getByText('Выбрано: 2')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Переслать' }))
+        const dialog = screen.getByRole('dialog', { name: 'Переслать' })
+        // «Избранного» ещё нет - пункт есть, его создаст сервер; поиск фильтрует чаты
+        fireEvent.change(within(dialog).getByLabelText('Поиск по чатам'), {
+            target: { value: 'ком' },
+        })
+        expect(within(dialog).queryByRole('checkbox', { name: 'Избранное' })).toBeNull()
+        fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Команда' }))
+        fireEvent.change(within(dialog).getByLabelText('Поиск по чатам'), { target: { value: '' } })
+        fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Избранное' }))
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Переслать (2)' }))
+
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/messages/forward',
+                expect.objectContaining({ method: 'POST' }),
+            ),
+        )
+        const call = fetchMock.mock.calls.find(([url]) => url === '/api/messages/forward')!
+        expect(JSON.parse(call[1]!.body as string)).toEqual({
+            message_ids: ['m1', 'm3'],
+            conversation_ids: ['g2'],
+            to_saved: true,
+            hide_author: false,
+        })
+        // после пересылки режим выбора закрывается
+        await vi.waitFor(() => expect(screen.queryByText(/Выбрано:/)).toBeNull())
+    })
+
+    it('leaves the selection mode with Esc', () => {
+        renderWindow()
+        fireEvent.contextMenu(screen.getAllByText('Привет! Как дела?').at(-1)!)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Переслать' }))
+        expect(screen.getByText('Выбрано: 1')).toBeInTheDocument()
+        fireEvent.keyDown(window, { key: 'Escape' })
+        expect(screen.queryByText('Выбрано: 1')).toBeNull()
+        expect(screen.getByLabelText('Сообщение')).toBeInTheDocument()
+    })
+
+    it('shows who a forwarded message is from and does not offer to edit it', async () => {
+        const { client } = renderWindow()
+        client.setQueryData(['messages', 'c1'], {
+            pages: [
+                {
+                    items: [
+                        msg('f2', 'me', 'Секрет', {
+                            is_forwarded: true,
+                            forwarded_from_user_id: null,
+                        }),
+                        msg('f1', 'me', 'Новость', {
+                            is_forwarded: true,
+                            forwarded_from_user_id: 'peer',
+                        }),
+                    ],
+                    limit: 50,
+                    next_before: null,
+                },
+            ],
+            pageParams: [undefined],
+        })
+        expect(await screen.findByText('Переслано от скрытого автора')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Дорофей Гришин' })).toBeInTheDocument()
+
+        fireEvent.contextMenu(screen.getByText('Новость'))
+        expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull()
+        expect(screen.getByRole('menuitem', { name: 'Удалить' })).toBeInTheDocument()
+    })
 })

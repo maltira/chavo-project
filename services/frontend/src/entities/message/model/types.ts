@@ -13,6 +13,10 @@ export interface Message {
     kind?: 'user' | 'system'
     system_event?: SystemEvent | null
     target_id?: string | null
+    // пересланная копия: forwarded_from_user_id - первый автор, null - автор скрыл имя;
+    // пересланное «без указания автора» - обычное сообщение
+    is_forwarded?: boolean
+    forwarded_from_user_id?: string | null
     // только на клиенте: отправлено, но сервер ещё не ответил
     pending?: boolean
     // только на клиенте: id временного сообщения, которое заменил ответ сервера - ключ строки

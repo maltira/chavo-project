@@ -16,6 +16,8 @@ interface MessagePayload {
     kind?: Message['kind']
     system_event?: Message['system_event']
     target_id?: string | null
+    is_forwarded?: boolean
+    forwarded_from_user_id?: string | null
 }
 
 // результат применения события к списку:
@@ -74,6 +76,8 @@ export function applyToConversations(
                 kind: data.kind ?? 'user',
                 system_event: data.system_event ?? null,
                 target_id: data.target_id ?? null,
+                is_forwarded: data.is_forwarded ?? false,
+                forwarded_from_user_id: data.forwarded_from_user_id ?? null,
             }
             // системные сообщения поднимают чат, но в непрочитанные не идут (так считает и сервер)
             const counts = data.sender_id !== myId && message.kind !== 'system'

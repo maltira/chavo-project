@@ -33,6 +33,10 @@ interface Props {
     onPin: (message: Message) => void
     // переход к сообщению снаружи (плашка закрепов); n отличает повторный переход к тому же сообщению
     jumpRequest: { id: string; n: number } | null
+    onForward: (message: Message) => void
+    // режим выбора для пересылки: id отмеченных; null - режим выключен
+    selected: string[] | null
+    onToggleSelect: (message: Message) => void
 }
 
 // одна серия - подряд идущие сообщения одного автора; системное серию прерывает
@@ -63,6 +67,9 @@ export function MessageList({
     pins,
     onPin,
     jumpRequest,
+    onForward,
+    selected,
+    onToggleSelect,
 }: Props) {
     const sentinelRef = useRef<HTMLDivElement>(null)
     const scrollerRef = useRef<HTMLDivElement>(null)
@@ -257,10 +264,15 @@ export function MessageList({
                                                 ? byId.get(message.reply_to_message_id)
                                                 : undefined
                                         }
-                                        canEdit={mine}
+                                        // пересланное - чужой текст: не правится
+                                        canEdit={mine && !message.is_forwarded}
                                         canDelete={mine || (isGroup && isAdmin)}
                                         pinned={canPin ? pinnedIds.has(message.id) : null}
                                         onPin={onPin}
+                                        onForward={onForward}
+                                        selecting={selected !== null}
+                                        selected={!!selected?.includes(message.id)}
+                                        onToggleSelect={onToggleSelect}
                                         highlighted={highlighted === message.id}
                                         appear={appears(message)}
                                         onReply={onReply}

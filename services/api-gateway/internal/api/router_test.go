@@ -269,6 +269,21 @@ func (f *fakeConversations) UnpinMessage(_ context.Context, req *conversationv1.
 	return &conversationv1.UnpinMessageResponse{}, nil
 }
 
+func (*fakeConversations) ForwardMessages(_ context.Context, req *conversationv1.ForwardMessagesRequest) (*conversationv1.ForwardMessagesResponse, error) {
+	if len(req.GetMessageIds()) == 0 {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	from := "author"
+	items := make([]*conversationv1.ForwardedChat, 0, len(req.GetConversationIds()))
+	for _, id := range req.GetConversationIds() {
+		items = append(items, &conversationv1.ForwardedChat{ConversationId: id, Messages: []*conversationv1.Message{{
+			Id: uuid.NewString(), ConversationId: id, CreatedAt: timestamppb.Now(),
+			IsForwarded: !req.GetHideAuthor(), ForwardedFromUserId: &from,
+		}}})
+	}
+	return &conversationv1.ForwardMessagesResponse{Items: items}, nil
+}
+
 func (f *fakeConversations) DeleteConversation(_ context.Context, req *conversationv1.DeleteConversationRequest) (*conversationv1.DeleteConversationResponse, error) {
 	f.mu.Lock()
 	f.lastForEveryone = req.GetForEveryone()
@@ -976,6 +991,28 @@ func TestPinEndpoints(t *testing.T) {
 	if e.convs.lastUnpinScope != "me" {
 		t.Fatalf("scope = %q", e.convs.lastUnpinScope)
 	}
+}
+
+func TestForwardEndpoint(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv := uuid.NewString()
+
+	w := e.do(http.MethodPost, "/api/messages/forward", tok,
+		`{"message_ids":["`+uuid.NewString()+`"],"conversation_ids":["`+conv+`"],"to_saved":true}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("forward: %d %s", w.Code, w.Body.String())
+	}
+	items, _ := decode(t, w)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items: %v", items)
+	}
+	chat := items[0].(map[string]any)
+	msg := chat["messages"].([]any)[0].(map[string]any)
+	if chat["conversation_id"] != conv || msg["is_forwarded"] != true || msg["forwarded_from_user_id"] != "author" {
+		t.Fatalf("forwarded: %v", chat)
+	}
+	expect(t, e.do(http.MethodPost, "/api/messages/forward", tok, `{"conversation_ids":["`+conv+`"]}`), http.StatusBadRequest, "")
 }
 
 func TestUpdateSettingsReturnsSettings(t *testing.T) {

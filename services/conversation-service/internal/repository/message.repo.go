@@ -21,6 +21,9 @@ type MessageRecord struct {
 	ContentEnc       []byte
 	ReplyToMessageID *uuid.UUID
 	IsEdited         bool
+	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор (nil - скрыл имя)
+	IsForwarded         bool
+	ForwardedFromUserID *uuid.UUID
 	// Kind - user или system; у системного нет текста, есть SystemEvent и TargetID
 	Kind        string
 	SystemEvent *string
@@ -60,17 +63,23 @@ const visibleToMember = `((cm.member_role = 'admin' OR m.created_at >= cm.joined
 	AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at))`
 
 const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
-	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at`
+	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at,
+	m.is_forwarded, m.forwarded_from_user_id`
 
 const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited,
-	kind, system_event, target_id, created_at, updated_at, deleted_at`
+	kind, system_event, target_id, created_at, updated_at, deleted_at,
+	is_forwarded, forwarded_from_user_id`
+
+// messageDest - поля для Scan в порядке messageColumns
+func messageDest(m *MessageRecord) []any {
+	return []any{&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
+		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
+		&m.IsForwarded, &m.ForwardedFromUserID}
+}
 
 func scanMessage(row pgx.Row) (*MessageRecord, error) {
 	var m MessageRecord
-	if err := row.Scan(
-		&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
-		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
-	); err != nil {
+	if err := row.Scan(messageDest(&m)...); err != nil {
 		return nil, err
 	}
 	return &m, nil
@@ -79,10 +88,12 @@ func scanMessage(row pgx.Row) (*MessageRecord, error) {
 func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageRecord) error {
 	// clock_timestamp(), а не NOW(): порядок сообщений должен отражать момент вставки, а не начало транзакции.
 	err := q.QueryRow(ctx,
-		`INSERT INTO messages (conversation_id, sender_id, content_enc, reply_to_message_id, created_at)
-		 VALUES ($1, $2, $3, $4, clock_timestamp())
+		`INSERT INTO messages (conversation_id, sender_id, content_enc, reply_to_message_id,
+		                       is_forwarded, forwarded_from_user_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, clock_timestamp())
 		 RETURNING id, created_at`,
 		rec.ConversationID, rec.SenderID, rec.ContentEnc, rec.ReplyToMessageID,
+		rec.IsForwarded, rec.ForwardedFromUserID,
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create message: %w", err)

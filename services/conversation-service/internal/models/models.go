@@ -89,6 +89,9 @@ type Message struct {
 	TargetID         *uuid.UUID `json:"target_id"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        *time.Time `json:"updated_at"`
+	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор, nil - автор скрыл имя
+	IsForwarded         bool       `json:"is_forwarded"`
+	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id"`
 }
 
 // Закреп сообщения: для всех участников или только для себя (личный чат)

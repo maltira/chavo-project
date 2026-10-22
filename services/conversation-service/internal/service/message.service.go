@@ -32,6 +32,7 @@ type MessageService interface {
 	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
+	Forward(ctx context.Context, userID uuid.UUID, in ForwardInput) ([]ForwardResult, error)
 	Readers(ctx context.Context, userID, convID, messageID uuid.UUID) ([]uuid.UUID, error)
 
 	// закреплённые сообщения: scope all - для всех (в группе только админы), me - только для себя (личный чат);
@@ -104,6 +105,9 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 		TargetID:         rec.TargetID,
 		CreatedAt:        rec.CreatedAt,
 		UpdatedAt:        rec.UpdatedAt,
+
+		IsForwarded:         rec.IsForwarded,
+		ForwardedFromUserID: rec.ForwardedFromUserID,
 	}
 	if m.Kind == "" {
 		m.Kind = models.MessageUser
@@ -303,8 +307,8 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 		if _, err = s.msgs.FindVisible(ctx, tx, messageID, userID); err != nil {
 			return err
 		}
-		// системное сообщение не правится: у него нет текста
-		if rec.SenderID != userID || rec.Kind == models.MessageSystem {
+		// системное сообщение не правится: у него нет текста; пересланное - копия чужого текста
+		if rec.SenderID != userID || rec.Kind == models.MessageSystem || rec.IsForwarded {
 			return apperror.ErrForbidden
 		}
 		if rec.DeletedAt != nil {

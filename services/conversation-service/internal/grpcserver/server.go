@@ -715,3 +715,33 @@ func (s *Server) UnpinMessage(ctx context.Context, req *conversationv1.UnpinMess
 	}
 	return &conversationv1.UnpinMessageResponse{}, nil
 }
+
+func (s *Server) ForwardMessages(ctx context.Context, req *conversationv1.ForwardMessagesRequest) (*conversationv1.ForwardMessagesResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	msgIDs, err := parseIDs(req.GetMessageIds())
+	if err != nil {
+		return nil, err
+	}
+	convIDs, err := parseIDs(req.GetConversationIds())
+	if err != nil {
+		return nil, err
+	}
+	results, err := s.msgs.Forward(ctx, user, service.ForwardInput{
+		MessageIDs: msgIDs, ConversationIDs: convIDs, ToSaved: req.GetToSaved(), HideAuthor: req.GetHideAuthor(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*conversationv1.ForwardedChat, len(results))
+	for i := range results {
+		msgs := make([]*conversationv1.Message, len(results[i].Messages))
+		for j := range results[i].Messages {
+			msgs[j] = toMessage(&results[i].Messages[j])
+		}
+		out[i] = &conversationv1.ForwardedChat{ConversationId: results[i].ConversationID.String(), Messages: msgs}
+	}
+	return &conversationv1.ForwardMessagesResponse{Items: out}, nil
+}

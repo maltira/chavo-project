@@ -252,6 +252,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		        cm.member_role, peer.user_id,
 		        lm.id, lm.sender_id, lm.content_enc, lm.reply_to_message_id, lm.is_edited,
 		        lm.kind, lm.system_event, lm.target_id, lm.created_at, lm.updated_at, lm.deleted_at,
+		        lm.is_forwarded, lm.forwarded_from_user_id,
 		        (SELECT COUNT(*) FROM messages m
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
 		            AND m.kind = 'user'
@@ -300,12 +301,14 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			lmKind, lmEvent                 *string
 			lmTarget                        *uuid.UUID
 			lmCreated, lmUpdated, lmDeleted *time.Time
+			lmForwarded                     *bool
+			lmFrom                          *uuid.UUID
 			cu                              customCols
 		)
 		dest := append(baseDest(&s.Conversation), cu.dest()...)
 		dest = append(dest, &s.MyRole, &s.PeerID,
 			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmKind, &lmEvent, &lmTarget,
-			&lmCreated, &lmUpdated, &lmDeleted,
+			&lmCreated, &lmUpdated, &lmDeleted, &lmForwarded, &lmFrom,
 			&s.UnreadCount, &s.LastMessageRead, &s.MembersCount,
 			&s.Settings.MutedUntil, &s.Settings.ArchivedAt, &s.Settings.PinnedAt, &s.IsSaved)
 		if err := rows.Scan(dest...); err != nil {
@@ -319,6 +322,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 				ContentEnc: lmEnc, ReplyToMessageID: lmReply, IsEdited: *lmEdited,
 				Kind: *lmKind, SystemEvent: lmEvent, TargetID: lmTarget,
 				CreatedAt: *lmCreated, UpdatedAt: lmUpdated, DeletedAt: lmDeleted,
+				IsForwarded: *lmForwarded, ForwardedFromUserID: lmFrom,
 			}
 		}
 		res = append(res, s)

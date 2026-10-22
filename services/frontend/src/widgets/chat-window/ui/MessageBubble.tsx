@@ -31,7 +31,12 @@ interface Props {
     onEdit: (message: Message) => void
     onDelete: (message: Message) => void
     onPin: (message: Message) => void
+    onForward: (message: Message) => void
     onJump: (messageId: string) => void
+    // режим выбора для пересылки: нажатие отмечает сообщение, меню действий не открывается
+    selecting: boolean
+    selected: boolean
+    onToggleSelect: (message: Message) => void
 }
 
 // аватар автора; нажатие открывает его профиль
@@ -59,6 +64,27 @@ function AuthorName({ userId, className }: { userId: string; className?: string 
     return <span className={className}>{user.data?.display_name ?? ' '}</span>
 }
 
+// «Переслано от <имя>» над текстом; имя - ссылка на профиль; автор мог скрыть имя
+function ForwardedFrom({ userId }: { userId: string | null }) {
+    const user = useUser(userId)
+    const openProfile = useProfileCard((state) => state.open)
+    if (!userId) {
+        return <span className={styles.forwarded}>Переслано от скрытого автора</span>
+    }
+    return (
+        <span className={styles.forwarded}>
+            Переслано от{' '}
+            <button
+                type="button"
+                className={styles.forwardedName}
+                onClick={() => openProfile(userId)}
+            >
+                {user.data?.display_name ?? '…'}
+            </button>
+        </span>
+    )
+}
+
 // пузырь сообщения
 export function MessageBubble({
     message,
@@ -79,7 +105,11 @@ export function MessageBubble({
     onEdit,
     onDelete,
     onPin,
+    onForward,
     onJump,
+    selecting,
+    selected,
+    onToggleSelect,
 }: Props) {
     const [open, setOpen] = useState(false)
 
@@ -125,6 +155,10 @@ export function MessageBubble({
         </>
     )
 
+    // в режиме выбора вся строка - флажок; удалённые и неотправленные не пересылаются
+    const selectable = selecting && interactive
+    const toggleSelect = () => selectable && onToggleSelect(message)
+
     return (
         <div
             ref={rootRef}
@@ -134,9 +168,32 @@ export function MessageBubble({
                 continued && styles.continued,
                 message.pending && styles.pending,
                 appear && styles.appear,
+                selecting && styles.selecting,
+                selected && styles.selected,
             )}
             data-message-id={message.id}
+            role={selectable ? 'checkbox' : undefined}
+            aria-checked={selectable ? selected : undefined}
+            aria-label={selectable ? `Выбрать сообщение: ${message.content ?? ''}` : undefined}
+            tabIndex={selectable ? 0 : undefined}
+            onClick={selecting ? toggleSelect : undefined}
+            onKeyDown={
+                selectable
+                    ? (event) => {
+                          if (event.key === ' ' || event.key === 'Enter') {
+                              event.preventDefault()
+                              toggleSelect()
+                          }
+                      }
+                    : undefined
+            }
         >
+            {selecting && (
+                <span className={cn(styles.selectMark, !interactive && styles.selectMarkOff)}>
+                    {selected && <Icon name="check" size={14} color="currentColor" />}
+                </span>
+            )}
+
             {avatar !== 'none' && (
                 <span className={styles.avatar}>
                     {avatar === 'show' && <AuthorAvatar userId={message.sender_id} />}
@@ -155,6 +212,9 @@ export function MessageBubble({
                     {/* имя автора - внутри пузыря, над цитатой и текстом */}
                     {showAuthor && (
                         <AuthorName userId={message.sender_id} className={styles.bubbleAuthor} />
+                    )}
+                    {message.is_forwarded && (
+                        <ForwardedFrom userId={message.forwarded_from_user_id ?? null} />
                     )}
                     {message.reply_to_message_id && (
                         <button
@@ -180,11 +240,11 @@ export function MessageBubble({
                     )}
                     <div
                         className={styles.body}
-                        tabIndex={interactive ? 0 : undefined}
-                        aria-haspopup={interactive ? 'menu' : undefined}
-                        aria-expanded={interactive ? open : undefined}
+                        tabIndex={interactive && !selecting ? 0 : undefined}
+                        aria-haspopup={interactive && !selecting ? 'menu' : undefined}
+                        aria-expanded={interactive && !selecting ? open : undefined}
                         onContextMenu={(event) => {
-                            if (!interactive) {
+                            if (!interactive || selecting) {
                                 return
                             }
                             event.preventDefault()
@@ -218,6 +278,12 @@ export function MessageBubble({
                             icon="reply"
                             aria-label="Ответить"
                             onClick={() => act(() => onReply(message))}
+                        />
+                        <IconButton
+                            role="menuitem"
+                            icon="forward"
+                            aria-label="Переслать"
+                            onClick={() => act(() => onForward(message))}
                         />
                         <IconButton
                             role="menuitem"

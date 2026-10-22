@@ -24,6 +24,21 @@ type fakeUsers struct {
 	blockedBySender map[[2]uuid.UUID]bool // {sender, recipient}: sender заблокировал recipient
 	missing         map[uuid.UUID]bool    // пользователя нет в user-service
 	noInvites       map[uuid.UUID]bool    // пользователь запретил приглашения в группы
+	hideForward     map[uuid.UUID]bool    // пользователь скрывает имя в пересланных
+	down            bool                  // user-service недоступен
+}
+
+func (f *fakeUsers) ForwardAuthorsHidden(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
+	if f.down {
+		return nil, apperror.ErrUserServiceError
+	}
+	res := map[uuid.UUID]bool{}
+	for _, id := range ids {
+		if f.hideForward[id] {
+			res[id] = true
+		}
+	}
+	return res, nil
 }
 
 func (f *fakeUsers) CheckMessagingAllowed(_ context.Context, s, r uuid.UUID) error {
@@ -64,6 +79,7 @@ func setup(t *testing.T) *env {
 		blockedBySender: map[[2]uuid.UUID]bool{},
 		missing:         map[uuid.UUID]bool{},
 		noInvites:       map[uuid.UUID]bool{},
+		hideForward:     map[uuid.UUID]bool{},
 	}
 	return &env{
 		pool:   pool,

@@ -1,0 +1,53 @@
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 320px;
+    padding: 8px;
+    overflow-y: auto;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+// строка - весь флажок: нажатие по аватару и имени тоже выбирает
+.row {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: $radius-md;
+
+    &:hover {
+        background-color: var(--color-bg-muted);
+    }
+}
+
+.who {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hint {
+    @include type(tag-medium);
+
+    margin: 8px;
+    color: alpha(var(--color-text), 0.6);
+}
+
+.option {
+    @include type(main-regular);
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+}

@@ -30,6 +30,9 @@ type MessageCreatedPayload struct {
 	Kind        string     `json:"kind"`
 	SystemEvent *string    `json:"system_event,omitempty"`
 	TargetID    *uuid.UUID `json:"target_id,omitempty"`
+	// пересланная копия: первый автор, null - автор скрыл имя
+	IsForwarded         bool       `json:"is_forwarded,omitempty"`
+	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id,omitempty"`
 }
 
 type MessageUpdatedPayload struct {

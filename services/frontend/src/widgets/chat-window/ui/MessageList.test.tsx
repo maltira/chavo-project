@@ -52,6 +52,9 @@ function renderList(conversation_type: 'group' | 'direct') {
                 pins={[]}
                 onPin={vi.fn()}
                 jumpRequest={null}
+                onForward={vi.fn()}
+                selected={null}
+                onToggleSelect={vi.fn()}
             />
         </QueryClientProvider>,
     )
@@ -146,6 +149,9 @@ describe('MessageList system messages', () => {
                     pins={[]}
                     onPin={vi.fn()}
                     jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
                 />
             </QueryClientProvider>,
         )
@@ -205,6 +211,9 @@ describe('MessageList appearing messages', () => {
                     pins={[]}
                     onPin={vi.fn()}
                     jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
                 />
             </QueryClientProvider>
         )

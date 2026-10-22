@@ -220,6 +220,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	msg := p.Group("/messages")
 	msg.GET("", h.listMessages)
 	msg.POST("", append(sendLimit, h.sendMessage)...)
+	// пересылка создаёт сообщения - под тем же лимитом, что и отправка
+	msg.POST("/forward", append(sendLimit, h.forwardMessages)...)
 	msg.GET("/:message_id", h.getMessage)
 	msg.PATCH("/:message_id", h.editMessage)
 	msg.DELETE("/:message_id", h.deleteMessage)

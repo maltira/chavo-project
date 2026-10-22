@@ -27,6 +27,9 @@ type allowAllUsers struct{}
 
 func (allowAllUsers) CheckMessagingAllowed(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (allowAllUsers) UserExists(context.Context, uuid.UUID) (bool, error)               { return true, nil }
+func (allowAllUsers) ForwardAuthorsHidden(context.Context, []uuid.UUID) (map[uuid.UUID]bool, error) {
+	return map[uuid.UUID]bool{}, nil
+}
 func (allowAllUsers) GroupInviteAllowed(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return true, nil
 }

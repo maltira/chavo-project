@@ -50,6 +50,7 @@ const (
 	ConversationService_ListMessages_FullMethodName          = "/conversation.v1.ConversationService/ListMessages"
 	ConversationService_EditMessage_FullMethodName           = "/conversation.v1.ConversationService/EditMessage"
 	ConversationService_DeleteMessage_FullMethodName         = "/conversation.v1.ConversationService/DeleteMessage"
+	ConversationService_ForwardMessages_FullMethodName       = "/conversation.v1.ConversationService/ForwardMessages"
 	ConversationService_MarkRead_FullMethodName              = "/conversation.v1.ConversationService/MarkRead"
 	ConversationService_ListReaders_FullMethodName           = "/conversation.v1.ConversationService/ListReaders"
 	ConversationService_ListPins_FullMethodName              = "/conversation.v1.ConversationService/ListPins"
@@ -100,6 +101,8 @@ type ConversationServiceClient interface {
 	ListMessages(ctx context.Context, in *ListMessagesRequest, opts ...grpc.CallOption) (*ListMessagesResponse, error)
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
+	// ForwardMessages - копии сообщений одного чата (до 20) в мои чаты (до 5) и/или в «Избранное»
+	ForwardMessages(ctx context.Context, in *ForwardMessagesRequest, opts ...grpc.CallOption) (*ForwardMessagesResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	ListReaders(ctx context.Context, in *ListReadersRequest, opts ...grpc.CallOption) (*ListReadersResponse, error)
 	// закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
@@ -426,6 +429,16 @@ func (c *conversationServiceClient) DeleteMessage(ctx context.Context, in *Delet
 	return out, nil
 }
 
+func (c *conversationServiceClient) ForwardMessages(ctx context.Context, in *ForwardMessagesRequest, opts ...grpc.CallOption) (*ForwardMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForwardMessagesResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ForwardMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *conversationServiceClient) MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MarkReadResponse)
@@ -519,6 +532,8 @@ type ConversationServiceServer interface {
 	ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error)
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
+	// ForwardMessages - копии сообщений одного чата (до 20) в мои чаты (до 5) и/или в «Избранное»
+	ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	ListReaders(context.Context, *ListReadersRequest) (*ListReadersResponse, error)
 	// закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
@@ -627,6 +642,9 @@ func (UnimplementedConversationServiceServer) EditMessage(context.Context, *Edit
 }
 func (UnimplementedConversationServiceServer) DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteMessage not implemented")
+}
+func (UnimplementedConversationServiceServer) ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForwardMessages not implemented")
 }
 func (UnimplementedConversationServiceServer) MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkRead not implemented")
@@ -1222,6 +1240,24 @@ func _ConversationService_DeleteMessage_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConversationService_ForwardMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForwardMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ForwardMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ForwardMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ForwardMessages(ctx, req.(*ForwardMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ConversationService_MarkRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MarkReadRequest)
 	if err := dec(in); err != nil {
@@ -1442,6 +1478,10 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteMessage",
 			Handler:    _ConversationService_DeleteMessage_Handler,
+		},
+		{
+			MethodName: "ForwardMessages",
+			Handler:    _ConversationService_ForwardMessages_Handler,
 		},
 		{
 			MethodName: "MarkRead",

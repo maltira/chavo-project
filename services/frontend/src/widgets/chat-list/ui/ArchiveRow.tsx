@@ -1,6 +1,6 @@
 import type { ConversationSummary } from '@/entities/conversation'
 import { cn, plural } from '@/shared/lib'
-import { Icon, IconButton, Tag } from '@/shared/ui'
+import { Icon, Tag } from '@/shared/ui'
 
 import itemStyles from './ChatListItem.module.scss'
 import styles from './ArchiveRow.module.scss'
@@ -60,9 +60,14 @@ export function ArchiveRow({ chats, more, compact, onOpen }: RowProps) {
 // шапка открытого архива: назад к основному списку
 export function ArchiveHeader({ compact, onBack }: { compact: boolean; onBack: () => void }) {
     return (
-        <div className={cn(styles.header, compact && styles.headerCompact)} onClick={onBack} >
-            <Icon name="arrow-left" size={20} aria-label="Назад к чатам" />
+        <button
+            type="button"
+            className={cn(styles.header, compact && styles.headerCompact)}
+            onClick={onBack}
+            aria-label="Назад к чатам"
+        >
+            <Icon name="arrow-left" size={20} color="currentColor" />
             {!compact && <span className={styles.title}>К чатам</span>}
-        </div>
+        </button>
     )
 }

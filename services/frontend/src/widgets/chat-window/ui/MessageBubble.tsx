@@ -11,6 +11,8 @@ interface Props {
     message: Message
     mine: boolean
     read: boolean // прочитано кем-то кроме меня
+    // галочки прочтения у своих сообщений; в «Избранном» читать некому
+    receipts: boolean
     showAuthor: boolean // имя автора над пузырём
     // аватар автора слева (чужие сообщения в группе): show - у нижнего в серии, space - место под него
     avatar: 'show' | 'space' | 'none'
@@ -62,6 +64,7 @@ export function MessageBubble({
     message,
     mine,
     read,
+    receipts,
     showAuthor,
     avatar,
     continued,
@@ -116,7 +119,7 @@ export function MessageBubble({
         <>
             {message.is_edited && !deleted && <span>изменено</span>}
             <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
-            {mine && !deleted && !message.pending && (
+            {mine && receipts && !deleted && !message.pending && (
                 <Icon name={read ? 'check-double' : 'check'} size={14} color="currentColor" />
             )}
         </>

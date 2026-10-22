@@ -35,9 +35,12 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
     return (
         <>
             <ContextMenu position={position} onClose={onClose} aria-label="Действия с чатом">
-                <MenuItem icon="settings" onClick={() => openInfo(chat)}>
-                    Сведения о чате
-                </MenuItem>
+                {/* у «Избранного» сведений нет: собеседника нет */}
+                {!chat.is_saved && (
+                    <MenuItem icon="settings" onClick={() => openInfo(chat)}>
+                        Сведения о чате
+                    </MenuItem>
+                )}
                 {chat.unread_count > 0 && last && (
                     <MenuItem
                         icon="check-double"
@@ -99,7 +102,7 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                 />
             )}
 
-            {!isGroup && (
+            {!isGroup && !chat.is_saved && (
                 <DeleteDirectModal
                     open={confirm}
                     peerId={chat.peer_id}
@@ -113,19 +116,22 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
             )}
 
             <ConfirmModal
-                open={confirm && isGroup}
+                open={confirm && (isGroup || chat.is_saved)}
                 onClose={() => setConfirm(false)}
                 onConfirm={() => {
                     setConfirm(false)
-                    leave.mutate({ conversationId: chat.id })
+                    // «Избранное» удаляется целиком: в нём никого, кроме меня
+                    leave.mutate({ conversationId: chat.id, forEveryone: chat.is_saved })
                 }}
-                confirmLabel={isAdmin ? 'Удалить' : 'Покинуть'}
+                confirmLabel={isAdmin || chat.is_saved ? 'Удалить' : 'Покинуть'}
                 danger
                 pending={leave.isPending}
             >
-                {isAdmin
-                    ? 'Группа и вся её история будут удалены у всех участников'
-                    : 'Чат и его история пропадут из вашего списка'}
+                {chat.is_saved
+                    ? 'Все сообщения в «Избранном» будут удалены'
+                    : isAdmin
+                      ? 'Группа и вся её история будут удалены у всех участников'
+                      : 'Чат и его история пропадут из вашего списка'}
             </ConfirmModal>
         </>
     )

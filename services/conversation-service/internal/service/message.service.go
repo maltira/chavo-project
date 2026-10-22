@@ -128,13 +128,11 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		return nil, err
 	}
 
-	// Сетевые проверки user-service выполняются до транзакции.
+	// Сетевые проверки user-service выполняются до транзакции. Себе («Избранное») писать можно всегда:
+	// проверять существование и блокировки не с кем.
 	var peerID uuid.UUID
-	if in.RecipientID != nil {
+	if in.RecipientID != nil && *in.RecipientID != senderID {
 		peerID = *in.RecipientID
-		if peerID == senderID {
-			return nil, apperror.ErrIncorrectData
-		}
 		exists, err := s.users.UserExists(ctx, peerID)
 		if err != nil {
 			return nil, err
@@ -142,7 +140,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		if !exists {
 			return nil, apperror.ErrUserNotFound
 		}
-	} else {
+	} else if in.ConversationID != nil {
 		access, err := s.convs.Access(ctx, s.db.Q(), *in.ConversationID, senderID)
 		if err != nil {
 			return nil, err
@@ -224,7 +222,8 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 	return result, nil
 }
 
-// resolveConversation возвращает id существующей conversation или лениво создаёт direct.
+// resolveConversation возвращает id существующей conversation или лениво создаёт direct;
+// direct с самим собой («Избранное») - ключ <id>:<id> и одна строка участника
 func (s *messageService) resolveConversation(ctx context.Context, tx repository.DBTX, senderID uuid.UUID, in SendMessageInput) (uuid.UUID, error) {
 	if in.ConversationID != nil {
 		return *in.ConversationID, nil

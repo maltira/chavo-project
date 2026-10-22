@@ -73,4 +73,36 @@ describe('NewChatWindow', () => {
             ),
         )
     })
+
+    it('opens a draft of «Избранное» for myself and writes to myself', async () => {
+        fetchMock.mockResolvedValue(
+            new Response(JSON.stringify({ id: 'm1', conversation_id: 'c-saved' }), { status: 201 }),
+        )
+        const client = new QueryClient({
+            defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+        })
+        client.setQueryData(['me'], { user_id: 'me' })
+        render(
+            <QueryClientProvider client={client}>
+                <MemoryRouter initialEntries={['/chats/new/me']}>
+                    <Routes>
+                        <Route path="/chats/new/:userId" element={<NewChatWindow userId="me" />} />
+                        <Route path="/chats/:id" element={<p>чат создан</p>} />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        )
+        expect(screen.getByRole('heading', { name: 'Избранное' })).toBeInTheDocument()
+        expect(screen.getByText('Сообщения для себя')).toBeInTheDocument()
+
+        const field = screen.getByLabelText('Сообщение')
+        fireEvent.change(field, { target: { value: 'заметка' } })
+        fireEvent.keyDown(field, { key: 'Enter' })
+        expect(await screen.findByText('чат создан')).toBeInTheDocument()
+        // блокировки с самим собой не проверяются
+        expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/messages'])
+        expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject({
+            recipient_id: 'me',
+        })
+    })
 })

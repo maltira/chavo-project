@@ -246,6 +246,7 @@ export function MessageList({
                                         message={message}
                                         mine={mine}
                                         read={readBoundary !== undefined && index >= readBoundary}
+                                        receipts={!chat.is_saved}
                                         showAuthor={showAuthor}
                                         avatar={avatar}
                                         // у раскрывающейся строки отступ серии задаёт AppearRow

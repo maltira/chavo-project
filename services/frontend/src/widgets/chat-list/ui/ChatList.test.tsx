@@ -38,6 +38,7 @@ const base: ConversationSummary = {
     muted_until: null,
     archived_at: null,
     pinned_at: null,
+    is_saved: false,
     slug: null,
 }
 
@@ -186,5 +187,22 @@ describe('ChatList', () => {
     it('shows the skeleton while loading', () => {
         renderList(undefined)
         expect(screen.getByLabelText('Загрузка чатов')).toHaveAttribute('aria-busy', 'true')
+    })
+
+    it('shows «Избранное» with a star and without read marks', () => {
+        renderList([
+            {
+                ...base,
+                conversation_type: 'direct',
+                name: null,
+                peer_id: null,
+                is_saved: true,
+                last_message_read: true,
+            },
+        ])
+        const link = screen.getByRole('link', { name: /Избранное/ })
+        // в «Избранном» все сообщения свои - без «Вы:»
+        expect(within(link).getByText('Привет всем')).toBeInTheDocument()
+        expect(link.querySelector('img')).toBeNull()
     })
 })

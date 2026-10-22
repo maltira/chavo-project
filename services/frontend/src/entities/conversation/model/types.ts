@@ -29,6 +29,8 @@ export interface ConversationSummary extends Conversation {
     members_count: number
     // код ссылки закрытой группы: только у её админов и только в карточке чата
     invite_code?: string | null
+    // «Избранное»: личный чат с самим собой, peer_id у него нет
+    is_saved: boolean
     // личные настройки чата: видит и меняет только сам участник
     muted_until: string | null
     archived_at: string | null

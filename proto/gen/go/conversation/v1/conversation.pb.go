@@ -306,9 +306,11 @@ type ConversationSummary struct {
 	// код ссылки закрытой группы: только админам и только в GetConversation
 	InviteCode *string `protobuf:"bytes,8,opt,name=invite_code,json=inviteCode,proto3,oneof" json:"invite_code,omitempty"`
 	// личные настройки чата вызывающего
-	MutedUntil    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=muted_until,json=mutedUntil,proto3,oneof" json:"muted_until,omitempty"`
-	ArchivedAt    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=archived_at,json=archivedAt,proto3,oneof" json:"archived_at,omitempty"`
-	PinnedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=pinned_at,json=pinnedAt,proto3,oneof" json:"pinned_at,omitempty"`
+	MutedUntil *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=muted_until,json=mutedUntil,proto3,oneof" json:"muted_until,omitempty"`
+	ArchivedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=archived_at,json=archivedAt,proto3,oneof" json:"archived_at,omitempty"`
+	PinnedAt   *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=pinned_at,json=pinnedAt,proto3,oneof" json:"pinned_at,omitempty"`
+	// «Избранное» - личный чат с самим собой (peer_id нет)
+	IsSaved       bool `protobuf:"varint,12,opt,name=is_saved,json=isSaved,proto3" json:"is_saved,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -418,6 +420,13 @@ func (x *ConversationSummary) GetPinnedAt() *timestamppb.Timestamp {
 		return x.PinnedAt
 	}
 	return nil
+}
+
+func (x *ConversationSummary) GetIsSaved() bool {
+	if x != nil {
+		return x.IsSaved
+	}
+	return false
 }
 
 type PinnedMessage struct {
@@ -4755,7 +4764,7 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\x14_reply_to_message_idB\x0f\n" +
 	"\r_system_eventB\f\n" +
 	"\n" +
-	"_target_id\"\xf2\x04\n" +
+	"_target_id\"\x8d\x05\n" +
 	"\x13ConversationSummary\x12A\n" +
 	"\fconversation\x18\x01 \x01(\v2\x1d.conversation.v1.ConversationR\fconversation\x12\x17\n" +
 	"\amy_role\x18\x02 \x01(\tR\x06myRole\x12\x1c\n" +
@@ -4771,7 +4780,8 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\varchived_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampH\x03R\n" +
 	"archivedAt\x88\x01\x01\x12<\n" +
-	"\tpinned_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x04R\bpinnedAt\x88\x01\x01B\n" +
+	"\tpinned_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x04R\bpinnedAt\x88\x01\x01\x12\x19\n" +
+	"\bis_saved\x18\f \x01(\bR\aisSavedB\n" +
 	"\n" +
 	"\b_peer_idB\x0e\n" +
 	"\f_invite_codeB\x0e\n" +

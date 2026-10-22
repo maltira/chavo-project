@@ -40,6 +40,7 @@ const chat: ConversationSummary = {
     muted_until: null,
     archived_at: null,
     pinned_at: null,
+    is_saved: false,
     invite_code: 'abc123def456',
 }
 

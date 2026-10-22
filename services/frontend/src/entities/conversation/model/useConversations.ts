@@ -140,6 +140,14 @@ export function findDirectWith(queryClient: QueryClient, userId: string) {
     ].find((c) => c.conversation_type === 'direct' && c.peer_id === userId)
 }
 
+// «Избранное» среди загруженных; если его нет, его создаст первое сообщение себе
+export function findSaved(queryClient: QueryClient) {
+    return [
+        ...(readList(queryClient, conversationsKey) ?? []),
+        ...(readList(queryClient, archivedConversationsKey) ?? []),
+    ].find((c) => c.is_saved)
+}
+
 // собеседники из моих личных чатов (загруженных): их можно позвать в группу
 export function useDirectPeers() {
     const chats = useConversations()

@@ -165,6 +165,7 @@ func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummar
 		MutedUntil:      optTS(s.MutedUntil),
 		ArchivedAt:      optTS(s.ArchivedAt),
 		PinnedAt:        optTS(s.PinnedAt),
+		IsSaved:         s.IsSaved,
 	}
 }
 

@@ -144,4 +144,21 @@ describe('ChatActionsMenu', () => {
             ),
         )
     })
+
+    it('«Избранное» has no info and is deleted whole after confirmation', async () => {
+        renderMenu({ ...direct, peer_id: null, is_saved: true })
+        expect(screen.queryByRole('menuitem', { name: 'Сведения о чате' })).toBeNull()
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Удалить чат' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        expect(
+            within(confirm).getByText('Все сообщения в «Избранном» будут удалены'),
+        ).toBeInTheDocument()
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/d1?scope=all',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
+    })
 })

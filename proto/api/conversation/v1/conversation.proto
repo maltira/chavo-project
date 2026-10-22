@@ -116,6 +116,8 @@ message ConversationSummary {
   optional google.protobuf.Timestamp muted_until = 9;
   optional google.protobuf.Timestamp archived_at = 10;
   optional google.protobuf.Timestamp pinned_at = 11;
+  // «Избранное» - личный чат с самим собой (peer_id нет)
+  bool is_saved = 12;
 }
 
 message PinnedMessage {

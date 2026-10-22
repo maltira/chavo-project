@@ -91,6 +91,7 @@ func (s *conversationService) toSummary(rec *repository.SummaryRecord) (*models.
 		LastMessageRead: rec.LastMessageRead,
 		MembersCount:    rec.MembersCount,
 		ChatSettings:    rec.Settings,
+		IsSaved:         rec.IsSaved,
 	}
 	if rec.LastMessage != nil {
 		m, err := recordToModel(s.cipher, rec.LastMessage)

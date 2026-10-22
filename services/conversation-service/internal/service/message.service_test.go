@@ -152,7 +152,6 @@ func TestSendValidation(t *testing.T) {
 		"no ids":   {Content: "x"},
 		"blank":    {RecipientID: &b, Content: "   "},
 		"too long": {RecipientID: &b, Content: strings.Repeat("я", 4097)},
-		"to self":  {RecipientID: &a, Content: "x"},
 	} {
 		if _, err := e.msgs.Send(ctx, a, in); !errors.Is(err, apperror.ErrIncorrectData) {
 			t.Errorf("%s: %v", name, err)

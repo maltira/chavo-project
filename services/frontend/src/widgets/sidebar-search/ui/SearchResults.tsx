@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router'
 
 import {
     previewFromSearch,
+    SAVED_NAME,
+    SavedAvatar,
     useConversations,
     useGroupCard,
     useGroupSearch,
@@ -132,7 +134,15 @@ export function SearchResults({ query, close }: Props) {
                         <section className={styles.section} aria-label="Мои чаты">
                             <h3 className={styles.title}>Мои чаты</h3>
                             {myChats.map((chat) =>
-                                chat.conversation_type === 'direct' && chat.peer_id ? (
+                                chat.is_saved ? (
+                                    <Row
+                                        key={chat.id}
+                                        avatar={<SavedAvatar />}
+                                        title={SAVED_NAME}
+                                        subtitle="Сообщения для себя"
+                                        onClick={() => openChat(chat.id)}
+                                    />
+                                ) : chat.conversation_type === 'direct' && chat.peer_id ? (
                                     <PeerRow
                                         key={chat.id}
                                         userId={chat.peer_id}

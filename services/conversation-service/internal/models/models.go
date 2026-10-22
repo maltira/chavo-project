@@ -125,6 +125,8 @@ type ConversationSummary struct {
 	MembersCount    int  `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы, только для её админов и только в карточке чата
 	InviteCode *string `json:"invite_code,omitempty"`
+	// IsSaved - «Избранное»: личный чат с самим собой, PeerID у него нет
+	IsSaved bool `json:"is_saved"`
 	ChatSettings
 }
 

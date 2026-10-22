@@ -27,6 +27,7 @@ function chat(
         muted_until: null,
         archived_at: null,
         pinned_at: null,
+        is_saved: false,
         slug: null,
         ...extra,
     }

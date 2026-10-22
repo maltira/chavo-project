@@ -32,6 +32,8 @@ type SummaryRecord struct {
 	LastMessageRead bool
 	MembersCount    int
 	Settings        models.ChatSettings
+	// IsSaved - «Избранное»: direct с самим собой
+	IsSaved bool
 }
 
 // conversationColumns и customJoins - чтение разговора со статусом и фигурой за аватаром; истёкший статус не читается
@@ -262,7 +264,8 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		            AND (orm.created_at, orm.id) >= (lm.created_at, lm.id)
 		          LIMIT 1), FALSE),
 		        (SELECT COUNT(*) FROM conversation_members mc WHERE mc.conversation_id = c.id),
-		        cm.muted_until, cm.archived_at, cm.pinned_at
+		        cm.muted_until, cm.archived_at, cm.pinned_at,
+		        (c.conversation_type = 'direct' AND peer.user_id IS NULL)
 		 FROM conversation_members cm
 		 JOIN conversations c ON c.id = cm.conversation_id
 		 `+customJoins+`
@@ -304,7 +307,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmKind, &lmEvent, &lmTarget,
 			&lmCreated, &lmUpdated, &lmDeleted,
 			&s.UnreadCount, &s.LastMessageRead, &s.MembersCount,
-			&s.Settings.MutedUntil, &s.Settings.ArchivedAt, &s.Settings.PinnedAt)
+			&s.Settings.MutedUntil, &s.Settings.ArchivedAt, &s.Settings.PinnedAt, &s.IsSaved)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}

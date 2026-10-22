@@ -44,6 +44,7 @@ export {
     conversationsKey,
     findDirectWith,
     findInLists,
+    findSaved,
     setChatSettings,
     useArchivedConversations,
     useConversations,
@@ -71,3 +72,4 @@ export type { ListUpdate } from './model/events'
 export { isMuted } from './model/types'
 export type { ChatSettings, Conversation, ConversationSummary } from './model/types'
 export { SlugField } from './ui/SlugField'
+export { SAVED_NAME, SavedAvatar } from './ui/SavedAvatar'

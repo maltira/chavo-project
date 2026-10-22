@@ -201,6 +201,8 @@ type summaryJSON struct {
 	MembersCount    int32 `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы; только у её админов в GET /conversations/:id
 	InviteCode *string `json:"invite_code"`
+	// IsSaved - «Избранное»: личный чат с самим собой
+	IsSaved bool `json:"is_saved"`
 	chatSettingsJSON
 }
 
@@ -235,6 +237,7 @@ func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 		LastMessageRead:  s.GetLastMessageRead(),
 		MembersCount:     s.GetMembersCount(),
 		InviteCode:       s.InviteCode,
+		IsSaved:          s.GetIsSaved(),
 		chatSettingsJSON: chatSettingsJSON{
 			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
 		},

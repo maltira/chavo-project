@@ -123,7 +123,8 @@ export function ChatWindow({ conversationId }: Props) {
     // в личном чате - через подтверждение
     function togglePin(messageId: string) {
         const pinned = pinList.some((p) => p.message.id === messageId)
-        if (!isGroup) {
+        // в «Избранном» спрашивать не о ком
+        if (!isGroup && !chat.data!.is_saved) {
             setPinDialog({ mode: pinned ? 'unpin' : 'pin', messageId })
         } else {
             pin.mutate({ messageId, scope: 'all', pinned: !pinned })
@@ -155,7 +156,7 @@ export function ChatWindow({ conversationId }: Props) {
         <div className={styles.root}>
             <ChatHeader
                 chat={chat.data}
-                onOpenInfo={() => openInfo(chat.data!)}
+                onOpenInfo={chat.data.is_saved ? undefined : () => openInfo(chat.data!)}
                 actions={
                     <IconButton
                         icon="menu-dot"

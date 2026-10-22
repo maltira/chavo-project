@@ -99,8 +99,10 @@ func (s *messageService) PinMessage(ctx context.Context, userID, convID, message
 			if err = s.publishPinsChanged(ctx, tx, convID, []*uuid.UUID{owner}); err != nil {
 				return err
 			}
-			// общий закреп видят все - в истории строка «закрепил сообщение»; личный остаётся незаметным
-			if owner == nil {
+			// общий закреп видят все - в истории строка «закрепил сообщение»; личный остаётся незаметным,
+			// в «Избранном» (direct без собеседника) показывать её некому
+			saved := access.Type == models.ConversationDirect && access.PeerID == nil
+			if owner == nil && !saved {
 				poster := systemPoster{msgs: s.msgs, convs: s.convs, outbox: s.outbox}
 				if err = poster.postPinned(ctx, tx, convID, userID, messageID); err != nil {
 					return err

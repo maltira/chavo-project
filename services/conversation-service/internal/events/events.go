@@ -13,6 +13,8 @@ const (
 	TypeConversationCreated = "conversation.created"
 	TypeConversationUpdated = "conversation.updated"
 	TypeConversationDeleted = "conversation.deleted"
+	// TypeChatSettingsUpdated - личные настройки чата участника, только его вкладкам
+	TypeChatSettingsUpdated = "conversation.settings.updated"
 
 	TypeMemberAdded   = "conversation.member.added"
 	TypeMemberRemoved = "conversation.member.removed"

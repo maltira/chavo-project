@@ -191,6 +191,12 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 		conv.POST("/:id/avatar", append(uploadLimit, h.uploadGroupAvatar)...)
 		conv.DELETE("/:id/avatar", h.deleteGroupAvatar)
 	}
+	conv.POST("/:id/mute", h.muteChat)
+	conv.DELETE("/:id/mute", h.unmuteChat)
+	conv.POST("/:id/archive", h.archiveChat(true))
+	conv.DELETE("/:id/archive", h.archiveChat(false))
+	conv.POST("/:id/pin", h.pinChat(true))
+	conv.DELETE("/:id/pin", h.pinChat(false))
 	conv.POST("/:id/join", h.joinGroup)
 	conv.POST("/:id/invite-link/regenerate", h.regenerateInvite)
 	conv.POST("/:id/join-requests", h.requestJoin)

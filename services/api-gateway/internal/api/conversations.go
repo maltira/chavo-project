@@ -11,7 +11,7 @@ import (
 
 func (h *Handler) listConversations(c *gin.Context) {
 	resp, err := h.conversations.ListConversations(c.Request.Context(), &conversationv1.ListConversationsRequest{
-		Limit: queryInt(c, "limit"), Offset: queryInt(c, "offset"),
+		Limit: queryInt(c, "limit"), Offset: queryInt(c, "offset"), Archived: c.Query("archived") == "true",
 	})
 	if err != nil {
 		h.fail(c, err)
@@ -297,4 +297,59 @@ func (h *Handler) listReaders(c *gin.Context) {
 		ids = []string{}
 	}
 	c.JSON(http.StatusOK, gin.H{"user_ids": ids})
+}
+
+// muteChat: тело {duration} - срок из каталога (GET /api/customization)
+func (h *Handler) muteChat(c *gin.Context) {
+	var body struct {
+		Duration string `json:"duration"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.conversations.SetChatMute(c.Request.Context(), &conversationv1.SetChatMuteRequest{
+		ConversationId: c.Param("id"), Duration: &body.Duration,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toChatSettings(resp.GetSettings()))
+}
+
+func (h *Handler) unmuteChat(c *gin.Context) {
+	resp, err := h.conversations.SetChatMute(c.Request.Context(), &conversationv1.SetChatMuteRequest{
+		ConversationId: c.Param("id"),
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toChatSettings(resp.GetSettings()))
+}
+
+func (h *Handler) archiveChat(archived bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		resp, err := h.conversations.SetChatArchived(c.Request.Context(), &conversationv1.SetChatArchivedRequest{
+			ConversationId: c.Param("id"), Archived: archived,
+		})
+		if err != nil {
+			h.fail(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toChatSettings(resp.GetSettings()))
+	}
+}
+
+func (h *Handler) pinChat(pinned bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		resp, err := h.conversations.SetChatPinned(c.Request.Context(), &conversationv1.SetChatPinnedRequest{
+			ConversationId: c.Param("id"), Pinned: pinned,
+		})
+		if err != nil {
+			h.fail(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toChatSettings(resp.GetSettings()))
+	}
 }

@@ -29,4 +29,15 @@ export interface ConversationSummary extends Conversation {
     members_count: number
     // код ссылки закрытой группы: только у её админов и только в карточке чата
     invite_code?: string | null
+    // личные настройки чата: видит и меняет только сам участник
+    muted_until: string | null
+    archived_at: string | null
+    pinned_at: string | null
+}
+
+export type ChatSettings = Pick<ConversationSummary, 'muted_until' | 'archived_at' | 'pinned_at'>
+
+// без звука, пока срок не прошёл: по окончании звук включается сам, без запроса к серверу
+export function isMuted(chat: Pick<ChatSettings, 'muted_until'>, now = Date.now()) {
+    return !!chat.muted_until && Date.parse(chat.muted_until) > now
 }

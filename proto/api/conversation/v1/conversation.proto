@@ -25,6 +25,11 @@ service ConversationService {
   // DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+  // личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
+  // архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
+  rpc SetChatMute(SetChatMuteRequest) returns (SetChatMuteResponse);
+  rpc SetChatArchived(SetChatArchivedRequest) returns (SetChatArchivedResponse);
+  rpc SetChatPinned(SetChatPinnedRequest) returns (SetChatPinnedResponse);
 
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
@@ -102,6 +107,18 @@ message ConversationSummary {
   int32 members_count = 7;
   // код ссылки закрытой группы: только админам и только в GetConversation
   optional string invite_code = 8;
+  // личные настройки чата вызывающего
+  optional google.protobuf.Timestamp muted_until = 9;
+  optional google.protobuf.Timestamp archived_at = 10;
+  optional google.protobuf.Timestamp pinned_at = 11;
+}
+
+// ChatSettings - личные настройки чата участника
+message ChatSettings {
+  string conversation_id = 1;
+  optional google.protobuf.Timestamp muted_until = 2;
+  optional google.protobuf.Timestamp archived_at = 3;
+  optional google.protobuf.Timestamp pinned_at = 4;
 }
 
 message Member {
@@ -156,6 +173,8 @@ message PublicGroup {
 message ListConversationsRequest {
   int32 limit = 1;
   int32 offset = 2;
+  // true - только архивные чаты, иначе только не архивные
+  bool archived = 3;
 }
 message ListConversationsResponse {
   repeated ConversationSummary items = 1;
@@ -218,6 +237,30 @@ message JoinGroupRequest {
   string conversation_id = 1;
 }
 message JoinGroupResponse {}
+
+message SetChatMuteRequest {
+  string conversation_id = 1;
+  optional string duration = 2;
+}
+message SetChatMuteResponse {
+  ChatSettings settings = 1;
+}
+
+message SetChatArchivedRequest {
+  string conversation_id = 1;
+  bool archived = 2;
+}
+message SetChatArchivedResponse {
+  ChatSettings settings = 1;
+}
+
+message SetChatPinnedRequest {
+  string conversation_id = 1;
+  bool pinned = 2;
+}
+message SetChatPinnedResponse {
+  ChatSettings settings = 1;
+}
 
 message ListMembersRequest {
   string conversation_id = 1;

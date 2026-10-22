@@ -2,7 +2,7 @@ import { request } from '@/shared/api'
 
 import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
 
-import type { ConversationSummary } from '../model/types'
+import type { ChatSettings, ConversationSummary } from '../model/types'
 
 // размер страницы списка; сервер отдаёт не больше 30 за запрос
 export const CONVERSATIONS_PAGE = 30
@@ -13,11 +13,46 @@ export interface Page<T> {
     offset: number
 }
 
-export async function getConversations(offset = 0): Promise<ConversationSummary[]> {
+// archived - архив; основной список архивных чатов не содержит
+export async function getConversations(
+    offset = 0,
+    archived = false,
+): Promise<ConversationSummary[]> {
     const page = await request<Page<ConversationSummary>>(
-        `/conversations?limit=${CONVERSATIONS_PAGE}&offset=${offset}`,
+        `/conversations?limit=${CONVERSATIONS_PAGE}&offset=${offset}${archived ? '&archived=true' : ''}`,
     )
     return page.items
+}
+
+export type ChatSettingsResponse = ChatSettings & { conversation_id: string }
+
+const chatPath = (id: string, action: string) =>
+    `/conversations/${encodeURIComponent(id)}/${action}`
+
+// duration - ключ из каталога (mute_durations в GET /customization)
+export function muteChat(id: string, duration: string) {
+    return request<ChatSettingsResponse>(chatPath(id, 'mute'), {
+        method: 'POST',
+        body: { duration },
+    })
+}
+
+export function unmuteChat(id: string) {
+    return request<ChatSettingsResponse>(chatPath(id, 'mute'), { method: 'DELETE' })
+}
+
+// архивация снимает закреп
+export function setChatArchived(id: string, archived: boolean) {
+    return request<ChatSettingsResponse>(chatPath(id, 'archive'), {
+        method: archived ? 'POST' : 'DELETE',
+    })
+}
+
+// закреп (до 5 чатов, иначе PIN_LIMIT) достаёт чат из архива
+export function setChatPinned(id: string, pinned: boolean) {
+    return request<ChatSettingsResponse>(chatPath(id, 'pin'), {
+        method: pinned ? 'POST' : 'DELETE',
+    })
 }
 
 export function getConversation(id: string): Promise<ConversationSummary> {

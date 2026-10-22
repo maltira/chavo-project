@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 
+import { isMuted } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import { isSystem, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
@@ -50,6 +51,7 @@ export function ChatListItem({ chat, myId, compact }: Props) {
     const mine =
         !!chat.last_message && chat.last_message.sender_id === myId && !isSystem(chat.last_message)
     const unread = chat.unread_count > 0
+    const muted = isMuted(chat)
     const time = formatChatTime(chat.last_message?.created_at ?? chat.created_at)
 
     // меню чата по правой кнопке - у курсора
@@ -72,7 +74,9 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                 <span className={styles.avatar}>
                     <UserAvatar src={avatarUrl} size={44} online={online} />
                     {compact && unread && (
-                        <span className={styles.badge}>{unreadLabel(chat.unread_count)}</span>
+                        <span className={cn(styles.badge, muted && styles.mutedBadge)}>
+                            {unreadLabel(chat.unread_count)}
+                        </span>
                     )}
                 </span>
 
@@ -96,7 +100,23 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                                 )}
                                 {time}
                             </span>
-                            {unread && <Tag>{unreadLabel(chat.unread_count)}</Tag>}
+                            <span className={styles.flags}>
+                                {muted && (
+                                    <span role="img" aria-label="Без звука" className={styles.flag}>
+                                        <Icon name="notif-off" size={16} color="currentColor" />
+                                    </span>
+                                )}
+                                {chat.pinned_at && !unread && (
+                                    <span role="img" aria-label="Закреплён" className={styles.flag}>
+                                        <Icon name="pinned" size={16} color="currentColor" />
+                                    </span>
+                                )}
+                                {unread && (
+                                    <Tag variant={muted ? 'muted' : 'default'}>
+                                        {unreadLabel(chat.unread_count)}
+                                    </Tag>
+                                )}
+                            </span>
                         </span>
                     </>
                 )}

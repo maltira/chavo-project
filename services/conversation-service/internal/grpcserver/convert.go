@@ -162,6 +162,18 @@ func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummar
 		LastMessageRead: s.LastMessageRead,
 		MembersCount:    int32(s.MembersCount),
 		InviteCode:      s.InviteCode,
+		MutedUntil:      optTS(s.MutedUntil),
+		ArchivedAt:      optTS(s.ArchivedAt),
+		PinnedAt:        optTS(s.PinnedAt),
+	}
+}
+
+func toChatSettings(convID uuid.UUID, cs *models.ChatSettings) *conversationv1.ChatSettings {
+	return &conversationv1.ChatSettings{
+		ConversationId: convID.String(),
+		MutedUntil:     optTS(cs.MutedUntil),
+		ArchivedAt:     optTS(cs.ArchivedAt),
+		PinnedAt:       optTS(cs.PinnedAt),
 	}
 }
 

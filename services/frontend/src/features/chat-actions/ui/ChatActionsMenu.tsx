@@ -1,12 +1,15 @@
 import { useState } from 'react'
 
+import { isMuted } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import { markRead } from '@/entities/message'
 import { ConfirmModal, ContextMenu, MenuItem } from '@/shared/ui'
 import type { MenuPosition } from '@/shared/ui'
 
+import { useChatSettings } from '../model/useChatSettings'
 import { useLeaveChat } from '../model/useLeaveChat'
 import { useOpenChatInfo } from '../model/useOpenChatInfo'
+import { MuteModal } from './MuteModal'
 
 interface Props {
     chat: ConversationSummary
@@ -14,11 +17,15 @@ interface Props {
     onClose: () => void
 }
 
-// меню чата (правая кнопка в списке и «⋮» в шапке): сведения, прочитать, покинуть/удалить группу;
+// меню чата (правая кнопка в списке и «⋮» в шапке): сведения, прочитать, закреп, «без звука», архив,
+// покинуть/удалить группу
 export function ChatActionsMenu({ chat, position, onClose }: Props) {
     const openInfo = useOpenChatInfo()
     const leave = useLeaveChat()
+    const settings = useChatSettings(chat.id)
     const [confirm, setConfirm] = useState(false)
+    const [mutePicker, setMutePicker] = useState(false)
+    const muted = isMuted(chat)
 
     const isGroup = chat.conversation_type === 'group'
     const isAdmin = isGroup && chat.my_role === 'admin'
@@ -39,6 +46,28 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                         Прочитать чат
                     </MenuItem>
                 )}
+                <MenuItem
+                    icon="pinned"
+                    onClick={() => settings.mutate({ kind: 'pin', pinned: !chat.pinned_at })}
+                >
+                    {chat.pinned_at ? 'Открепить чат' : 'Закрепить чат'}
+                </MenuItem>
+                <MenuItem
+                    icon={muted ? 'notif' : 'notif-off'}
+                    onClick={() =>
+                        muted ? settings.mutate({ kind: 'unmute' }) : setMutePicker(true)
+                    }
+                >
+                    {muted ? 'Включить звук' : 'Без звука'}
+                </MenuItem>
+                <MenuItem
+                    icon="archive"
+                    onClick={() =>
+                        settings.mutate({ kind: 'archive', archived: !chat.archived_at })
+                    }
+                >
+                    {chat.archived_at ? 'Вернуть из архива' : 'В архив'}
+                </MenuItem>
                 {isGroup && (
                     <MenuItem
                         icon={isAdmin ? 'trash' : 'exit'}
@@ -49,6 +78,21 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                     </MenuItem>
                 )}
             </ContextMenu>
+
+            {/* каталог сроков грузится, только когда окно открыли */}
+            {mutePicker && (
+                <MuteModal
+                    open
+                    onClose={() => setMutePicker(false)}
+                    pending={settings.isPending}
+                    onPick={(duration) =>
+                        settings.mutate(
+                            { kind: 'mute', duration },
+                            { onSuccess: () => setMutePicker(false) },
+                        )
+                    }
+                />
+            )}
 
             <ConfirmModal
                 open={confirm}

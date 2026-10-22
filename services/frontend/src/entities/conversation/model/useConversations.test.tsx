@@ -2,7 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-import { conversationsKey, useConversations } from './useConversations'
+import {
+    applyConversationEvent,
+    archivedConversationsKey,
+    conversationsKey,
+    useConversations,
+} from './useConversations'
 import type { ConversationSummary } from './types'
 
 function chat(id: string): ConversationSummary {
@@ -25,6 +30,9 @@ function chat(id: string): ConversationSummary {
         unread_count: 0,
         last_message_read: false,
         members_count: 2,
+        muted_until: null,
+        archived_at: null,
+        pinned_at: null,
         slug: null,
     }
 }
@@ -80,5 +88,31 @@ describe('useConversations', () => {
         )
         const { result } = renderHook(() => useConversations(), { wrapper })
         await waitFor(() => expect(result.current.data).toHaveLength(31))
+    })
+
+    it('a new message of an archived chat stays in the archive', () => {
+        const { client } = setup()
+        client.setQueryData(conversationsKey, { pages: [[chat('main')]], pageParams: [0] })
+        client.setQueryData(archivedConversationsKey, { pages: [[chat('old')]], pageParams: [0] })
+        applyConversationEvent(
+            client,
+            {
+                type: 'message.created',
+                data: {
+                    conversation_id: 'old',
+                    message_id: 'm1',
+                    sender_id: 'peer',
+                    created_at: '2026-10-14T11:00:00Z',
+                },
+            },
+            'me',
+        )
+        const ids = (key: readonly string[]) =>
+            client
+                .getQueryData<{ pages: ConversationSummary[][] }>(key)!
+                .pages.flat()
+                .map((c) => [c.id, c.unread_count])
+        expect(ids(conversationsKey)).toEqual([['main', 0]])
+        expect(ids(archivedConversationsKey)).toEqual([['old', 1]])
     })
 })

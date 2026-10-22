@@ -1,4 +1,4 @@
-import { applyToConversations } from './events'
+import { applyChatSettings, applyToConversations } from './events'
 import type { ConversationSummary } from './types'
 
 function chat(
@@ -24,6 +24,9 @@ function chat(
         unread_count: 0,
         last_message_read: false,
         members_count: 2,
+        muted_until: null,
+        archived_at: null,
+        pinned_at: null,
         slug: null,
         ...extra,
     }
@@ -165,5 +168,65 @@ describe('applyToConversations', () => {
         expect(applyToConversations(list, { type: 'user.online', data: {} }, ME).kind).toBe(
             'ignore',
         )
+    })
+})
+
+describe('applyChatSettings', () => {
+    const settings = (data: Record<string, unknown>) => ({
+        type: 'conversation.settings.updated',
+        data: {
+            conversation_id: 'b',
+            muted_until: null,
+            archived_at: null,
+            pinned_at: null,
+            ...data,
+        },
+    })
+    const main = [chat('a', '2026-10-14T10:00:00Z'), chat('b', '2026-10-14T09:00:00Z')]
+
+    it('puts a pinned chat above fresher ones', () => {
+        const update = applyChatSettings(main, [], settings({ pinned_at: '2026-10-14T12:00:00Z' }))
+        expect(update.main?.map((c) => c.id)).toEqual(['b', 'a'])
+        expect(update.archived).toEqual([])
+    })
+
+    it('newer pin goes higher, times with different fraction lengths compare as dates', () => {
+        const pinned = [
+            chat('a', '2026-10-14T10:00:00Z', { pinned_at: '2026-10-14T12:00:00.2Z' }),
+            chat('b', '2026-10-14T09:00:00Z'),
+        ]
+        const update = applyChatSettings(
+            pinned,
+            [],
+            settings({ pinned_at: '2026-10-14T12:00:00.21Z' }),
+        )
+        expect(update.main?.map((c) => c.id)).toEqual(['b', 'a'])
+    })
+
+    it('moves the chat to the archive and back', () => {
+        const toArchive = applyChatSettings(
+            main,
+            [],
+            settings({ archived_at: '2026-10-14T12:00:00Z' }),
+        )
+        expect(toArchive.main?.map((c) => c.id)).toEqual(['a'])
+        expect(toArchive.archived?.map((c) => c.id)).toEqual(['b'])
+
+        const back = applyChatSettings(toArchive.main, toArchive.archived, settings({}))
+        expect(back.main?.map((c) => c.id)).toEqual(['a', 'b'])
+        expect(back.archived).toEqual([])
+    })
+
+    it('updates mute in place and asks to reload for an unknown chat', () => {
+        const muted = applyChatSettings(
+            main,
+            undefined,
+            settings({ muted_until: '9999-12-31T00:00:00Z' }),
+        )
+        expect(muted.main?.find((c) => c.id === 'b')?.muted_until).toBe('9999-12-31T00:00:00Z')
+        expect(muted.archived).toBeUndefined()
+        expect(
+            applyChatSettings(main, [], { ...settings({}), data: { conversation_id: 'x' } }).reload,
+        ).toBe(true)
     })
 })

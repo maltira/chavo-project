@@ -105,6 +105,12 @@ CREATE TABLE conversation_members (
     last_read_message_id UUID REFERENCES messages (id) ON DELETE SET NULL,
     -- История видна участнику с этого момента (admin видит всё); clock_timestamp() согласован с messages.created_at.
     joined_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp (),
+    -- Личные настройки чата участника: без звука до (навсегда = 9999-12-31), в архиве с, закреплён с.
+    muted_until TIMESTAMPTZ,
+    archived_at TIMESTAMPTZ,
+    pinned_at TIMESTAMPTZ,
+    -- Закреплённый чат не бывает в архиве.
+    CONSTRAINT conversation_members_pin_archive_check CHECK (pinned_at IS NULL OR archived_at IS NULL),
     PRIMARY KEY (conversation_id, user_id)
 );
 

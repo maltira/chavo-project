@@ -221,6 +221,8 @@ type fakeConversations struct {
 	mu      sync.Mutex
 	avatars map[string]string // группа -> путь аватарки
 	admins  map[string]string // группа -> её админ
+	// lastArchived - фильтр архива в последнем ListConversations
+	lastArchived bool
 }
 
 func (f *fakeConversations) GetConversation(_ context.Context, req *conversationv1.GetConversationRequest) (*conversationv1.GetConversationResponse, error) {
@@ -248,8 +250,39 @@ func (f *fakeConversations) UpdateGroup(ctx context.Context, req *conversationv1
 	return &conversationv1.UpdateGroupResponse{Conversation: &conversationv1.Conversation{Id: req.GetConversationId()}}, nil
 }
 
-func (*fakeConversations) ListConversations(context.Context, *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+func (f *fakeConversations) ListConversations(_ context.Context, req *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+	f.mu.Lock()
+	f.lastArchived = req.GetArchived()
+	f.mu.Unlock()
 	return &conversationv1.ListConversationsResponse{Limit: 30}, nil
+}
+
+// SetChatMute отвечает сроком как временем: так тест видит, что ушло в сервис
+func (f *fakeConversations) SetChatMute(_ context.Context, req *conversationv1.SetChatMuteRequest) (*conversationv1.SetChatMuteResponse, error) {
+	cs := &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}
+	switch {
+	case req.Duration == nil:
+	case req.GetDuration() == "8h":
+		cs.MutedUntil = timestamppb.New(time.Date(2026, 1, 1, 8, 0, 0, 0, time.UTC))
+	default:
+		return nil, grpcx.Error(codes.InvalidArgument, "MUTE_DURATION_INVALID", "Неизвестный срок отключения звука")
+	}
+	return &conversationv1.SetChatMuteResponse{Settings: cs}, nil
+}
+
+func (*fakeConversations) SetChatArchived(_ context.Context, req *conversationv1.SetChatArchivedRequest) (*conversationv1.SetChatArchivedResponse, error) {
+	cs := &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}
+	if req.GetArchived() {
+		cs.ArchivedAt = timestamppb.Now()
+	}
+	return &conversationv1.SetChatArchivedResponse{Settings: cs}, nil
+}
+
+func (*fakeConversations) SetChatPinned(_ context.Context, req *conversationv1.SetChatPinnedRequest) (*conversationv1.SetChatPinnedResponse, error) {
+	if req.GetPinned() {
+		return nil, grpcx.Error(codes.FailedPrecondition, "PIN_LIMIT", "Можно закрепить не больше 5 чатов")
+	}
+	return &conversationv1.SetChatPinnedResponse{Settings: &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}}, nil
 }
 
 func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.SendMessageRequest) (*conversationv1.SendMessageResponse, error) {
@@ -748,7 +781,9 @@ func TestStatusEndpoints(t *testing.T) {
 	icons, _ := st["icons"].([]any)
 	durations, _ := st["durations"].([]any)
 	shapes, _ := cat["avatar_shapes"].([]any)
-	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" {
+	mutes, _ := cat["mute_durations"].([]any)
+	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" ||
+		len(mutes) != 4 || mutes[3] != "forever" {
 		t.Fatalf("catalog content: %v", cat)
 	}
 	if w := e.do(http.MethodGet, "/api/statuses", "", ""); w.Code != http.StatusNotFound {
@@ -806,5 +841,46 @@ func TestAvatarShapeEndpoints(t *testing.T) {
 	// PUT не поддерживается: фигура только ставится заново или удаляется
 	if w := e.do(http.MethodPut, "/api/users/me/avatar-shape", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT: %d", w.Code)
+	}
+}
+
+func TestChatSettingsEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	id := uuid.NewString()
+
+	w := e.do(http.MethodPost, "/api/conversations/"+id+"/mute", tok, `{"duration":"8h"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("mute: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["conversation_id"] != id || body["muted_until"] != "2026-01-01T08:00:00Z" {
+		t.Fatalf("mute body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/mute", tok, `{"duration":"3h"}`),
+		http.StatusBadRequest, "MUTE_DURATION_INVALID")
+	if body = decode(t, e.do(http.MethodDelete, "/api/conversations/"+id+"/mute", tok, "")); body["muted_until"] != nil {
+		t.Fatalf("unmute body: %v", body)
+	}
+
+	if body = decode(t, e.do(http.MethodPost, "/api/conversations/"+id+"/archive", tok, "")); body["archived_at"] == nil {
+		t.Fatalf("archive body: %v", body)
+	}
+	if body = decode(t, e.do(http.MethodDelete, "/api/conversations/"+id+"/archive", tok, "")); body["archived_at"] != nil {
+		t.Fatalf("unarchive body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/pin", tok, ""), http.StatusConflict, "PIN_LIMIT")
+	if w := e.do(http.MethodDelete, "/api/conversations/"+id+"/pin", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("unpin: %d", w.Code)
+	}
+
+	// архив - отдельный список
+	e.do(http.MethodGet, "/api/conversations?archived=true", tok, "")
+	if !e.convs.lastArchived {
+		t.Fatal("archived filter not passed")
+	}
+	e.do(http.MethodGet, "/api/conversations", tok, "")
+	if e.convs.lastArchived {
+		t.Fatal("main list asked for archive")
 	}
 }

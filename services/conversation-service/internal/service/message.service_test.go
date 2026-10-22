@@ -68,7 +68,7 @@ func setup(t *testing.T) *env {
 	return &env{
 		pool:   pool,
 		msgs:   service.NewMessageService(db, cr, mr, or, users, cipher, zap.NewNop()),
-		convs:  service.NewConversationService(db, cr, cipher),
+		convs:  service.NewConversationService(db, cr, or, cipher),
 		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), cipher, mr),
 		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository(), cipher, mr),
 		users:  users,
@@ -334,7 +334,7 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 		t.Fatalf("readers of ids[3] = %v", readers)
 	}
 
-	list, _ := e.convs.List(ctx, a, 10, 0)
+	list, _ := e.convs.List(ctx, a, false, 10, 0)
 	if len(list) != 1 || list[0].UnreadCount != 0 {
 		t.Fatalf("list for a: %+v", list)
 	}
@@ -346,7 +346,7 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 	if err = e.msgs.MarkRead(ctx, b, conv, ids[4]); err != nil {
 		t.Fatal(err)
 	}
-	list, _ = e.convs.List(ctx, a, 10, 0)
+	list, _ = e.convs.List(ctx, a, false, 10, 0)
 	if !list[0].LastMessageRead {
 		t.Fatal("last message must be read after b's cursor reaches it")
 	}
@@ -365,7 +365,7 @@ func TestPaginationAndReadReceipts(t *testing.T) {
 
 func mustConv(t *testing.T, e *env, user uuid.UUID) uuid.UUID {
 	t.Helper()
-	list, err := e.convs.List(context.Background(), user, 1, 0)
+	list, err := e.convs.List(context.Background(), user, false, 1, 0)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list: %v %v", list, err)
 	}

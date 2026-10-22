@@ -1,7 +1,6 @@
-import type { InfiniteData, QueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 
-import { conversationKey, conversationsKey, getConversation } from '@/entities/conversation'
-import type { ConversationSummary } from '@/entities/conversation'
+import { conversationKey, findInLists, getConversation, isMuted } from '@/entities/conversation'
 import { getUser, userKey } from '@/entities/user'
 import type { Profile } from '@/entities/user'
 import type { ServerEvent } from '@/shared/api'
@@ -15,14 +14,10 @@ interface CreatedData {
     kind?: string
 }
 
-// чат из кеша (список или карточка), иначе с сервера
+// чат из кеша (списки или карточка), иначе с сервера
 export async function findChat(queryClient: QueryClient, id: string) {
-    const fromList = queryClient
-        .getQueryData<InfiniteData<ConversationSummary[]>>(conversationsKey)
-        ?.pages.flat()
-        .find((c) => c.id === id)
     return (
-        fromList ??
+        findInLists(queryClient, id) ??
         queryClient.fetchQuery({
             queryKey: conversationKey(id),
             queryFn: () => getConversation(id),
@@ -68,6 +63,10 @@ export async function notifyNewMessage(
             findChat(queryClient, chatId),
             findUser(queryClient, senderId),
         ])
+        // чат без звука - без всплывашки, непрочитанные всё равно считаются
+        if (isMuted(chat)) {
+            return
+        }
         const isGroup = chat.conversation_type === 'group'
         const text = data.content ?? ''
         notify({

@@ -27,6 +27,8 @@ const (
 	TypeConversationCreated = "conversation.created"
 	TypeConversationUpdated = "conversation.updated"
 	TypeConversationDeleted = "conversation.deleted"
+	// TypeChatSettingsUpdated - личные настройки чата; member_ids - только сам участник (все его вкладки)
+	TypeChatSettingsUpdated = "conversation.settings.updated"
 	TypeMemberAdded         = "conversation.member.added"
 	TypeMemberRemoved       = "conversation.member.removed"
 	TypeJoinRequestCreated  = "conversation.join_request.created"
@@ -187,7 +189,7 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 	switch ev.EventType {
 	case TypeMessageCreated, TypeMessageUpdated, TypeMessageDeleted,
 		TypeConversationCreated, TypeConversationUpdated, TypeConversationDeleted,
-		TypeMemberAdded, TypeMemberRemoved, TypeJoinRequestApproved:
+		TypeMemberAdded, TypeMemberRemoved, TypeJoinRequestApproved, TypeChatSettingsUpdated:
 		users = to.MemberIDs
 	case TypeMessageRead:
 		// Читатель получает событие во все свои вкладки: счётчик непрочитанных синхронизируется между ними.

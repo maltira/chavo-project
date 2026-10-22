@@ -110,6 +110,14 @@ type ConversationSummary struct {
 	MembersCount    int  `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы, только для её админов и только в карточке чата
 	InviteCode *string `json:"invite_code,omitempty"`
+	ChatSettings
+}
+
+// ChatSettings - личные настройки чата участника; видит и меняет только он сам
+type ChatSettings struct {
+	MutedUntil *time.Time `json:"muted_until"`
+	ArchivedAt *time.Time `json:"archived_at"`
+	PinnedAt   *time.Time `json:"pinned_at"`
 }
 
 // InviteInfo - краткая информация о группе по ссылке на чат

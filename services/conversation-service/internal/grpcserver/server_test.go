@@ -47,7 +47,7 @@ func start(t *testing.T) clients {
 	log := zap.NewNop()
 
 	impl := grpcserver.New(
-		service.NewConversationService(db, cr, cipher),
+		service.NewConversationService(db, cr, or, cipher),
 		service.NewGroupService(db, cr, or, users, br, cipher, mr),
 		service.NewJoinService(db, cr, jr, or, br, cipher, mr),
 		service.NewMessageService(db, cr, mr, or, users, cipher, log),

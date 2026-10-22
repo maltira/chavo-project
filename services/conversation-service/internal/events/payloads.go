@@ -105,3 +105,13 @@ type JoinRequestApprovedPayload struct {
 	ApprovedBy     uuid.UUID   `json:"approved_by"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
+
+// ChatSettingsUpdatedPayload - новое состояние личных настроек; MemberIDs - только сам участник
+type ChatSettingsUpdatedPayload struct {
+	ConversationID uuid.UUID   `json:"conversation_id"`
+	UserID         uuid.UUID   `json:"user_id"`
+	MutedUntil     *time.Time  `json:"muted_until"`
+	ArchivedAt     *time.Time  `json:"archived_at"`
+	PinnedAt       *time.Time  `json:"pinned_at"`
+	MemberIDs      []uuid.UUID `json:"member_ids"`
+}

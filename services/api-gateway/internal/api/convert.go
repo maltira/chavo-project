@@ -201,6 +201,28 @@ type summaryJSON struct {
 	MembersCount    int32 `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы; только у её админов в GET /conversations/:id
 	InviteCode *string `json:"invite_code"`
+	chatSettingsJSON
+}
+
+// chatSettingsJSON - личные настройки чата вызывающего
+type chatSettingsJSON struct {
+	MutedUntil *time.Time `json:"muted_until"`
+	ArchivedAt *time.Time `json:"archived_at"`
+	PinnedAt   *time.Time `json:"pinned_at"`
+}
+
+type chatSettingsResponseJSON struct {
+	ConversationID string `json:"conversation_id"`
+	chatSettingsJSON
+}
+
+func toChatSettings(s *conversationv1.ChatSettings) chatSettingsResponseJSON {
+	return chatSettingsResponseJSON{
+		ConversationID: s.GetConversationId(),
+		chatSettingsJSON: chatSettingsJSON{
+			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
+		},
+	}
 }
 
 func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
@@ -213,6 +235,9 @@ func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 		LastMessageRead:  s.GetLastMessageRead(),
 		MembersCount:     s.GetMembersCount(),
 		InviteCode:       s.InviteCode,
+		chatSettingsJSON: chatSettingsJSON{
+			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
+		},
 	}
 }
 

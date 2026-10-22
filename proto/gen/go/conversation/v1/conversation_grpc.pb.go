@@ -30,6 +30,9 @@ const (
 	ConversationService_ClearGroupAvatarShape_FullMethodName = "/conversation.v1.ConversationService/ClearGroupAvatarShape"
 	ConversationService_DeleteConversation_FullMethodName    = "/conversation.v1.ConversationService/DeleteConversation"
 	ConversationService_JoinGroup_FullMethodName             = "/conversation.v1.ConversationService/JoinGroup"
+	ConversationService_SetChatMute_FullMethodName           = "/conversation.v1.ConversationService/SetChatMute"
+	ConversationService_SetChatArchived_FullMethodName       = "/conversation.v1.ConversationService/SetChatArchived"
+	ConversationService_SetChatPinned_FullMethodName         = "/conversation.v1.ConversationService/SetChatPinned"
 	ConversationService_ListMembers_FullMethodName           = "/conversation.v1.ConversationService/ListMembers"
 	ConversationService_AddMembers_FullMethodName            = "/conversation.v1.ConversationService/AddMembers"
 	ConversationService_SetMemberRole_FullMethodName         = "/conversation.v1.ConversationService/SetMemberRole"
@@ -71,6 +74,11 @@ type ConversationServiceClient interface {
 	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
 	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
+	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
+	// архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
+	SetChatMute(ctx context.Context, in *SetChatMuteRequest, opts ...grpc.CallOption) (*SetChatMuteResponse, error)
+	SetChatArchived(ctx context.Context, in *SetChatArchivedRequest, opts ...grpc.CallOption) (*SetChatArchivedResponse, error)
+	SetChatPinned(ctx context.Context, in *SetChatPinnedRequest, opts ...grpc.CallOption) (*SetChatPinnedResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
 	SetMemberRole(ctx context.Context, in *SetMemberRoleRequest, opts ...grpc.CallOption) (*SetMemberRoleResponse, error)
@@ -205,6 +213,36 @@ func (c *conversationServiceClient) JoinGroup(ctx context.Context, in *JoinGroup
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(JoinGroupResponse)
 	err := c.cc.Invoke(ctx, ConversationService_JoinGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetChatMute(ctx context.Context, in *SetChatMuteRequest, opts ...grpc.CallOption) (*SetChatMuteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatMuteResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetChatMute_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetChatArchived(ctx context.Context, in *SetChatArchivedRequest, opts ...grpc.CallOption) (*SetChatArchivedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatArchivedResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetChatArchived_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetChatPinned(ctx context.Context, in *SetChatPinnedRequest, opts ...grpc.CallOption) (*SetChatPinnedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatPinnedResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetChatPinned_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -421,6 +459,11 @@ type ConversationServiceServer interface {
 	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
 	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
+	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
+	// архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
+	SetChatMute(context.Context, *SetChatMuteRequest) (*SetChatMuteResponse, error)
+	SetChatArchived(context.Context, *SetChatArchivedRequest) (*SetChatArchivedResponse, error)
+	SetChatPinned(context.Context, *SetChatPinnedRequest) (*SetChatPinnedResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
 	SetMemberRole(context.Context, *SetMemberRoleRequest) (*SetMemberRoleResponse, error)
@@ -483,6 +526,15 @@ func (UnimplementedConversationServiceServer) DeleteConversation(context.Context
 }
 func (UnimplementedConversationServiceServer) JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinGroup not implemented")
+}
+func (UnimplementedConversationServiceServer) SetChatMute(context.Context, *SetChatMuteRequest) (*SetChatMuteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetChatMute not implemented")
+}
+func (UnimplementedConversationServiceServer) SetChatArchived(context.Context, *SetChatArchivedRequest) (*SetChatArchivedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetChatArchived not implemented")
+}
+func (UnimplementedConversationServiceServer) SetChatPinned(context.Context, *SetChatPinnedRequest) (*SetChatPinnedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetChatPinned not implemented")
 }
 func (UnimplementedConversationServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMembers not implemented")
@@ -756,6 +808,60 @@ func _ConversationService_JoinGroup_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).JoinGroup(ctx, req.(*JoinGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetChatMute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatMuteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetChatMute(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetChatMute_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetChatMute(ctx, req.(*SetChatMuteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetChatArchived_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatArchivedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetChatArchived(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetChatArchived_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetChatArchived(ctx, req.(*SetChatArchivedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetChatPinned_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatPinnedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetChatPinned(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetChatPinned_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetChatPinned(ctx, req.(*SetChatPinnedRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1152,6 +1258,18 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinGroup",
 			Handler:    _ConversationService_JoinGroup_Handler,
+		},
+		{
+			MethodName: "SetChatMute",
+			Handler:    _ConversationService_SetChatMute_Handler,
+		},
+		{
+			MethodName: "SetChatArchived",
+			Handler:    _ConversationService_SetChatArchived_Handler,
+		},
+		{
+			MethodName: "SetChatPinned",
+			Handler:    _ConversationService_SetChatPinned_Handler,
 		},
 		{
 			MethodName: "ListMembers",

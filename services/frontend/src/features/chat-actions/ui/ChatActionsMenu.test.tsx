@@ -84,4 +84,48 @@ describe('ChatActionsMenu', () => {
         fireEvent.click(screen.getByRole('menuitem', { name: 'Сведения о чате' }))
         expect(useGroupCard.getState().target).toEqual({ kind: 'chat', id: 'g1' })
     })
+
+    it('pins, archives and unmutes the chat', async () => {
+        renderMenu({
+            ...direct,
+            muted_until: '9999-12-31T00:00:00Z',
+            pinned_at: null,
+            archived_at: null,
+        })
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Закрепить чат' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'В архив' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Включить звук' }))
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+        const calls = fetchMock.mock.calls.map(([url, init]) => `${init.method} ${url}`)
+        expect(calls).toEqual([
+            'POST /api/conversations/d1/pin',
+            'POST /api/conversations/d1/archive',
+            'DELETE /api/conversations/d1/mute',
+        ])
+    })
+
+    it('mutes for the picked duration', async () => {
+        fetchMock.mockImplementation((url: string) =>
+            Promise.resolve(
+                new Response(
+                    url === '/api/customization'
+                        ? '{"status":{"icons":[],"durations":[]},"avatar_shapes":[],"mute_durations":["1h","8h","2d","forever"]}'
+                        : '{"conversation_id":"d1","muted_until":"2026-01-01T08:00:00Z","archived_at":null,"pinned_at":null}',
+                ),
+            ),
+        )
+        renderMenu({ ...direct, muted_until: null })
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Без звука' }))
+        const dialog = screen.getByRole('dialog', { name: 'Без звука' })
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'На 8 часов' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/d1/mute',
+                expect.objectContaining({ method: 'POST', body: '{"duration":"8h"}' }),
+            ),
+        )
+        await vi.waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: 'Без звука' })).toBeNull(),
+        )
+    })
 })

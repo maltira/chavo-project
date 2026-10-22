@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
 
 import { MAX_MESSAGE_LENGTH } from '@/entities/message'
 import type { Message } from '@/entities/message'
 import { useFavoriteEmojis } from '@/entities/user'
-import { useDismiss } from '@/shared/lib'
-import { EmojiPicker, Icon, IconButton } from '@/shared/ui'
+import { sameValue, trimValue, useDismiss } from '@/shared/lib'
+import type { RichValue } from '@/shared/lib'
+import { EmojiPicker, Icon, IconButton, RichEditor } from '@/shared/ui'
+import type { RichEditorHandle } from '@/shared/ui'
 
 import { useEditMessage } from '../model/useEditMessage'
 import { useSendMessage } from '../model/useSendMessage'
@@ -30,10 +31,15 @@ interface Props {
     onCancel: () => void
 }
 
-// предел высоты поля: дальше текст прокручивается внутри
-const MAX_HEIGHT = 160
+const EMPTY: RichValue = { text: '', entities: [] }
 
-// поле ввода сообщения: отправка, ответ и редактирование; Enter - отправить, Shift+Enter - перенос
+// текст и форматирование сообщения, которое правят
+function valueOf(message: Message | null | undefined): RichValue {
+    return { text: message?.content ?? '', entities: message?.entities ?? [] }
+}
+
+// поле ввода сообщения: отправка, ответ и редактирование; жирный, курсив и подчёркивание (панель над
+// выделением и Ctrl/Cmd + B / I / U); Enter - отправить, Shift+Enter - перенос
 export function MessageComposer({
     conversationId,
     recipientId,
@@ -43,8 +49,8 @@ export function MessageComposer({
     editing,
     onCancel,
 }: Props) {
-    const [text, setText] = useState(editing?.content ?? '')
-    const fieldRef = useRef<HTMLTextAreaElement>(null)
+    const [value, setValue] = useState<RichValue>(() => valueOf(editing))
+    const editorRef = useRef<RichEditorHandle>(null)
     const send = useSendMessage(myId, onSent)
     // панель эмодзи: кнопка и панель - одна область, клик вне неё и Esc закрывают панель
     const [emojiOpen, setEmojiOpen] = useState(false)
@@ -54,50 +60,36 @@ export function MessageComposer({
     const favorites = useFavoriteEmojis(emojiOpen)
 
     // при открытии чата фокуса нет - пользователь сам нажмёт на поле;
-    // при редактировании - фокус и курсор в конце текста, высота по тексту
+    // при редактировании - фокус и курсор в конце текста
     const editingId = editing?.id
     useEffect(() => {
-        resize()
-        const field = fieldRef.current
-        if (editingId && field) {
-            field.focus()
-            const end = field.value.length
-            field.setSelectionRange(end, end)
-            // длинный текст не должен оставаться прокрученным к началу
-            field.scrollTop = field.scrollHeight
+        if (editingId) {
+            editorRef.current?.focus()
+            const edited = valueOf(editing)
+            editorRef.current?.setValue(edited)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- содержимое берётся при смене сообщения
     }, [editingId])
 
     // выбрали сообщение для ответа - курсор сразу в поле, можно печатать
     const replyId = replyTo?.id
     useEffect(() => {
         if (replyId) {
-            fieldRef.current?.focus()
+            editorRef.current?.focus()
         }
     }, [replyId])
     const edit = useEditMessage()
 
-    const content = text.trim()
-    const canSubmit = content.length > 0 && content !== (editing?.content ?? '').trim()
-
-    function resize() {
-        const field = fieldRef.current
-        if (field) {
-            field.style.height = 'auto'
-            const border = field.offsetHeight - field.clientHeight
-            const wanted = field.scrollHeight + border
-            field.style.height = `${Math.min(wanted, MAX_HEIGHT)}px`
-            // полоса прокрутки - только когда высота дошла до предела
-            field.style.overflowY = wanted > MAX_HEIGHT ? 'auto' : 'hidden'
-        }
-    }
+    const trimmed = trimValue(value)
+    const canSubmit =
+        trimmed.text.length > 0 && (!editing || !sameValue(trimmed, trimValue(valueOf(editing))))
 
     function submit() {
         if (!canSubmit) {
             return
         }
         if (editing) {
-            edit.mutate({ id: editing.id, content })
+            edit.mutate({ id: editing.id, content: trimmed.text, entities: trimmed.entities })
             onCancel()
             return
         }
@@ -105,40 +97,22 @@ export function MessageComposer({
             ...(conversationId
                 ? { conversation_id: conversationId }
                 : { recipient_id: recipientId }),
-            content,
+            content: trimmed.text,
+            ...(trimmed.entities.length > 0 ? { entities: trimmed.entities } : {}),
             reply_to_message_id: replyTo?.id ?? null,
         })
-        setText('')
-        // высота поля возвращается к одной строке после очистки
-        requestAnimationFrame(resize)
+        // поле очищается, форматирование сбрасывается
+        editorRef.current?.setValue(EMPTY)
         onCancel()
     }
 
-    // эмодзи встаёт в позицию курсора (или заменяет выделенное); курсор после него, фокус - в поле,
-    // чтобы можно было сразу печатать дальше
-    function insertEmoji(emoji: string) {
-        const field = fieldRef.current
-        const start = field?.selectionStart ?? text.length
-        const end = field?.selectionEnd ?? text.length
-        const next = text.slice(0, start) + emoji + text.slice(end)
-        if (next.length > MAX_MESSAGE_LENGTH) {
-            return
-        }
-        setText(next)
-        const caret = start + emoji.length
-        requestAnimationFrame(() => {
-            resize()
-            field?.setSelectionRange(caret, caret)
-        })
-    }
-
-    function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            submit()
-        }
-        if (event.key === 'Escape' && (editing || replyTo)) {
-            onCancel()
+    // эмодзи встаёт в позицию курсора (или заменяет выделенное). После выбора с клавиатуры фокус остаётся
+    // в панели, чтобы можно было выбрать следующий; после выбора мышью - в поле, чтобы печатать дальше
+    function insertEmoji(emoji: string, options?: { keyboard: boolean }) {
+        const active = document.activeElement as HTMLElement | null
+        editorRef.current?.insertText(emoji)
+        if (options?.keyboard) {
+            active?.focus()
         }
     }
 
@@ -167,19 +141,20 @@ export function MessageComposer({
             )}
 
             <div className={styles.row}>
-                <textarea
-                    ref={fieldRef}
+                <RichEditor
+                    ref={editorRef}
                     className={styles.field}
-                    rows={1}
+                    initial={valueOf(editing)}
                     placeholder="Введите сообщение"
                     aria-label="Сообщение"
-                    value={text}
                     maxLength={MAX_MESSAGE_LENGTH}
-                    onChange={(event) => {
-                        setText(event.target.value)
-                        resize()
+                    onChange={setValue}
+                    onSubmit={submit}
+                    onEscape={() => {
+                        if (editing || replyTo) {
+                            onCancel()
+                        }
                     }}
-                    onKeyDown={onKeyDown}
                 />
                 {/* Esc закрывает панель и возвращает фокус в поле */}
                 <div
@@ -188,7 +163,7 @@ export function MessageComposer({
                     onKeyDown={(event) => {
                         if (event.key === 'Escape' && emojiOpen) {
                             event.stopPropagation()
-                            fieldRef.current?.focus()
+                            editorRef.current?.focus()
                         }
                     }}
                 >

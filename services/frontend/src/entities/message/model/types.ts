@@ -1,3 +1,5 @@
+import type { MessageEntity } from '@/shared/lib'
+
 export interface Message {
     id: string
     conversation_id: string
@@ -17,6 +19,8 @@ export interface Message {
     // пересланное «без указания автора» - обычное сообщение
     is_forwarded?: boolean
     forwarded_from_user_id?: string | null
+    // форматирование текста (жирный, курсив, подчёркивание); без него - обычный текст
+    entities?: MessageEntity[]
     // только на клиенте: отправлено, но сервер ещё не ответил
     pending?: boolean
     // только на клиенте: id временного сообщения, которое заменил ответ сервера - ключ строки

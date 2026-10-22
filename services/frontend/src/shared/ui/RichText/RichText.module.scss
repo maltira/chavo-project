@@ -1,0 +1,14 @@
+// жирный и курсив - настоящие начертания Inter 18pt (см. _fonts.scss); underline - обычная линия чуть ниже текста
+.bold {
+    font-weight: 700;
+}
+
+.italic {
+    font-style: italic;
+}
+
+.underline {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}

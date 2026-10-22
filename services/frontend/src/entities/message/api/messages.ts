@@ -1,4 +1,5 @@
 import { request } from '@/shared/api'
+import type { MessageEntity } from '@/shared/lib'
 
 import type { Message, MessagesPage } from '../model/types'
 
@@ -25,16 +26,23 @@ export interface SendMessageInput {
     recipient_id?: string
     content: string
     reply_to_message_id?: string | null
+    // форматирование текста; диапазоны в единицах UTF-16
+    entities?: MessageEntity[]
 }
 
 export function sendMessage(input: SendMessageInput): Promise<Message> {
     return request<Message>('/messages', { method: 'POST', body: input })
 }
 
-export function editMessage(id: string, content: string): Promise<Message> {
+// текст и форматирование заменяются целиком
+export function editMessage(
+    id: string,
+    content: string,
+    entities: MessageEntity[] = [],
+): Promise<Message> {
     return request<Message>(`/messages/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        body: { content },
+        body: { content, entities },
     })
 }
 

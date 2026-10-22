@@ -23,6 +23,7 @@ export function useSendMessage(myId: string | undefined, onSent?: (message: Mess
                 conversation_id: input.conversation_id,
                 sender_id: myId ?? '',
                 content: input.content,
+                entities: input.entities ?? [],
                 reply_to_message_id: input.reply_to_message_id ?? null,
                 is_edited: false,
                 is_deleted: false,

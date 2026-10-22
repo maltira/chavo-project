@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import type { Message } from '@/entities/message'
 import { useProfileCard, UserAvatar, useUser } from '@/entities/user'
 import { cn, formatTime, notify, useDismiss } from '@/shared/lib'
-import { Icon, IconButton } from '@/shared/ui'
+import { Icon, IconButton, RichText } from '@/shared/ui'
 
 import styles from './MessageBubble.module.scss'
 
@@ -263,7 +263,14 @@ export function MessageBubble({
                         }}
                     >
                         <span className={styles.text}>
-                            {deleted ? 'Сообщение удалено' : message.content}
+                            {deleted ? (
+                                'Сообщение удалено'
+                            ) : (
+                                <RichText
+                                    text={message.content ?? ''}
+                                    entities={message.entities}
+                                />
+                            )}
                             {/* невидимая копия занимает место в конце последней строки:
                                 если не помещается, время уходит на новую строку */}
                             <span className={styles.metaSpace} aria-hidden="true">

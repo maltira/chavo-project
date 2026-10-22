@@ -97,4 +97,41 @@ describe('message cache', () => {
         expect(pages[0]!.items[0]).toMatchObject({ content: 'исправлено', is_edited: true })
         expect(pages[0]!.items[1]).toMatchObject({ content: null, is_deleted: true })
     })
+
+    it('carries the formatting from created events and replaces it on every edit', () => {
+        const { client } = setup([msg('m1')])
+        const first = () =>
+            client.getQueryData<InfiniteData<MessagesPage>>(messagesKey('c1'))!.pages[0]!.items[0]!
+        applyMessageEvent(client, {
+            type: 'message.created',
+            data: {
+                conversation_id: 'c1',
+                message_id: 'm2',
+                sender_id: 'b',
+                content: 'привет мир',
+                created_at: '2026-10-14T11:00:00Z',
+                entities: [{ type: 'bold', offset: 0, length: 6 }],
+            },
+        })
+        expect(first().entities).toEqual([{ type: 'bold', offset: 0, length: 6 }])
+
+        // правка присылает новую разметку целиком
+        applyMessageEvent(client, {
+            type: 'message.updated',
+            data: {
+                conversation_id: 'c1',
+                message_id: 'm2',
+                content: 'привет мир',
+                entities: [{ type: 'italic', offset: 7, length: 3 }],
+            },
+        })
+        expect(first().entities).toEqual([{ type: 'italic', offset: 7, length: 3 }])
+
+        // правка без форматирования снимает его; событие без поля - тоже «без форматирования»
+        applyMessageEvent(client, {
+            type: 'message.updated',
+            data: { conversation_id: 'c1', message_id: 'm2', content: 'просто' },
+        })
+        expect(first().entities).toEqual([])
+    })
 })

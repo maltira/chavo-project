@@ -440,4 +440,38 @@ describe('ChatWindow', () => {
         expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull()
         expect(screen.getByRole('menuitem', { name: 'Удалить' })).toBeInTheDocument()
     })
+
+    it('renders the formatting of a message: bold, italic and underline, nested where they overlap', async () => {
+        const { client } = renderWindow()
+        client.setQueryData(['messages', 'c1'], {
+            pages: [
+                {
+                    items: [
+                        msg('f1', 'peer', 'привет мир', {
+                            entities: [
+                                { type: 'bold', offset: 0, length: 6 },
+                                { type: 'italic', offset: 3, length: 7 },
+                                { type: 'underline', offset: 7, length: 3 },
+                            ],
+                        }),
+                    ],
+                    limit: 50,
+                    next_before: null,
+                },
+            ],
+            pageParams: [undefined],
+        })
+        await vi.waitFor(() =>
+            expect(document.querySelector('[data-message-id="f1"]')).not.toBeNull(),
+        )
+        const text = document.querySelector('[data-message-id="f1"]')!
+        expect(Array.from(text.querySelectorAll('strong'), (n) => n.textContent)).toEqual([
+            'при',
+            'вет',
+        ])
+        expect(text.querySelector('strong em')?.textContent).toBe('вет')
+        expect(text.querySelector('em u')?.textContent).toBe('мир')
+        // скопированный текст не содержит разметки
+        expect(text.textContent).toContain('привет мир')
+    })
 })

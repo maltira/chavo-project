@@ -11,7 +11,8 @@ import { getFrequent, recordEmoji } from './frequent'
 
 interface Props {
     // выбранный эмодзи вставляется в поле; панель остаётся открытой - можно выбрать несколько
-    onPick: (emoji: string) => void
+    // keyboard - выбор с клавиатуры (Enter, пробел): тогда фокус должен остаться в панели
+    onPick: (emoji: string, options?: { keyboard: boolean }) => void
     // избранные (из настроек) и их изменение: правая кнопка мыши или клавиша меню на эмодзи
     favorites: string[]
     onToggleFavorite: (emoji: string) => void
@@ -68,9 +69,9 @@ export function EmojiPicker({ onPick, favorites, onToggleFavorite }: Props) {
         sectionRefs.current[id] = el
     }
 
-    function pick(emoji: string) {
+    function pick(emoji: string, keyboard: boolean) {
         recordEmoji(emoji)
-        onPick(emoji)
+        onPick(emoji, { keyboard })
     }
 
     function goTo(id: SectionId) {
@@ -150,7 +151,8 @@ export function EmojiPicker({ onPick, favorites, onToggleFavorite }: Props) {
             data-emoji={emoji}
             aria-label={labels.get(emoji) ?? emoji}
             title={labels.get(emoji)}
-            onClick={() => pick(emoji)}
+            // detail 0 - нажатие сделано клавиатурой, а не мышью
+            onClick={(event) => pick(emoji, event.detail === 0)}
             onContextMenu={(event) => {
                 event.preventDefault()
                 onToggleFavorite(emoji)

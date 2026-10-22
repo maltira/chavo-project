@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
+import { typeMessage } from '@/shared/lib/testing'
+
 import { NewChatWindow } from './NewChatWindow'
 
 const fetchMock = vi.fn()
@@ -42,7 +44,7 @@ describe('NewChatWindow', () => {
         expect(screen.getByRole('heading', { name: 'Герман Самойлов' })).toBeInTheDocument()
 
         const field = screen.getByLabelText('Сообщение')
-        fireEvent.change(field, { target: { value: 'привет' } })
+        typeMessage(field, 'привет')
         fireEvent.keyDown(field, { key: 'Enter' })
 
         expect(await screen.findByText('чат создан')).toBeInTheDocument()
@@ -96,7 +98,7 @@ describe('NewChatWindow', () => {
         expect(screen.getByText('Сообщения для себя')).toBeInTheDocument()
 
         const field = screen.getByLabelText('Сообщение')
-        fireEvent.change(field, { target: { value: 'заметка' } })
+        typeMessage(field, 'заметка')
         fireEvent.keyDown(field, { key: 'Enter' })
         expect(await screen.findByText('чат создан')).toBeInTheDocument()
         // блокировки с самим собой не проверяются

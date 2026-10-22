@@ -3,12 +3,21 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { editMessage, patchMessage } from '@/entities/message'
 import { errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
+import type { MessageEntity } from '@/shared/lib'
 
 export function useEditMessage() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ id, content }: { id: string; content: string }) => editMessage(id, content),
+        mutationFn: ({
+            id,
+            content,
+            entities,
+        }: {
+            id: string
+            content: string
+            entities?: MessageEntity[]
+        }) => editMessage(id, content, entities),
         onSuccess: (message) => {
             patchMessage(queryClient, message.conversation_id, message.id, message)
         },

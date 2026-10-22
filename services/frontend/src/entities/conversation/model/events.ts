@@ -1,4 +1,5 @@
 import type { ServerEvent } from '@/shared/api'
+import type { MessageEntity } from '@/shared/lib'
 
 import type { Message } from '@/entities/message/@x/conversation'
 
@@ -18,6 +19,7 @@ interface MessagePayload {
     target_id?: string | null
     is_forwarded?: boolean
     forwarded_from_user_id?: string | null
+    entities?: MessageEntity[]
 }
 
 // результат применения события к списку:
@@ -78,6 +80,7 @@ export function applyToConversations(
                 target_id: data.target_id ?? null,
                 is_forwarded: data.is_forwarded ?? false,
                 forwarded_from_user_id: data.forwarded_from_user_id ?? null,
+                entities: data.entities ?? [],
             }
             // системные сообщения поднимают чат, но в непрочитанные не идут (так считает и сервер)
             const counts = data.sender_id !== myId && message.kind !== 'system'

@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent, WheelEvent } from 'react'
 
 import {
+    AVATAR_MIN_SIDE,
     clampCrop,
     coverScale,
     encodeSquare,
+    isTooSmall,
     loadImage,
-    MAX_ZOOM,
+    maxZoomFor,
     MIN_ZOOM,
     notify,
     sourceRect,
@@ -74,6 +76,8 @@ function CropperBody({ file, onCancel, onConfirm }: BodyProps) {
     const [image, setImage] = useState<LoadedImage | null>(null)
     const [crop, setCrop] = useState<CropState>({ zoom: MIN_ZOOM, x: 0, y: 0 })
     const [saving, setSaving] = useState(false)
+    // приближать можно, пока кроп не меньше минимального размера фото (сервер не примет меньше)
+    const maxZoom = image ? maxZoomFor(image.width, image.height) : MIN_ZOOM
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const dragRef = useRef<{ id: number; px: number; py: number; x: number; y: number } | null>(
         null,
@@ -86,9 +90,20 @@ function CropperBody({ file, onCancel, onConfirm }: BodyProps) {
         loadImage(file).then(
             (img) => {
                 loaded = img
-                if (alive) {
-                    setImage(img)
+                if (!alive) {
+                    return
                 }
+                // сервер принимает фото не меньше 512×512: говорим об этом сразу, а не после загрузки
+                if (isTooSmall(img.width, img.height)) {
+                    notify({
+                        icon: 'warn',
+                        title: 'Фото слишком маленькое',
+                        description: `Нужно не меньше ${AVATAR_MIN_SIDE}×${AVATAR_MIN_SIDE} px, это - ${img.width}×${img.height}`,
+                    })
+                    onCancel()
+                    return
+                }
+                setImage(img)
             },
             () => {
                 if (alive) {
@@ -144,7 +159,7 @@ function CropperBody({ file, onCancel, onConfirm }: BodyProps) {
 
     // зум вокруг центра окна: смещение растёт вместе с масштабом
     function zoomTo(zoom: number) {
-        const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+        const z = Math.min(maxZoom, Math.max(MIN_ZOOM, zoom))
         update({ zoom: z, x: (crop.x * z) / crop.zoom, y: (crop.y * z) / crop.zoom })
     }
 
@@ -259,7 +274,7 @@ function CropperBody({ file, onCancel, onConfirm }: BodyProps) {
                     type="range"
                     aria-label="Масштаб"
                     min={MIN_ZOOM}
-                    max={MAX_ZOOM}
+                    max={maxZoom}
                     step={0.01}
                     value={crop.zoom}
                     disabled={!image}

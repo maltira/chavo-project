@@ -24,6 +24,10 @@ const (
 	UserService_UpdateMe_FullMethodName         = "/user.v1.UserService/UpdateMe"
 	UserService_GetProfile_FullMethodName       = "/user.v1.UserService/GetProfile"
 	UserService_SearchProfiles_FullMethodName   = "/user.v1.UserService/SearchProfiles"
+	UserService_ListAvatars_FullMethodName      = "/user.v1.UserService/ListAvatars"
+	UserService_AddAvatar_FullMethodName        = "/user.v1.UserService/AddAvatar"
+	UserService_SelectAvatar_FullMethodName     = "/user.v1.UserService/SelectAvatar"
+	UserService_DeleteAvatar_FullMethodName     = "/user.v1.UserService/DeleteAvatar"
 	UserService_ListBlocked_FullMethodName      = "/user.v1.UserService/ListBlocked"
 	UserService_GetBlockStatus_FullMethodName   = "/user.v1.UserService/GetBlockStatus"
 	UserService_BlockUser_FullMethodName        = "/user.v1.UserService/BlockUser"
@@ -47,6 +51,15 @@ type UserServiceClient interface {
 	UpdateMe(ctx context.Context, in *UpdateMeRequest, opts ...grpc.CallOption) (*UpdateMeResponse, error)
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
 	SearchProfiles(ctx context.Context, in *SearchProfilesRequest, opts ...grpc.CallOption) (*SearchProfilesResponse, error)
+	// История аватарок: до 5 последних фото, первое (самое новое) - текущее. Список другого пользователя
+	// пуст, если он заблокировал вызывающего.
+	ListAvatars(ctx context.Context, in *ListAvatarsRequest, opts ...grpc.CallOption) (*ListAvatarsResponse, error)
+	// AddAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+	AddAvatar(ctx context.Context, in *AddAvatarRequest, opts ...grpc.CallOption) (*AddAvatarResponse, error)
+	// SelectAvatar - сделать фото из истории текущим.
+	SelectAvatar(ctx context.Context, in *SelectAvatarRequest, opts ...grpc.CallOption) (*SelectAvatarResponse, error)
+	// DeleteAvatar - убрать фото из истории; если оно было текущим, текущим становится предыдущее.
+	DeleteAvatar(ctx context.Context, in *DeleteAvatarRequest, opts ...grpc.CallOption) (*DeleteAvatarResponse, error)
 	ListBlocked(ctx context.Context, in *ListBlockedRequest, opts ...grpc.CallOption) (*ListBlockedResponse, error)
 	GetBlockStatus(ctx context.Context, in *GetBlockStatusRequest, opts ...grpc.CallOption) (*GetBlockStatusResponse, error)
 	BlockUser(ctx context.Context, in *BlockUserRequest, opts ...grpc.CallOption) (*BlockUserResponse, error)
@@ -113,6 +126,46 @@ func (c *userServiceClient) SearchProfiles(ctx context.Context, in *SearchProfil
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchProfilesResponse)
 	err := c.cc.Invoke(ctx, UserService_SearchProfiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ListAvatars(ctx context.Context, in *ListAvatarsRequest, opts ...grpc.CallOption) (*ListAvatarsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAvatarsResponse)
+	err := c.cc.Invoke(ctx, UserService_ListAvatars_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) AddAvatar(ctx context.Context, in *AddAvatarRequest, opts ...grpc.CallOption) (*AddAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddAvatarResponse)
+	err := c.cc.Invoke(ctx, UserService_AddAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) SelectAvatar(ctx context.Context, in *SelectAvatarRequest, opts ...grpc.CallOption) (*SelectAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelectAvatarResponse)
+	err := c.cc.Invoke(ctx, UserService_SelectAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) DeleteAvatar(ctx context.Context, in *DeleteAvatarRequest, opts ...grpc.CallOption) (*DeleteAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAvatarResponse)
+	err := c.cc.Invoke(ctx, UserService_DeleteAvatar_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +283,15 @@ type UserServiceServer interface {
 	UpdateMe(context.Context, *UpdateMeRequest) (*UpdateMeResponse, error)
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
 	SearchProfiles(context.Context, *SearchProfilesRequest) (*SearchProfilesResponse, error)
+	// История аватарок: до 5 последних фото, первое (самое новое) - текущее. Список другого пользователя
+	// пуст, если он заблокировал вызывающего.
+	ListAvatars(context.Context, *ListAvatarsRequest) (*ListAvatarsResponse, error)
+	// AddAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+	AddAvatar(context.Context, *AddAvatarRequest) (*AddAvatarResponse, error)
+	// SelectAvatar - сделать фото из истории текущим.
+	SelectAvatar(context.Context, *SelectAvatarRequest) (*SelectAvatarResponse, error)
+	// DeleteAvatar - убрать фото из истории; если оно было текущим, текущим становится предыдущее.
+	DeleteAvatar(context.Context, *DeleteAvatarRequest) (*DeleteAvatarResponse, error)
 	ListBlocked(context.Context, *ListBlockedRequest) (*ListBlockedResponse, error)
 	GetBlockStatus(context.Context, *GetBlockStatusRequest) (*GetBlockStatusResponse, error)
 	BlockUser(context.Context, *BlockUserRequest) (*BlockUserResponse, error)
@@ -266,6 +328,18 @@ func (UnimplementedUserServiceServer) GetProfile(context.Context, *GetProfileReq
 }
 func (UnimplementedUserServiceServer) SearchProfiles(context.Context, *SearchProfilesRequest) (*SearchProfilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SearchProfiles not implemented")
+}
+func (UnimplementedUserServiceServer) ListAvatars(context.Context, *ListAvatarsRequest) (*ListAvatarsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAvatars not implemented")
+}
+func (UnimplementedUserServiceServer) AddAvatar(context.Context, *AddAvatarRequest) (*AddAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddAvatar not implemented")
+}
+func (UnimplementedUserServiceServer) SelectAvatar(context.Context, *SelectAvatarRequest) (*SelectAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectAvatar not implemented")
+}
+func (UnimplementedUserServiceServer) DeleteAvatar(context.Context, *DeleteAvatarRequest) (*DeleteAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAvatar not implemented")
 }
 func (UnimplementedUserServiceServer) ListBlocked(context.Context, *ListBlockedRequest) (*ListBlockedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBlocked not implemented")
@@ -404,6 +478,78 @@ func _UserService_SearchProfiles_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).SearchProfiles(ctx, req.(*SearchProfilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ListAvatars_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAvatarsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ListAvatars(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ListAvatars_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ListAvatars(ctx, req.(*ListAvatarsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_AddAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).AddAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_AddAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).AddAvatar(ctx, req.(*AddAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_SelectAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SelectAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SelectAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SelectAvatar(ctx, req.(*SelectAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_DeleteAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).DeleteAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_DeleteAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).DeleteAvatar(ctx, req.(*DeleteAvatarRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -616,6 +762,22 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_SearchProfiles_Handler,
 		},
 		{
+			MethodName: "ListAvatars",
+			Handler:    _UserService_ListAvatars_Handler,
+		},
+		{
+			MethodName: "AddAvatar",
+			Handler:    _UserService_AddAvatar_Handler,
+		},
+		{
+			MethodName: "SelectAvatar",
+			Handler:    _UserService_SelectAvatar_Handler,
+		},
+		{
+			MethodName: "DeleteAvatar",
+			Handler:    _UserService_DeleteAvatar_Handler,
+		},
+		{
 			MethodName: "ListBlocked",
 			Handler:    _UserService_ListBlocked_Handler,
 		},
@@ -661,11 +823,12 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	UserInternalService_MessagingAllowed_FullMethodName   = "/user.v1.UserInternalService/MessagingAllowed"
-	UserInternalService_UserExists_FullMethodName         = "/user.v1.UserInternalService/UserExists"
-	UserInternalService_GroupInviteAllowed_FullMethodName = "/user.v1.UserInternalService/GroupInviteAllowed"
-	UserInternalService_PresenceVisible_FullMethodName    = "/user.v1.UserInternalService/PresenceVisible"
-	UserInternalService_BlockedIDs_FullMethodName         = "/user.v1.UserInternalService/BlockedIDs"
+	UserInternalService_MessagingAllowed_FullMethodName     = "/user.v1.UserInternalService/MessagingAllowed"
+	UserInternalService_UserExists_FullMethodName           = "/user.v1.UserInternalService/UserExists"
+	UserInternalService_GroupInviteAllowed_FullMethodName   = "/user.v1.UserInternalService/GroupInviteAllowed"
+	UserInternalService_PresenceVisible_FullMethodName      = "/user.v1.UserInternalService/PresenceVisible"
+	UserInternalService_BlockedIDs_FullMethodName           = "/user.v1.UserInternalService/BlockedIDs"
+	UserInternalService_ForwardAuthorsHidden_FullMethodName = "/user.v1.UserInternalService/ForwardAuthorsHidden"
 )
 
 // UserInternalServiceClient is the client API for UserInternalService service.
@@ -681,6 +844,8 @@ type UserInternalServiceClient interface {
 	PresenceVisible(ctx context.Context, in *PresenceVisibleRequest, opts ...grpc.CallOption) (*PresenceVisibleResponse, error)
 	// BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
 	BlockedIDs(ctx context.Context, in *BlockedIDsRequest, opts ...grpc.CallOption) (*BlockedIDsResponse, error)
+	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
+	ForwardAuthorsHidden(ctx context.Context, in *ForwardAuthorsHiddenRequest, opts ...grpc.CallOption) (*ForwardAuthorsHiddenResponse, error)
 }
 
 type userInternalServiceClient struct {
@@ -741,6 +906,16 @@ func (c *userInternalServiceClient) BlockedIDs(ctx context.Context, in *BlockedI
 	return out, nil
 }
 
+func (c *userInternalServiceClient) ForwardAuthorsHidden(ctx context.Context, in *ForwardAuthorsHiddenRequest, opts ...grpc.CallOption) (*ForwardAuthorsHiddenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForwardAuthorsHiddenResponse)
+	err := c.cc.Invoke(ctx, UserInternalService_ForwardAuthorsHidden_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserInternalServiceServer is the server API for UserInternalService service.
 // All implementations must embed UnimplementedUserInternalServiceServer
 // for forward compatibility.
@@ -754,6 +929,8 @@ type UserInternalServiceServer interface {
 	PresenceVisible(context.Context, *PresenceVisibleRequest) (*PresenceVisibleResponse, error)
 	// BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
 	BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error)
+	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
+	ForwardAuthorsHidden(context.Context, *ForwardAuthorsHiddenRequest) (*ForwardAuthorsHiddenResponse, error)
 	mustEmbedUnimplementedUserInternalServiceServer()
 }
 
@@ -778,6 +955,9 @@ func (UnimplementedUserInternalServiceServer) PresenceVisible(context.Context, *
 }
 func (UnimplementedUserInternalServiceServer) BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BlockedIDs not implemented")
+}
+func (UnimplementedUserInternalServiceServer) ForwardAuthorsHidden(context.Context, *ForwardAuthorsHiddenRequest) (*ForwardAuthorsHiddenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForwardAuthorsHidden not implemented")
 }
 func (UnimplementedUserInternalServiceServer) mustEmbedUnimplementedUserInternalServiceServer() {}
 func (UnimplementedUserInternalServiceServer) testEmbeddedByValue()                             {}
@@ -890,6 +1070,24 @@ func _UserInternalService_BlockedIDs_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserInternalService_ForwardAuthorsHidden_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForwardAuthorsHiddenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserInternalServiceServer).ForwardAuthorsHidden(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserInternalService_ForwardAuthorsHidden_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserInternalServiceServer).ForwardAuthorsHidden(ctx, req.(*ForwardAuthorsHiddenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserInternalService_ServiceDesc is the grpc.ServiceDesc for UserInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -916,6 +1114,10 @@ var UserInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BlockedIDs",
 			Handler:    _UserInternalService_BlockedIDs_Handler,
+		},
+		{
+			MethodName: "ForwardAuthorsHidden",
+			Handler:    _UserInternalService_ForwardAuthorsHidden_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

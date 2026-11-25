@@ -1,4 +1,5 @@
 import { request } from '@/shared/api'
+import type { MessageEntity } from '@/shared/lib'
 
 import type { Message, MessagesPage } from '../model/types'
 
@@ -25,17 +26,55 @@ export interface SendMessageInput {
     recipient_id?: string
     content: string
     reply_to_message_id?: string | null
+    // форматирование текста; диапазоны в единицах UTF-16
+    entities?: MessageEntity[]
 }
 
 export function sendMessage(input: SendMessageInput): Promise<Message> {
     return request<Message>('/messages', { method: 'POST', body: input })
 }
 
-export function editMessage(id: string, content: string): Promise<Message> {
+// текст и форматирование заменяются целиком
+export function editMessage(
+    id: string,
+    content: string,
+    entities: MessageEntity[] = [],
+): Promise<Message> {
     return request<Message>(`/messages/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        body: { content },
+        body: { content, entities },
     })
+}
+
+// не больше 20 сообщений одного чата и 5 чатов (вместе с «Избранным») за раз
+export const MAX_FORWARD_MESSAGES = 20
+export const MAX_FORWARD_CHATS = 5
+
+export interface ForwardInput {
+    message_ids: string[]
+    conversation_ids: string[]
+    // также в «Избранное»: сервер создаст его, если его ещё нет
+    to_saved: boolean
+    // без указания автора: копии - мои обычные сообщения
+    hide_author: boolean
+}
+
+export interface ForwardedChat {
+    conversation_id: string
+    messages: Message[]
+}
+
+export async function forwardMessages(input: ForwardInput): Promise<ForwardedChat[]> {
+    const res = await request<{ items: ForwardedChat[] }>('/messages/forward', {
+        method: 'POST',
+        body: input,
+    })
+    return res.items
+}
+
+// одно сообщение: видимое мне или то, на которое ссылается видимое (цитата, закреп)
+export function getMessage(id: string): Promise<Message> {
+    return request<Message>(`/messages/${encodeURIComponent(id)}`)
 }
 
 export function deleteMessage(id: string): Promise<void> {

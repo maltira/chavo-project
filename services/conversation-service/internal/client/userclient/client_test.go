@@ -47,6 +47,14 @@ func (f *fakeUserService) GroupInviteAllowed(_ context.Context, req *userv1.Grou
 	return &userv1.GroupInviteAllowedResponse{Allowed: false}, nil
 }
 
+func (f *fakeUserService) ForwardAuthorsHidden(_ context.Context, req *userv1.ForwardAuthorsHiddenRequest) (*userv1.ForwardAuthorsHiddenResponse, error) {
+	if f.failAll {
+		return nil, status.Error(codes.Unavailable, "down")
+	}
+	// скрывает имя первый из переданных
+	return &userv1.ForwardAuthorsHiddenResponse{HiddenUserIds: req.GetUserIds()[:1]}, nil
+}
+
 func newClient(t *testing.T, fake *fakeUserService) Client {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
@@ -106,5 +114,24 @@ func TestGroupInviteAllowed(t *testing.T) {
 	fake.inviteErr = status.Error(codes.NotFound, "no user")
 	if _, err = c.GroupInviteAllowed(context.Background(), user, inviter); !errors.Is(err, apperror.ErrUserNotFound) {
 		t.Fatalf("not found: %v", err)
+	}
+}
+
+func TestForwardAuthorsHidden(t *testing.T) {
+	fake := &fakeUserService{}
+	c := newClient(t, fake)
+	a, b := uuid.New(), uuid.New()
+
+	hidden, err := c.ForwardAuthorsHidden(context.Background(), []uuid.UUID{a, b})
+	if err != nil || !hidden[a] || hidden[b] {
+		t.Fatalf("hidden=%v err=%v", hidden, err)
+	}
+	if hidden, err := c.ForwardAuthorsHidden(context.Background(), nil); err != nil || len(hidden) != 0 {
+		t.Fatalf("empty: %v %v", hidden, err)
+	}
+	// user-service недоступен - ошибка, а не «никто не скрывает»
+	fake.failAll = true
+	if _, err := c.ForwardAuthorsHidden(context.Background(), []uuid.UUID{a}); !errors.Is(err, apperror.ErrUserServiceError) {
+		t.Fatalf("down: %v", err)
 	}
 }

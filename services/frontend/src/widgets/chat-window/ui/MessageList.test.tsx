@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 
 import type { ConversationSummary } from '@/entities/conversation'
 import type { Message } from '@/entities/message'
@@ -22,22 +22,34 @@ const msg = (id: string, sender: string, at: number) =>
         updated_at: null,
     }) as Message
 
-function renderList(conversation_type: 'group' | 'direct') {
+function renderList(
+    conversation_type: 'group' | 'direct',
+    options: { saved?: boolean; messages?: Message[] } = {},
+) {
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
     client.setQueryData(['user', 'a'], { user_id: 'a', display_name: 'Давыд' })
     client.setQueryData(['user', 'b'], { user_id: 'b', display_name: 'Герман' })
     render(
         <QueryClientProvider client={client}>
             <MessageList
-                chat={{ id: 'g1', conversation_type, my_role: 'member' } as ConversationSummary}
+                chat={
+                    {
+                        id: 'g1',
+                        conversation_type,
+                        my_role: 'member',
+                        is_saved: !!options.saved,
+                    } as ConversationSummary
+                }
                 // снизу вверх: a (2 подряд), моё, b, a
-                messages={[
-                    msg('a3', 'a', 1),
-                    msg('a2', 'a', 2),
-                    msg('mine', 'me', 3),
-                    msg('b1', 'b', 4),
-                    msg('a1', 'a', 5),
-                ]}
+                messages={
+                    options.messages ?? [
+                        msg('a3', 'a', 1),
+                        msg('a2', 'a', 2),
+                        msg('mine', 'me', 3),
+                        msg('b1', 'b', 4),
+                        msg('a1', 'a', 5),
+                    ]
+                }
                 myId="me"
                 readBoundary={undefined}
                 hasOlder={false}
@@ -49,6 +61,12 @@ function renderList(conversation_type: 'group' | 'direct') {
                 onReply={vi.fn()}
                 onEdit={vi.fn()}
                 onDelete={vi.fn()}
+                pins={[]}
+                onPin={vi.fn()}
+                jumpRequest={null}
+                onForward={vi.fn()}
+                selected={null}
+                onToggleSelect={vi.fn()}
             />
         </QueryClientProvider>,
     )
@@ -81,6 +99,40 @@ describe('MessageList avatars', () => {
         // a3 идёт сразу за a2 того же автора, a2 - после моего сообщения
         expect(document.querySelector('[data-message-id="a3"]')!.className).toMatch(/continued/)
         expect(document.querySelector('[data-message-id="a2"]')!.className).not.toMatch(/continued/)
+    })
+
+    it('puts forwarded messages with an author on the left in «Избранное»', () => {
+        renderList('direct', {
+            saved: true,
+            messages: [
+                { ...msg('plain', 'me', 1), is_forwarded: false },
+                { ...msg('fwd2', 'me', 2), is_forwarded: true, forwarded_from_user_id: 'a' },
+                { ...msg('fwd1', 'me', 3), is_forwarded: true, forwarded_from_user_id: 'a' },
+                msg('note', 'me', 4),
+            ],
+        })
+        const row = (id: string) => document.querySelector(`[data-message-id="${id}"]`)!
+        expect(row('note').className).toMatch(/mine/)
+        expect(row('fwd1').className).not.toMatch(/mine/)
+        expect(row('fwd2').className).not.toMatch(/mine/)
+        // пересланные одного автора - одна серия, моё после них - новая
+        expect(row('fwd2').className).toMatch(/continued/)
+        expect(row('plain').className).toMatch(/mine/)
+        expect(row('plain').className).not.toMatch(/continued/)
+        // аватар первого автора - у нижнего сообщения его серии, у своих аватара нет
+        expect(
+            within(row('fwd2') as HTMLElement).getByRole('button', { name: 'Профиль: Давыд' }),
+        ).toBeInTheDocument()
+        expect(
+            within(row('fwd1') as HTMLElement).queryByRole('button', { name: /Профиль/ }),
+        ).toBeNull()
+        expect(
+            within(row('note') as HTMLElement).queryByRole('button', { name: /Профиль/ }),
+        ).toBeNull()
+        // своё пересланное слева, но удалить его можно, а править - нет
+        fireEvent.contextMenu(screen.getByText('fwd1'))
+        expect(screen.getByRole('menuitem', { name: 'Удалить' })).toBeInTheDocument()
+        expect(screen.queryByRole('menuitem', { name: 'Изменить' })).toBeNull()
     })
 
     it('has no avatars in a direct chat', () => {
@@ -140,6 +192,12 @@ describe('MessageList system messages', () => {
                     onReply={vi.fn()}
                     onEdit={vi.fn()}
                     onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
                 />
             </QueryClientProvider>,
         )
@@ -196,6 +254,12 @@ describe('MessageList appearing messages', () => {
                     onReply={vi.fn()}
                     onEdit={vi.fn()}
                     onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
                 />
             </QueryClientProvider>
         )

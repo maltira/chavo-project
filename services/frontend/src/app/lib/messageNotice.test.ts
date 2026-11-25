@@ -65,4 +65,29 @@ describe('notifyNewMessage', () => {
         await notifyNewMessage(created(), client, 'me')
         expect(notices()).toEqual([])
     })
+
+    it('stays silent for a muted chat, including one in the archive', async () => {
+        const client = setup('direct')
+        client.setQueryData(['conversations'], { pages: [[]], pageParams: [0] })
+        client.setQueryData(['conversations', 'archived'], {
+            pages: [
+                [{ id: 'c1', conversation_type: 'direct', muted_until: '9999-12-31T00:00:00Z' }],
+            ],
+            pageParams: [0],
+        })
+        await notifyNewMessage(created(), client, 'me')
+        expect(notices()).toEqual([])
+    })
+
+    it('notifies again once the mute has expired', async () => {
+        const client = setup('direct')
+        client.setQueryData(['conversations'], {
+            pages: [
+                [{ id: 'c1', conversation_type: 'direct', muted_until: '2020-01-01T00:00:00Z' }],
+            ],
+            pageParams: [0],
+        })
+        await notifyNewMessage(created(), client, 'me')
+        expect(notices()).toHaveLength(1)
+    })
 })

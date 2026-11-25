@@ -16,6 +16,16 @@ service UserService {
   rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
   rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
+  // История аватарок: до 5 последних фото, первое (самое новое) - текущее. Список другого пользователя
+  // пуст, если он заблокировал вызывающего.
+  rpc ListAvatars(ListAvatarsRequest) returns (ListAvatarsResponse);
+  // AddAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+  rpc AddAvatar(AddAvatarRequest) returns (AddAvatarResponse);
+  // SelectAvatar - сделать фото из истории текущим.
+  rpc SelectAvatar(SelectAvatarRequest) returns (SelectAvatarResponse);
+  // DeleteAvatar - убрать фото из истории; если оно было текущим, текущим становится предыдущее.
+  rpc DeleteAvatar(DeleteAvatarRequest) returns (DeleteAvatarResponse);
+
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc GetBlockStatus(GetBlockStatusRequest) returns (GetBlockStatusResponse);
   rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
@@ -42,6 +52,8 @@ service UserInternalService {
   rpc PresenceVisible(PresenceVisibleRequest) returns (PresenceVisibleResponse);
   // BlockedIDs — кого заблокировал пользователь: им не доставляются его онлайн и статус.
   rpc BlockedIDs(BlockedIDsRequest) returns (BlockedIDsResponse);
+  // ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
+  rpc ForwardAuthorsHidden(ForwardAuthorsHiddenRequest) returns (ForwardAuthorsHiddenResponse);
 }
 
 message Profile {
@@ -61,12 +73,47 @@ message Profile {
   avatarshape.v1.AvatarShape avatar_shape = 11;
 }
 
+message AvatarPhoto {
+  string id = 1;
+  string avatar_url = 2;
+  google.protobuf.Timestamp created_at = 3;
+  bool is_current = 4;
+}
+message ListAvatarsRequest {
+  string user_id = 1;
+}
+message ListAvatarsResponse {
+  repeated AvatarPhoto items = 1;
+}
+message AddAvatarRequest {
+  string avatar_url = 1;
+}
+message AddAvatarResponse {
+  repeated string evicted_urls = 1;
+}
+message SelectAvatarRequest {
+  string avatar_id = 1;
+}
+message SelectAvatarResponse {}
+message DeleteAvatarRequest {
+  // пусто - текущее фото
+  optional string avatar_id = 1;
+}
+message DeleteAvatarResponse {
+  // адрес удалённого фото: его файлы удаляет Gateway; пусто, если удалять было нечего
+  optional string removed_url = 1;
+}
+
 message Settings {
   string user_id = 1;
   bool allow_group_invites = 2;
   bool show_online_status = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
+  // при пересылке моих сообщений вместо имени - «скрытый автор»
+  bool hide_forward_author = 6;
+  // избранные эмодзи панели в поле ввода: до 30, в порядке добавления
+  repeated string favorite_emojis = 7;
 }
 
 message BlockedEntry {
@@ -150,8 +197,21 @@ message GetSettingsResponse {
 message UpdateSettingsRequest {
   optional bool allow_group_invites = 1;
   optional bool show_online_status = 2;
+  optional bool hide_forward_author = 3;
+  // весь список целиком (пустой очищает); не задан - не меняется
+  optional EmojiList favorite_emojis = 4;
+}
+message EmojiList {
+  repeated string items = 1;
 }
 message UpdateSettingsResponse {}
+
+message ForwardAuthorsHiddenRequest {
+  repeated string user_ids = 1;
+}
+message ForwardAuthorsHiddenResponse {
+  repeated string hidden_user_ids = 1;
+}
 
 message MessagingAllowedRequest {
   string sender_id = 1;

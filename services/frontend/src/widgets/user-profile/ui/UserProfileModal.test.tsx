@@ -28,16 +28,19 @@ function renderModal() {
     client.setQueryData(['me'], { ...peer, user_id: 'me', username: 'enemybye', display_name: 'Я' })
     client.setQueryData(['user', 'peer'], peer)
     client.setQueryData(['block-status', 'peer'], { blocked_by_me: false, blocked_by_them: false })
-    return render(
-        <QueryClientProvider client={client}>
-            <MemoryRouter initialEntries={['/']}>
-                <Routes>
-                    <Route path="/" element={<UserProfileModal />} />
-                    <Route path="/chats/new/:userId" element={<p>новый чат</p>} />
-                </Routes>
-            </MemoryRouter>
-        </QueryClientProvider>,
-    )
+    return {
+        client,
+        ...render(
+            <QueryClientProvider client={client}>
+                <MemoryRouter initialEntries={['/']}>
+                    <Routes>
+                        <Route path="/" element={<UserProfileModal />} />
+                        <Route path="/chats/new/:userId" element={<p>новый чат</p>} />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        ),
+    }
 }
 
 describe('UserProfileModal', () => {
@@ -106,5 +109,130 @@ describe('UserProfileModal', () => {
         expect(screen.getByRole('heading', { name: 'Я' })).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Написать сообщение' })).toBeNull()
         expect(useRecentUsers.getState().ids).toEqual([])
+    })
+
+    const photo = (c: string) => `/media/avatars/${c.repeat(32)}.jpg`
+    const history = (owner: string) =>
+        ['a', 'b', 'c'].map((c, i) => ({
+            id: `${owner}-${c}`,
+            avatar_url: photo(c),
+            created_at: '2026-10-01T10:00:00Z',
+            is_current: i === 0,
+        }))
+    // GET истории отдаёт три фото, перечитанный профиль - прежний, остальное - «ок»
+    const respond = (owner: string) =>
+        fetchMock.mockImplementation((url: string) =>
+            Promise.resolve(
+                new Response(
+                    url === `/api/users/${owner}/avatars`
+                        ? JSON.stringify({ items: history(owner) })
+                        : url === '/api/users/me'
+                          ? JSON.stringify({
+                                ...peer,
+                                user_id: 'me',
+                                display_name: 'Я',
+                                avatar_url: photo('a'),
+                            })
+                          : '{"message":"ok"}',
+                ),
+            ),
+        )
+
+    it('opens the photo of another person full-screen and pages through their history', async () => {
+        respond('peer')
+        const { client } = renderModal()
+        client.setQueryData(['user', 'peer'], { ...peer, avatar_url: photo('a') })
+        act(() => useProfileCard.getState().open('peer'))
+        fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
+        const viewer = screen.getByRole('dialog', { name: 'Фото: Василиса Мамонтова' })
+        // на весь экран - крупная версия фото; историю не видно, пока она не загрузилась
+        expect(viewer.querySelector('img')).toHaveAttribute(
+            'src',
+            `/media/avatars/${'a'.repeat(32)}_l.jpg`,
+        )
+        expect(await within(viewer).findByText('1 из 3')).toBeInTheDocument()
+        expect(fetchMock).toHaveBeenCalledWith('/api/users/peer/avatars', expect.anything())
+
+        fireEvent.keyDown(document, { key: 'ArrowLeft' })
+        expect(viewer.querySelector('img')).toHaveAttribute(
+            'src',
+            `/media/avatars/${'b'.repeat(32)}_l.jpg`,
+        )
+        // чужой профиль: управлять историей нельзя
+        expect(within(viewer).getByRole('button', { name: 'Скачать' })).toBeInTheDocument()
+        expect(within(viewer).queryByRole('button', { name: 'Удалить фото' })).toBeNull()
+        expect(within(viewer).queryByRole('button', { name: 'Сделать главной' })).toBeNull()
+
+        // Esc закрывает только просмотр, профиль остаётся
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(screen.queryByRole('dialog', { name: /^Фото/ })).toBeNull()
+        expect(screen.getByRole('dialog', { name: /Профиль: Василиса/ })).toBeInTheDocument()
+    })
+
+    it('my own history: make a photo the main one and delete exactly the shown one', async () => {
+        respond('me')
+        const { client } = renderModal()
+        client.setQueryData(['me'], {
+            ...peer,
+            user_id: 'me',
+            display_name: 'Я',
+            avatar_url: photo('a'),
+        })
+        act(() => useProfileCard.getState().open('me', { remember: false }))
+        // у своего аватара с фото выбор фигуры - отдельная кнопка
+        expect(
+            screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
+        const viewer = screen.getByRole('dialog', { name: 'Фото: Я' })
+        await within(viewer).findByText('1 из 3')
+        fireEvent.keyDown(document, { key: 'ArrowLeft' })
+
+        fireEvent.click(within(viewer).getByRole('button', { name: 'Сделать главной' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/users/me/avatars/me-b/select',
+                expect.objectContaining({ method: 'POST' }),
+            ),
+        )
+
+        fireEvent.click(within(viewer).getByRole('button', { name: 'Удалить фото' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        // удаляется именно показанное фото из истории, а не текущее
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/users/me/avatars/me-b',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
+    })
+
+    it('deletes the current photo through the plain endpoint while the history is loading', async () => {
+        // история не успела загрузиться: показано только текущее фото, оно и удаляется
+        fetchMock.mockImplementation((url: string) =>
+            url.endsWith('/avatars')
+                ? new Promise(() => {})
+                : Promise.resolve(new Response('{"message":"ok"}')),
+        )
+        const { client } = renderModal()
+        client.setQueryData(['me'], {
+            ...peer,
+            user_id: 'me',
+            display_name: 'Я',
+            avatar_url: photo('a'),
+        })
+        act(() => useProfileCard.getState().open('me', { remember: false }))
+        fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить фото' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/users/me/avatar',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
     })
 })

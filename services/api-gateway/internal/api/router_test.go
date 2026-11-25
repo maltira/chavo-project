@@ -139,6 +139,91 @@ type fakeUsers struct {
 	profiles    map[string]bool
 	avatars     map[string]string
 	existsCalls atomic.Int32
+	hideForward bool
+	favorites   []string
+	// history - история аватарок пользователя, новые первыми
+	history map[string][]fakePhoto
+}
+
+// fakePhoto - фото в истории аватарок (пользователя или группы)
+type fakePhoto struct{ id, url string }
+
+// historyAdd кладёт фото наверх и возвращает выпавшие сверх пяти; current - адрес нового текущего ("" - нет)
+func historyAdd(list []fakePhoto, url string) ([]fakePhoto, []string) {
+	list = append([]fakePhoto{{id: uuid.NewString(), url: url}}, list...)
+	var evicted []string
+	for len(list) > 5 {
+		evicted = append(evicted, list[len(list)-1].url)
+		list = list[:len(list)-1]
+	}
+	return list, evicted
+}
+
+func historyFind(list []fakePhoto, id string) int {
+	for i, p := range list {
+		if p.id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func historyProto(list []fakePhoto) []*userv1.AvatarPhoto {
+	out := make([]*userv1.AvatarPhoto, len(list))
+	for i, p := range list {
+		out[i] = &userv1.AvatarPhoto{Id: p.id, AvatarUrl: p.url, CreatedAt: timestamppb.Now(), IsCurrent: i == 0}
+	}
+	return out
+}
+
+func (u *fakeUsers) AddAvatar(ctx context.Context, req *userv1.AddAvatarRequest) (*userv1.AddAvatarResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	id := grpcx.IncomingUserID(ctx)
+	list, evicted := historyAdd(u.history[id], req.GetAvatarUrl())
+	u.history[id] = list
+	u.avatars[id] = list[0].url
+	return &userv1.AddAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (u *fakeUsers) ListAvatars(_ context.Context, req *userv1.ListAvatarsRequest) (*userv1.ListAvatarsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return &userv1.ListAvatarsResponse{Items: historyProto(u.history[req.GetUserId()])}, nil
+}
+
+func (u *fakeUsers) SelectAvatar(ctx context.Context, req *userv1.SelectAvatarRequest) (*userv1.SelectAvatarResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	id := grpcx.IncomingUserID(ctx)
+	i := historyFind(u.history[id], req.GetAvatarId())
+	if i < 0 {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	p := u.history[id][i]
+	u.history[id] = append([]fakePhoto{p}, append(append([]fakePhoto{}, u.history[id][:i]...), u.history[id][i+1:]...)...)
+	u.avatars[id] = p.url
+	return &userv1.SelectAvatarResponse{}, nil
+}
+
+func (u *fakeUsers) DeleteAvatar(ctx context.Context, req *userv1.DeleteAvatarRequest) (*userv1.DeleteAvatarResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	id := grpcx.IncomingUserID(ctx)
+	i := 0
+	if req.AvatarId != nil {
+		i = historyFind(u.history[id], req.GetAvatarId())
+	}
+	if i < 0 || i >= len(u.history[id]) {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	removed := u.history[id][i].url
+	u.history[id] = append(append([]fakePhoto{}, u.history[id][:i]...), u.history[id][i+1:]...)
+	u.avatars[id] = ""
+	if len(u.history[id]) > 0 {
+		u.avatars[id] = u.history[id][0].url
+	}
+	return &userv1.DeleteAvatarResponse{RemovedUrl: &removed}, nil
 }
 
 func (u *fakeUsers) has(id string) bool {
@@ -210,6 +295,27 @@ func (u *fakeUsers) SearchProfiles(context.Context, *userv1.SearchProfilesReques
 	return &userv1.SearchProfilesResponse{}, nil
 }
 
+// настройки одного пользователя: PATCH должен вернуть то, что стало после изменения
+func (u *fakeUsers) GetSettings(context.Context, *userv1.GetSettingsRequest) (*userv1.GetSettingsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return &userv1.GetSettingsResponse{Settings: &userv1.Settings{
+		AllowGroupInvites: true, ShowOnlineStatus: true, HideForwardAuthor: u.hideForward, FavoriteEmojis: u.favorites,
+	}}, nil
+}
+
+func (u *fakeUsers) UpdateSettings(_ context.Context, req *userv1.UpdateSettingsRequest) (*userv1.UpdateSettingsResponse, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if req.HideForwardAuthor != nil {
+		u.hideForward = req.GetHideForwardAuthor()
+	}
+	if req.FavoriteEmojis != nil {
+		u.favorites = req.GetFavoriteEmojis().GetItems()
+	}
+	return &userv1.UpdateSettingsResponse{}, nil
+}
+
 func (u *fakeUsers) UserExists(_ context.Context, req *userv1.UserExistsRequest) (*userv1.UserExistsResponse, error) {
 	u.existsCalls.Add(1)
 	return &userv1.UserExistsResponse{Exists: u.has(req.GetUserId())}, nil
@@ -219,8 +325,58 @@ type fakeConversations struct {
 	conversationv1.UnimplementedConversationServiceServer
 	sendErr error
 	mu      sync.Mutex
-	avatars map[string]string // группа -> путь аватарки
-	admins  map[string]string // группа -> её админ
+	avatars map[string]string      // группа -> путь текущей аватарки
+	admins  map[string]string      // группа -> её админ
+	history map[string][]fakePhoto // группа -> история аватарок, новые первыми
+	// lastArchived - фильтр архива в последнем ListConversations
+	lastArchived bool
+	// lastForEveryone - for_everyone последнего DeleteConversation
+	lastForEveryone bool
+	// lastUnpinScope - scope последнего UnpinMessage
+	lastUnpinScope string
+}
+
+func (*fakeConversations) ListPins(context.Context, *conversationv1.ListPinsRequest) (*conversationv1.ListPinsResponse, error) {
+	return &conversationv1.ListPinsResponse{}, nil
+}
+
+func (*fakeConversations) PinMessage(_ context.Context, req *conversationv1.PinMessageRequest) (*conversationv1.PinMessageResponse, error) {
+	if req.GetScope() != "all" && req.GetScope() != "me" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.PinMessageResponse{Pin: &conversationv1.PinnedMessage{
+		Message: &conversationv1.Message{Id: req.GetMessageId(), ConversationId: req.GetConversationId(), CreatedAt: timestamppb.Now()},
+		Scope:   req.GetScope(), PinnedBy: "me", PinnedAt: timestamppb.Now(),
+	}}, nil
+}
+
+func (f *fakeConversations) UnpinMessage(_ context.Context, req *conversationv1.UnpinMessageRequest) (*conversationv1.UnpinMessageResponse, error) {
+	f.mu.Lock()
+	f.lastUnpinScope = req.GetScope()
+	f.mu.Unlock()
+	return &conversationv1.UnpinMessageResponse{}, nil
+}
+
+func (*fakeConversations) ForwardMessages(_ context.Context, req *conversationv1.ForwardMessagesRequest) (*conversationv1.ForwardMessagesResponse, error) {
+	if len(req.GetMessageIds()) == 0 {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	from := "author"
+	items := make([]*conversationv1.ForwardedChat, 0, len(req.GetConversationIds()))
+	for _, id := range req.GetConversationIds() {
+		items = append(items, &conversationv1.ForwardedChat{ConversationId: id, Messages: []*conversationv1.Message{{
+			Id: uuid.NewString(), ConversationId: id, CreatedAt: timestamppb.Now(),
+			IsForwarded: !req.GetHideAuthor(), ForwardedFromUserId: &from,
+		}}})
+	}
+	return &conversationv1.ForwardMessagesResponse{Items: items}, nil
+}
+
+func (f *fakeConversations) DeleteConversation(_ context.Context, req *conversationv1.DeleteConversationRequest) (*conversationv1.DeleteConversationResponse, error) {
+	f.mu.Lock()
+	f.lastForEveryone = req.GetForEveryone()
+	f.mu.Unlock()
+	return &conversationv1.DeleteConversationResponse{}, nil
 }
 
 func (f *fakeConversations) GetConversation(_ context.Context, req *conversationv1.GetConversationRequest) (*conversationv1.GetConversationResponse, error) {
@@ -236,6 +392,80 @@ func (f *fakeConversations) GetConversation(_ context.Context, req *conversation
 	return &conversationv1.GetConversationResponse{Conversation: &conversationv1.ConversationSummary{Conversation: c}}, nil
 }
 
+func (f *fakeConversations) adminOnly(ctx context.Context, group string) error {
+	if _, ok := f.admins[group]; !ok {
+		return grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	if f.admins[group] != grpcx.IncomingUserID(ctx) {
+		return grpcx.Error(codes.PermissionDenied, "", "Недостаточно прав")
+	}
+	return nil
+}
+
+func (f *fakeConversations) AddGroupAvatar(ctx context.Context, req *conversationv1.AddGroupAvatarRequest) (*conversationv1.AddGroupAvatarResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := req.GetConversationId()
+	if err := f.adminOnly(ctx, g); err != nil {
+		return nil, err
+	}
+	list, evicted := historyAdd(f.history[g], req.GetAvatarUrl())
+	f.history[g] = list
+	f.avatars[g] = list[0].url
+	return &conversationv1.AddGroupAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (f *fakeConversations) ListGroupAvatars(_ context.Context, req *conversationv1.ListGroupAvatarsRequest) (*conversationv1.ListGroupAvatarsResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	list := f.history[req.GetConversationId()]
+	out := make([]*conversationv1.AvatarPhoto, len(list))
+	for i, p := range list {
+		out[i] = &conversationv1.AvatarPhoto{Id: p.id, AvatarUrl: p.url, CreatedAt: timestamppb.Now(), IsCurrent: i == 0}
+	}
+	return &conversationv1.ListGroupAvatarsResponse{Items: out}, nil
+}
+
+func (f *fakeConversations) SelectGroupAvatar(ctx context.Context, req *conversationv1.SelectGroupAvatarRequest) (*conversationv1.SelectGroupAvatarResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := req.GetConversationId()
+	if err := f.adminOnly(ctx, g); err != nil {
+		return nil, err
+	}
+	i := historyFind(f.history[g], req.GetAvatarId())
+	if i < 0 {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	p := f.history[g][i]
+	f.history[g] = append([]fakePhoto{p}, append(append([]fakePhoto{}, f.history[g][:i]...), f.history[g][i+1:]...)...)
+	f.avatars[g] = p.url
+	return &conversationv1.SelectGroupAvatarResponse{}, nil
+}
+
+func (f *fakeConversations) DeleteGroupAvatar(ctx context.Context, req *conversationv1.DeleteGroupAvatarRequest) (*conversationv1.DeleteGroupAvatarResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := req.GetConversationId()
+	if err := f.adminOnly(ctx, g); err != nil {
+		return nil, err
+	}
+	i := 0
+	if req.AvatarId != nil {
+		i = historyFind(f.history[g], req.GetAvatarId())
+	}
+	if i < 0 || i >= len(f.history[g]) {
+		return nil, grpcx.Error(codes.NotFound, "", "Запись не найдена")
+	}
+	removed := f.history[g][i].url
+	f.history[g] = append(append([]fakePhoto{}, f.history[g][:i]...), f.history[g][i+1:]...)
+	f.avatars[g] = ""
+	if len(f.history[g]) > 0 {
+		f.avatars[g] = f.history[g][0].url
+	}
+	return &conversationv1.DeleteGroupAvatarResponse{RemovedUrl: &removed}, nil
+}
+
 func (f *fakeConversations) UpdateGroup(ctx context.Context, req *conversationv1.UpdateGroupRequest) (*conversationv1.UpdateGroupResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -248,8 +478,39 @@ func (f *fakeConversations) UpdateGroup(ctx context.Context, req *conversationv1
 	return &conversationv1.UpdateGroupResponse{Conversation: &conversationv1.Conversation{Id: req.GetConversationId()}}, nil
 }
 
-func (*fakeConversations) ListConversations(context.Context, *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+func (f *fakeConversations) ListConversations(_ context.Context, req *conversationv1.ListConversationsRequest) (*conversationv1.ListConversationsResponse, error) {
+	f.mu.Lock()
+	f.lastArchived = req.GetArchived()
+	f.mu.Unlock()
 	return &conversationv1.ListConversationsResponse{Limit: 30}, nil
+}
+
+// SetChatMute отвечает сроком как временем: так тест видит, что ушло в сервис
+func (f *fakeConversations) SetChatMute(_ context.Context, req *conversationv1.SetChatMuteRequest) (*conversationv1.SetChatMuteResponse, error) {
+	cs := &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}
+	switch {
+	case req.Duration == nil:
+	case req.GetDuration() == "8h":
+		cs.MutedUntil = timestamppb.New(time.Date(2026, 1, 1, 8, 0, 0, 0, time.UTC))
+	default:
+		return nil, grpcx.Error(codes.InvalidArgument, "MUTE_DURATION_INVALID", "Неизвестный срок отключения звука")
+	}
+	return &conversationv1.SetChatMuteResponse{Settings: cs}, nil
+}
+
+func (*fakeConversations) SetChatArchived(_ context.Context, req *conversationv1.SetChatArchivedRequest) (*conversationv1.SetChatArchivedResponse, error) {
+	cs := &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}
+	if req.GetArchived() {
+		cs.ArchivedAt = timestamppb.Now()
+	}
+	return &conversationv1.SetChatArchivedResponse{Settings: cs}, nil
+}
+
+func (*fakeConversations) SetChatPinned(_ context.Context, req *conversationv1.SetChatPinnedRequest) (*conversationv1.SetChatPinnedResponse, error) {
+	if req.GetPinned() {
+		return nil, grpcx.Error(codes.FailedPrecondition, "PIN_LIMIT", "Можно закрепить не больше 5 чатов")
+	}
+	return &conversationv1.SetChatPinnedResponse{Settings: &conversationv1.ChatSettings{ConversationId: req.GetConversationId()}}, nil
 }
 
 func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.SendMessageRequest) (*conversationv1.SendMessageResponse, error) {
@@ -258,6 +519,14 @@ func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.S
 	}
 	return &conversationv1.SendMessageResponse{Message: &conversationv1.Message{
 		Id: uuid.NewString(), ConversationId: req.GetConversationId(), Content: &req.Content, CreatedAt: timestamppb.Now(),
+		Entities: req.GetEntities(),
+	}}, nil
+}
+
+// EditMessage отвечает присланной разметкой, как будто сервис её принял
+func (f *fakeConversations) EditMessage(_ context.Context, req *conversationv1.EditMessageRequest) (*conversationv1.EditMessageResponse, error) {
+	return &conversationv1.EditMessageResponse{Message: &conversationv1.Message{
+		Id: req.GetMessageId(), Content: &req.Content, CreatedAt: timestamppb.Now(), IsEdited: true, Entities: req.GetEntities(),
 	}}, nil
 }
 
@@ -300,10 +569,10 @@ func newEnvWithLimits(t *testing.T, limits api.Limits) *env {
 		sessions: &fakeSessions{owners: map[string]string{}},
 		cache:    &fakeCache{set: map[string]bool{}},
 		seen:     &seenMD{},
-		convs:    &fakeConversations{avatars: map[string]string{}, admins: map[string]string{}},
+		convs:    &fakeConversations{avatars: map[string]string{}, admins: map[string]string{}, history: map[string][]fakePhoto{}},
 		media:    &memStore{objects: map[string][]byte{}},
 	}
-	e.users = &fakeUsers{seen: e.seen, profiles: map[string]bool{}, avatars: map[string]string{}}
+	e.users = &fakeUsers{seen: e.seen, profiles: map[string]bool{}, avatars: map[string]string{}, history: map[string][]fakePhoto{}}
 
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
@@ -748,7 +1017,9 @@ func TestStatusEndpoints(t *testing.T) {
 	icons, _ := st["icons"].([]any)
 	durations, _ := st["durations"].([]any)
 	shapes, _ := cat["avatar_shapes"].([]any)
-	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" {
+	mutes, _ := cat["mute_durations"].([]any)
+	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" ||
+		len(mutes) != 4 || mutes[3] != "forever" {
 		t.Fatalf("catalog content: %v", cat)
 	}
 	if w := e.do(http.MethodGet, "/api/statuses", "", ""); w.Code != http.StatusNotFound {
@@ -806,5 +1077,175 @@ func TestAvatarShapeEndpoints(t *testing.T) {
 	// PUT не поддерживается: фигура только ставится заново или удаляется
 	if w := e.do(http.MethodPut, "/api/users/me/avatar-shape", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT: %d", w.Code)
+	}
+}
+
+func TestChatSettingsEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	id := uuid.NewString()
+
+	w := e.do(http.MethodPost, "/api/conversations/"+id+"/mute", tok, `{"duration":"8h"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("mute: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["conversation_id"] != id || body["muted_until"] != "2026-01-01T08:00:00Z" {
+		t.Fatalf("mute body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/mute", tok, `{"duration":"3h"}`),
+		http.StatusBadRequest, "MUTE_DURATION_INVALID")
+	if body = decode(t, e.do(http.MethodDelete, "/api/conversations/"+id+"/mute", tok, "")); body["muted_until"] != nil {
+		t.Fatalf("unmute body: %v", body)
+	}
+
+	if body = decode(t, e.do(http.MethodPost, "/api/conversations/"+id+"/archive", tok, "")); body["archived_at"] == nil {
+		t.Fatalf("archive body: %v", body)
+	}
+	if body = decode(t, e.do(http.MethodDelete, "/api/conversations/"+id+"/archive", tok, "")); body["archived_at"] != nil {
+		t.Fatalf("unarchive body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+id+"/pin", tok, ""), http.StatusConflict, "PIN_LIMIT")
+	if w := e.do(http.MethodDelete, "/api/conversations/"+id+"/pin", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("unpin: %d", w.Code)
+	}
+
+	// личный чат удаляется у себя или у обоих
+	e.do(http.MethodDelete, "/api/conversations/"+id+"?scope=all", tok, "")
+	if !e.convs.lastForEveryone {
+		t.Fatal("scope=all not passed")
+	}
+	e.do(http.MethodDelete, "/api/conversations/"+id, tok, "")
+	if e.convs.lastForEveryone {
+		t.Fatal("delete for me became for everyone")
+	}
+
+	// архив - отдельный список
+	e.do(http.MethodGet, "/api/conversations?archived=true", tok, "")
+	if !e.convs.lastArchived {
+		t.Fatal("archived filter not passed")
+	}
+	e.do(http.MethodGet, "/api/conversations", tok, "")
+	if e.convs.lastArchived {
+		t.Fatal("main list asked for archive")
+	}
+}
+
+func TestPinEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv, msg := uuid.NewString(), uuid.NewString()
+
+	// пустой список - массив, а не null
+	if w := e.do(http.MethodGet, "/api/conversations/"+conv+"/pins", tok, ""); w.Code != http.StatusOK ||
+		!strings.Contains(w.Body.String(), `"items":[]`) {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	w := e.do(http.MethodPost, "/api/conversations/"+conv+"/pins", tok, `{"message_id":"`+msg+`","scope":"me"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("pin: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["scope"] != "me" || body["message"].(map[string]any)["id"] != msg {
+		t.Fatalf("pin body: %v", body)
+	}
+	expect(t, e.do(http.MethodPost, "/api/conversations/"+conv+"/pins", tok, `{"message_id":"`+msg+`","scope":"x"}`),
+		http.StatusBadRequest, "")
+
+	// без scope снимается общий закреп
+	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg, tok, "")
+	if e.convs.lastUnpinScope != "all" {
+		t.Fatalf("default scope = %q", e.convs.lastUnpinScope)
+	}
+	e.do(http.MethodDelete, "/api/conversations/"+conv+"/pins/"+msg+"?scope=me", tok, "")
+	if e.convs.lastUnpinScope != "me" {
+		t.Fatalf("scope = %q", e.convs.lastUnpinScope)
+	}
+}
+
+func TestForwardEndpoint(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv := uuid.NewString()
+
+	w := e.do(http.MethodPost, "/api/messages/forward", tok,
+		`{"message_ids":["`+uuid.NewString()+`"],"conversation_ids":["`+conv+`"],"to_saved":true}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("forward: %d %s", w.Code, w.Body.String())
+	}
+	items, _ := decode(t, w)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items: %v", items)
+	}
+	chat := items[0].(map[string]any)
+	msg := chat["messages"].([]any)[0].(map[string]any)
+	if chat["conversation_id"] != conv || msg["is_forwarded"] != true || msg["forwarded_from_user_id"] != "author" {
+		t.Fatalf("forwarded: %v", chat)
+	}
+	expect(t, e.do(http.MethodPost, "/api/messages/forward", tok, `{"conversation_ids":["`+conv+`"]}`), http.StatusBadRequest, "")
+}
+
+func TestUpdateSettingsReturnsSettings(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	w := e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"hide_forward_author":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", w.Code, w.Body.String())
+	}
+	if body := decode(t, w); body["hide_forward_author"] != true || body["show_online_status"] != true {
+		t.Fatalf("settings: %v", body)
+	}
+}
+
+func TestFavoriteEmojisSettings(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+
+	// по умолчанию - пустой список, а не null
+	w := e.do(http.MethodGet, "/api/users/me/settings", tok, "")
+	if list, ok := decode(t, w)["favorite_emojis"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("default: %s", w.Body.String())
+	}
+	// список целиком; другие поля не затрагиваются
+	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"favorite_emojis":["🔥","👍"]}`)
+	body := decode(t, w)
+	if list, _ := body["favorite_emojis"].([]any); len(list) != 2 || list[0] != "🔥" || body["show_online_status"] != true {
+		t.Fatalf("saved: %s", w.Body.String())
+	}
+	// настройка без списка список не трогает; пустой список очищает
+	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"hide_forward_author":true}`)
+	if list, _ := decode(t, w)["favorite_emojis"].([]any); len(list) != 2 {
+		t.Fatalf("untouched: %s", w.Body.String())
+	}
+	w = e.do(http.MethodPatch, "/api/users/me/settings", tok, `{"favorite_emojis":[]}`)
+	if list, ok := decode(t, w)["favorite_emojis"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("cleared: %s", w.Body.String())
+	}
+}
+
+func TestMessageEntitiesPassThrough(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	conv := uuid.NewString()
+
+	// отправка: разметка уходит в сервис и возвращается в ответе
+	w := e.do(http.MethodPost, "/api/messages", tok,
+		`{"conversation_id":"`+conv+`","content":"привет мир","entities":[{"type":"bold","offset":0,"length":6},{"type":"underline","offset":7,"length":3}]}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("send: %d %s", w.Code, w.Body.String())
+	}
+	got, _ := decode(t, w)["entities"].([]any)
+	if len(got) != 2 || got[0].(map[string]any)["type"] != "bold" || got[1].(map[string]any)["offset"] != float64(7) {
+		t.Fatalf("entities: %v", got)
+	}
+	// без разметки - пустой список, а не null
+	w = e.do(http.MethodPost, "/api/messages", tok, `{"conversation_id":"`+conv+`","content":"просто"}`)
+	if list, ok := decode(t, w)["entities"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("plain entities: %s", w.Body.String())
+	}
+	// правка
+	w = e.do(http.MethodPatch, "/api/messages/"+uuid.NewString(), tok, `{"content":"новый","entities":[{"type":"italic","offset":0,"length":5}]}`)
+	if list, _ := decode(t, w)["entities"].([]any); w.Code != http.StatusOK || len(list) != 1 {
+		t.Fatalf("edit: %d %s", w.Code, w.Body.String())
 	}
 }

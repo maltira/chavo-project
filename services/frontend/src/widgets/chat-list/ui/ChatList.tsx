@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 
-import { useConversations } from '@/entities/conversation'
+import { useArchivedConversations, useConversations } from '@/entities/conversation'
 import { useMe } from '@/entities/user'
 import { ApiError, errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
 import { Button, SkeletonRow } from '@/shared/ui'
 
+import { ArchiveHeader, ArchiveRow } from './ArchiveRow'
 import styles from './ChatList.module.scss'
 import { ChatListItem } from './ChatListItem'
 
@@ -15,9 +17,53 @@ interface Props {
 
 const SKELETON_ROWS = 6
 
-// список чатов сайдбара; новые сообщения и прочтения приходят по WebSocket и сразу видны здесь
+// список чатов сайдбара; новые сообщения и прочтения приходят по WebSocket и сразу видны здесь;
+// архивные чаты - за строкой «Архив» наверху
 export function ChatList({ compact = false }: Props) {
-    const chats = useConversations()
+    const main = useConversations()
+    const archived = useArchivedConversations()
+    const [archiveOpen, setArchiveOpen] = useState(false)
+    const archivedChats = archived.data ?? []
+
+    // опустевший архив (последний чат вернули) закрывается сам
+    if (archiveOpen && archived.data && archivedChats.length === 0) {
+        return <Chats chats={main} compact={compact} />
+    }
+    if (archiveOpen) {
+        return (
+            <Chats
+                chats={archived}
+                compact={compact}
+                top={<ArchiveHeader compact={compact} onBack={() => setArchiveOpen(false)} />}
+            />
+        )
+    }
+    return (
+        <Chats
+            chats={main}
+            compact={compact}
+            top={
+                archivedChats.length > 0 && (
+                    <ArchiveRow
+                        chats={archivedChats}
+                        more={!!archived.hasNextPage}
+                        compact={compact}
+                        onOpen={() => setArchiveOpen(true)}
+                    />
+                )
+            }
+        />
+    )
+}
+
+interface ChatsProps {
+    chats: ReturnType<typeof useConversations>
+    compact: boolean
+    // строка над чатами: вход в архив или его шапка
+    top?: ReactNode
+}
+
+function Chats({ chats, compact, top }: ChatsProps) {
     const me = useMe()
     const sentinelRef = useRef<HTMLDivElement>(null)
     const { hasNextPage, isFetchingNextPage, isFetchNextPageError, error, fetchNextPage } = chats
@@ -68,6 +114,7 @@ export function ChatList({ compact = false }: Props) {
     if (chats.isPending) {
         return (
             <div className={styles.list} aria-busy="true" aria-label="Загрузка чатов">
+                {top}
                 {Array.from({ length: SKELETON_ROWS }, (_, i) => (
                     <SkeletonRow key={i} compact={compact} />
                 ))}
@@ -96,8 +143,11 @@ export function ChatList({ compact = false }: Props) {
     }
 
     if (chats.data.length === 0) {
-        return compact ? null : (
+        return compact ? (
+            top
+        ) : (
             <div className={styles.empty}>
+                {top && <div className={styles.top}>{top}</div>}
                 <p className={styles.emptyText}>Здесь пока что пусто</p>
                 <Button variant="secondary" className={styles.emptyButton}>
                     Искать друзей
@@ -108,6 +158,7 @@ export function ChatList({ compact = false }: Props) {
 
     return (
         <nav className={styles.list} aria-label="Чаты">
+            {top}
             {chats.data.map((chat) => (
                 <ChatListItem key={chat.id} chat={chat} myId={me.data?.user_id} compact={compact} />
             ))}

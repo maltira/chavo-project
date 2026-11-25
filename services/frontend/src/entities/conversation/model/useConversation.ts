@@ -1,20 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { InfiniteData, QueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 
 import { getConversation, getMembers } from '../api/conversations'
 import type { Member } from '../api/conversations'
-import type { ConversationSummary } from './types'
-import { conversationsKey } from './useConversations'
+import { findInLists } from './useConversations'
 
 export const conversationKey = (id: string) => ['conversation', id] as const
 export const membersKey = (id: string) => ['members', id] as const
-
-function fromList(queryClient: QueryClient, id: string) {
-    return queryClient
-        .getQueryData<InfiniteData<ConversationSummary[]>>(conversationsKey)
-        ?.pages.flat()
-        .find((c) => c.id === id)
-}
 
 // карточка чата; пока загружается, берётся строка из списка - окно открывается без ожидания
 export function useConversation(id: string, enabled = true) {
@@ -22,7 +14,7 @@ export function useConversation(id: string, enabled = true) {
     return useQuery({
         queryKey: conversationKey(id),
         queryFn: () => getConversation(id),
-        placeholderData: () => fromList(queryClient, id),
+        placeholderData: () => findInLists(queryClient, id),
         enabled,
     })
 }

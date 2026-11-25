@@ -1,6 +1,7 @@
 import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 
 import type { ServerEvent } from '@/shared/api'
+import type { MessageEntity } from '@/shared/lib'
 
 import type { Message, MessagesPage } from './types'
 
@@ -81,6 +82,9 @@ interface MessageEventData {
     kind?: Message['kind']
     system_event?: Message['system_event']
     target_id?: string | null
+    is_forwarded?: boolean
+    forwarded_from_user_id?: string | null
+    entities?: MessageEntity[]
 }
 
 // события сообщений дописывают историю открытых чатов
@@ -108,12 +112,17 @@ export function applyMessageEvent(queryClient: QueryClient, event: ServerEvent) 
                     kind: data.kind ?? 'user',
                     system_event: data.system_event ?? null,
                     target_id: data.target_id ?? null,
+                    is_forwarded: data.is_forwarded ?? false,
+                    forwarded_from_user_id: data.forwarded_from_user_id ?? null,
+                    entities: data.entities ?? [],
                 })
             }
             break
         case 'message.updated':
             patchMessage(queryClient, conversationId, id, {
                 content: data.content ?? null,
+                // новая разметка целиком: у правки без форматирования список пуст
+                entities: data.entities ?? [],
                 is_edited: true,
                 updated_at: data.updated_at ?? null,
             })

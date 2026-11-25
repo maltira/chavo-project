@@ -30,19 +30,52 @@ func (h *Handler) sendMessage(c *gin.Context) {
 		RecipientID      *string `json:"recipient_id"`
 		Content          string  `json:"content"`
 		ReplyToMessageID *string `json:"reply_to_message_id"`
+		// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
+		Entities []entityJSON `json:"entities"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.SendMessage(c.Request.Context(), &conversationv1.SendMessageRequest{
 		ConversationId: body.ConversationID, RecipientId: body.RecipientID,
-		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID,
+		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID, Entities: fromEntities(body.Entities),
 	})
 	if err != nil {
 		h.fail(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, toMessage(resp.GetMessage()))
+}
+
+// forwardMessages: копии сообщений одного чата в мои чаты и/или «Избранное»;
+// ответ - созданные копии по чатам
+func (h *Handler) forwardMessages(c *gin.Context) {
+	var body struct {
+		MessageIDs      []string `json:"message_ids"`
+		ConversationIDs []string `json:"conversation_ids"`
+		ToSaved         bool     `json:"to_saved"`
+		HideAuthor      bool     `json:"hide_author"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.conversations.ForwardMessages(c.Request.Context(), &conversationv1.ForwardMessagesRequest{
+		MessageIds: body.MessageIDs, ConversationIds: body.ConversationIDs,
+		ToSaved: body.ToSaved, HideAuthor: body.HideAuthor,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	type forwardedJSON struct {
+		ConversationID string         `json:"conversation_id"`
+		Messages       []*messageJSON `json:"messages"`
+	}
+	items := make([]forwardedJSON, len(resp.GetItems()))
+	for i, chat := range resp.GetItems() {
+		items[i] = forwardedJSON{ConversationID: chat.GetConversationId(), Messages: mapSlice(chat.GetMessages(), toMessage)}
+	}
+	c.JSON(http.StatusCreated, gin.H{"items": items})
 }
 
 func (h *Handler) getMessage(c *gin.Context) {
@@ -57,12 +90,14 @@ func (h *Handler) getMessage(c *gin.Context) {
 func (h *Handler) editMessage(c *gin.Context) {
 	var body struct {
 		Content string `json:"content"`
+		// новое форматирование целиком; нет - без форматирования
+		Entities []entityJSON `json:"entities"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.EditMessage(c.Request.Context(), &conversationv1.EditMessageRequest{
-		MessageId: c.Param("message_id"), Content: body.Content,
+		MessageId: c.Param("message_id"), Content: body.Content, Entities: fromEntities(body.Entities),
 	})
 	if err != nil {
 		h.fail(c, err)

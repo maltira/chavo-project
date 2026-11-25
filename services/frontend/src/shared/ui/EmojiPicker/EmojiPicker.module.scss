@@ -1,0 +1,180 @@
+$columns: 8;
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    width: 372px;
+    max-width: calc(100vw - 32px);
+    height: 420px;
+    max-height: 60vh;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-xl;
+    background-color: var(--color-bg-secondary);
+    box-shadow: $drop-shadow;
+    overflow: hidden;
+
+    transform-origin: bottom right;
+    animation: panel-show 150ms ease-out;
+}
+
+.search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+
+    border-bottom: 1px solid var(--color-bg-muted);
+    color: alpha(var(--color-text), 0.6);
+}
+
+.searchInput {
+    @include type(main-regular);
+
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: var(--color-text);
+    outline: none;
+
+    &::placeholder {
+        color: alpha(var(--color-text), 0.6);
+    }
+
+    // у type="search" браузер рисует свой крестик
+    &::-webkit-search-cancel-button {
+        appearance: none;
+    }
+}
+
+.tabs {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+
+    border-bottom: 1px solid var(--color-bg-muted);
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+
+    border: none;
+    border-radius: $radius-md;
+    background: none;
+    color: alpha(var(--color-text), 0.6);
+    cursor: pointer;
+    transition:
+        color $transition-fast,
+        background-color $transition-fast;
+
+    &:hover {
+        color: var(--color-text);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: -2px;
+    }
+}
+
+.tabActive {
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text);
+}
+
+.scroller {
+    flex: 1;
+    min-height: 0;
+    padding: 4px 12px 12px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.section {
+    // секции вне экрана не рисуются: в каталоге около двух тысяч эмодзи
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
+}
+
+.title {
+    @include type(tag-medium);
+
+    margin: 12px 0 6px;
+    color: alpha(var(--color-text), 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat($columns, 1fr);
+}
+
+.emoji {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    padding: 0;
+
+    border: none;
+    border-radius: $radius-md;
+    background: none;
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+    // шрифт эмодзи системный: на Windows, macOS и Linux они выглядят по-разному
+    font-family:
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Twemoji Mozilla', sans-serif;
+
+    &:hover {
+        background-color: var(--color-bg-tertiary);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: -2px;
+    }
+}
+
+// избранное отмечено точкой в углу: видно и в общих секциях
+.favorite::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 5px;
+    height: 5px;
+
+    border-radius: $radius-full;
+    background-color: var(--color-accent);
+}
+
+.hint {
+    @include type(tag-regular);
+
+    margin: 8px 4px;
+    color: alpha(var(--color-text), 0.6);
+}
+
+@keyframes panel-show {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel {
+        animation: none;
+    }
+}

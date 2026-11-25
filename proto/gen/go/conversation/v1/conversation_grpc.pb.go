@@ -30,6 +30,13 @@ const (
 	ConversationService_ClearGroupAvatarShape_FullMethodName = "/conversation.v1.ConversationService/ClearGroupAvatarShape"
 	ConversationService_DeleteConversation_FullMethodName    = "/conversation.v1.ConversationService/DeleteConversation"
 	ConversationService_JoinGroup_FullMethodName             = "/conversation.v1.ConversationService/JoinGroup"
+	ConversationService_ListGroupAvatars_FullMethodName      = "/conversation.v1.ConversationService/ListGroupAvatars"
+	ConversationService_AddGroupAvatar_FullMethodName        = "/conversation.v1.ConversationService/AddGroupAvatar"
+	ConversationService_SelectGroupAvatar_FullMethodName     = "/conversation.v1.ConversationService/SelectGroupAvatar"
+	ConversationService_DeleteGroupAvatar_FullMethodName     = "/conversation.v1.ConversationService/DeleteGroupAvatar"
+	ConversationService_SetChatMute_FullMethodName           = "/conversation.v1.ConversationService/SetChatMute"
+	ConversationService_SetChatArchived_FullMethodName       = "/conversation.v1.ConversationService/SetChatArchived"
+	ConversationService_SetChatPinned_FullMethodName         = "/conversation.v1.ConversationService/SetChatPinned"
 	ConversationService_ListMembers_FullMethodName           = "/conversation.v1.ConversationService/ListMembers"
 	ConversationService_AddMembers_FullMethodName            = "/conversation.v1.ConversationService/AddMembers"
 	ConversationService_SetMemberRole_FullMethodName         = "/conversation.v1.ConversationService/SetMemberRole"
@@ -47,8 +54,12 @@ const (
 	ConversationService_ListMessages_FullMethodName          = "/conversation.v1.ConversationService/ListMessages"
 	ConversationService_EditMessage_FullMethodName           = "/conversation.v1.ConversationService/EditMessage"
 	ConversationService_DeleteMessage_FullMethodName         = "/conversation.v1.ConversationService/DeleteMessage"
+	ConversationService_ForwardMessages_FullMethodName       = "/conversation.v1.ConversationService/ForwardMessages"
 	ConversationService_MarkRead_FullMethodName              = "/conversation.v1.ConversationService/MarkRead"
 	ConversationService_ListReaders_FullMethodName           = "/conversation.v1.ConversationService/ListReaders"
+	ConversationService_ListPins_FullMethodName              = "/conversation.v1.ConversationService/ListPins"
+	ConversationService_PinMessage_FullMethodName            = "/conversation.v1.ConversationService/PinMessage"
+	ConversationService_UnpinMessage_FullMethodName          = "/conversation.v1.ConversationService/UnpinMessage"
 )
 
 // ConversationServiceClient is the client API for ConversationService service.
@@ -68,9 +79,23 @@ type ConversationServiceClient interface {
 	// SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
 	SetGroupAvatarShape(ctx context.Context, in *SetGroupAvatarShapeRequest, opts ...grpc.CallOption) (*SetGroupAvatarShapeResponse, error)
 	ClearGroupAvatarShape(ctx context.Context, in *ClearGroupAvatarShapeRequest, opts ...grpc.CallOption) (*ClearGroupAvatarShapeResponse, error)
-	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
+	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
 	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
+	// История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
+	// и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
+	// (fields: ["avatar_url"]).
+	ListGroupAvatars(ctx context.Context, in *ListGroupAvatarsRequest, opts ...grpc.CallOption) (*ListGroupAvatarsResponse, error)
+	// AddGroupAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+	AddGroupAvatar(ctx context.Context, in *AddGroupAvatarRequest, opts ...grpc.CallOption) (*AddGroupAvatarResponse, error)
+	SelectGroupAvatar(ctx context.Context, in *SelectGroupAvatarRequest, opts ...grpc.CallOption) (*SelectGroupAvatarResponse, error)
+	// DeleteGroupAvatar - убрать фото; если оно было текущим, текущим становится предыдущее.
+	DeleteGroupAvatar(ctx context.Context, in *DeleteGroupAvatarRequest, opts ...grpc.CallOption) (*DeleteGroupAvatarResponse, error)
+	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
+	// архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
+	SetChatMute(ctx context.Context, in *SetChatMuteRequest, opts ...grpc.CallOption) (*SetChatMuteResponse, error)
+	SetChatArchived(ctx context.Context, in *SetChatArchivedRequest, opts ...grpc.CallOption) (*SetChatArchivedResponse, error)
+	SetChatPinned(ctx context.Context, in *SetChatPinnedRequest, opts ...grpc.CallOption) (*SetChatPinnedResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
 	SetMemberRole(ctx context.Context, in *SetMemberRoleRequest, opts ...grpc.CallOption) (*SetMemberRoleResponse, error)
@@ -89,8 +114,14 @@ type ConversationServiceClient interface {
 	ListMessages(ctx context.Context, in *ListMessagesRequest, opts ...grpc.CallOption) (*ListMessagesResponse, error)
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
+	// ForwardMessages - копии сообщений одного чата (до 20) в мои чаты (до 5) и/или в «Избранное»
+	ForwardMessages(ctx context.Context, in *ForwardMessagesRequest, opts ...grpc.CallOption) (*ForwardMessagesResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	ListReaders(ctx context.Context, in *ListReadersRequest, opts ...grpc.CallOption) (*ListReadersResponse, error)
+	// закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
+	ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error)
+	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
+	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
 }
 
 type conversationServiceClient struct {
@@ -205,6 +236,76 @@ func (c *conversationServiceClient) JoinGroup(ctx context.Context, in *JoinGroup
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(JoinGroupResponse)
 	err := c.cc.Invoke(ctx, ConversationService_JoinGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) ListGroupAvatars(ctx context.Context, in *ListGroupAvatarsRequest, opts ...grpc.CallOption) (*ListGroupAvatarsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGroupAvatarsResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ListGroupAvatars_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) AddGroupAvatar(ctx context.Context, in *AddGroupAvatarRequest, opts ...grpc.CallOption) (*AddGroupAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddGroupAvatarResponse)
+	err := c.cc.Invoke(ctx, ConversationService_AddGroupAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SelectGroupAvatar(ctx context.Context, in *SelectGroupAvatarRequest, opts ...grpc.CallOption) (*SelectGroupAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelectGroupAvatarResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SelectGroupAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) DeleteGroupAvatar(ctx context.Context, in *DeleteGroupAvatarRequest, opts ...grpc.CallOption) (*DeleteGroupAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteGroupAvatarResponse)
+	err := c.cc.Invoke(ctx, ConversationService_DeleteGroupAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetChatMute(ctx context.Context, in *SetChatMuteRequest, opts ...grpc.CallOption) (*SetChatMuteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatMuteResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetChatMute_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetChatArchived(ctx context.Context, in *SetChatArchivedRequest, opts ...grpc.CallOption) (*SetChatArchivedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatArchivedResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetChatArchived_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetChatPinned(ctx context.Context, in *SetChatPinnedRequest, opts ...grpc.CallOption) (*SetChatPinnedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatPinnedResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetChatPinned_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -381,6 +482,16 @@ func (c *conversationServiceClient) DeleteMessage(ctx context.Context, in *Delet
 	return out, nil
 }
 
+func (c *conversationServiceClient) ForwardMessages(ctx context.Context, in *ForwardMessagesRequest, opts ...grpc.CallOption) (*ForwardMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForwardMessagesResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ForwardMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *conversationServiceClient) MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MarkReadResponse)
@@ -395,6 +506,36 @@ func (c *conversationServiceClient) ListReaders(ctx context.Context, in *ListRea
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListReadersResponse)
 	err := c.cc.Invoke(ctx, ConversationService_ListReaders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPinsResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ListPins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PinMessageResponse)
+	err := c.cc.Invoke(ctx, ConversationService_PinMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnpinMessageResponse)
+	err := c.cc.Invoke(ctx, ConversationService_UnpinMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -418,9 +559,23 @@ type ConversationServiceServer interface {
 	// SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
 	SetGroupAvatarShape(context.Context, *SetGroupAvatarShapeRequest) (*SetGroupAvatarShapeResponse, error)
 	ClearGroupAvatarShape(context.Context, *ClearGroupAvatarShapeRequest) (*ClearGroupAvatarShapeResponse, error)
-	// DeleteConversation: участник выходит, admin удаляет группу, direct удалить нельзя.
+	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
 	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
+	// История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
+	// и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
+	// (fields: ["avatar_url"]).
+	ListGroupAvatars(context.Context, *ListGroupAvatarsRequest) (*ListGroupAvatarsResponse, error)
+	// AddGroupAvatar - новое фото становится текущим; evicted_urls - выпавшие из истории (файлы удаляет Gateway).
+	AddGroupAvatar(context.Context, *AddGroupAvatarRequest) (*AddGroupAvatarResponse, error)
+	SelectGroupAvatar(context.Context, *SelectGroupAvatarRequest) (*SelectGroupAvatarResponse, error)
+	// DeleteGroupAvatar - убрать фото; если оно было текущим, текущим становится предыдущее.
+	DeleteGroupAvatar(context.Context, *DeleteGroupAvatarRequest) (*DeleteGroupAvatarResponse, error)
+	// личные настройки чата вызывающего: без звука (duration из proto/mute, без него - звук включён),
+	// архив (снимает закреп) и закреп наверху списка (до 5, достаёт из архива)
+	SetChatMute(context.Context, *SetChatMuteRequest) (*SetChatMuteResponse, error)
+	SetChatArchived(context.Context, *SetChatArchivedRequest) (*SetChatArchivedResponse, error)
+	SetChatPinned(context.Context, *SetChatPinnedRequest) (*SetChatPinnedResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
 	SetMemberRole(context.Context, *SetMemberRoleRequest) (*SetMemberRoleResponse, error)
@@ -439,8 +594,14 @@ type ConversationServiceServer interface {
 	ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error)
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
+	// ForwardMessages - копии сообщений одного чата (до 20) в мои чаты (до 5) и/или в «Избранное»
+	ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	ListReaders(context.Context, *ListReadersRequest) (*ListReadersResponse, error)
+	// закреплённые сообщения: scope "all" - для всех (в группе только админы), "me" - только для себя (личный чат)
+	ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error)
+	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
+	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
 	mustEmbedUnimplementedConversationServiceServer()
 }
 
@@ -483,6 +644,27 @@ func (UnimplementedConversationServiceServer) DeleteConversation(context.Context
 }
 func (UnimplementedConversationServiceServer) JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinGroup not implemented")
+}
+func (UnimplementedConversationServiceServer) ListGroupAvatars(context.Context, *ListGroupAvatarsRequest) (*ListGroupAvatarsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListGroupAvatars not implemented")
+}
+func (UnimplementedConversationServiceServer) AddGroupAvatar(context.Context, *AddGroupAvatarRequest) (*AddGroupAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddGroupAvatar not implemented")
+}
+func (UnimplementedConversationServiceServer) SelectGroupAvatar(context.Context, *SelectGroupAvatarRequest) (*SelectGroupAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectGroupAvatar not implemented")
+}
+func (UnimplementedConversationServiceServer) DeleteGroupAvatar(context.Context, *DeleteGroupAvatarRequest) (*DeleteGroupAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteGroupAvatar not implemented")
+}
+func (UnimplementedConversationServiceServer) SetChatMute(context.Context, *SetChatMuteRequest) (*SetChatMuteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetChatMute not implemented")
+}
+func (UnimplementedConversationServiceServer) SetChatArchived(context.Context, *SetChatArchivedRequest) (*SetChatArchivedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetChatArchived not implemented")
+}
+func (UnimplementedConversationServiceServer) SetChatPinned(context.Context, *SetChatPinnedRequest) (*SetChatPinnedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetChatPinned not implemented")
 }
 func (UnimplementedConversationServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMembers not implemented")
@@ -535,11 +717,23 @@ func (UnimplementedConversationServiceServer) EditMessage(context.Context, *Edit
 func (UnimplementedConversationServiceServer) DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteMessage not implemented")
 }
+func (UnimplementedConversationServiceServer) ForwardMessages(context.Context, *ForwardMessagesRequest) (*ForwardMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForwardMessages not implemented")
+}
 func (UnimplementedConversationServiceServer) MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkRead not implemented")
 }
 func (UnimplementedConversationServiceServer) ListReaders(context.Context, *ListReadersRequest) (*ListReadersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListReaders not implemented")
+}
+func (UnimplementedConversationServiceServer) ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPins not implemented")
+}
+func (UnimplementedConversationServiceServer) PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PinMessage not implemented")
+}
+func (UnimplementedConversationServiceServer) UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnpinMessage not implemented")
 }
 func (UnimplementedConversationServiceServer) mustEmbedUnimplementedConversationServiceServer() {}
 func (UnimplementedConversationServiceServer) testEmbeddedByValue()                             {}
@@ -756,6 +950,132 @@ func _ConversationService_JoinGroup_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).JoinGroup(ctx, req.(*JoinGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_ListGroupAvatars_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGroupAvatarsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ListGroupAvatars(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ListGroupAvatars_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ListGroupAvatars(ctx, req.(*ListGroupAvatarsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_AddGroupAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddGroupAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).AddGroupAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_AddGroupAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).AddGroupAvatar(ctx, req.(*AddGroupAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SelectGroupAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectGroupAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SelectGroupAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SelectGroupAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SelectGroupAvatar(ctx, req.(*SelectGroupAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_DeleteGroupAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteGroupAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).DeleteGroupAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_DeleteGroupAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).DeleteGroupAvatar(ctx, req.(*DeleteGroupAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetChatMute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatMuteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetChatMute(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetChatMute_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetChatMute(ctx, req.(*SetChatMuteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetChatArchived_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatArchivedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetChatArchived(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetChatArchived_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetChatArchived(ctx, req.(*SetChatArchivedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetChatPinned_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatPinnedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetChatPinned(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetChatPinned_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetChatPinned(ctx, req.(*SetChatPinnedRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1066,6 +1386,24 @@ func _ConversationService_DeleteMessage_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConversationService_ForwardMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForwardMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ForwardMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ForwardMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ForwardMessages(ctx, req.(*ForwardMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ConversationService_MarkRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MarkReadRequest)
 	if err := dec(in); err != nil {
@@ -1098,6 +1436,60 @@ func _ConversationService_ListReaders_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).ListReaders(ctx, req.(*ListReadersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_ListPins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPinsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ListPins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ListPins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ListPins(ctx, req.(*ListPinsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_PinMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PinMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).PinMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_PinMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).PinMessage(ctx, req.(*PinMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_UnpinMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpinMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).UnpinMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_UnpinMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).UnpinMessage(ctx, req.(*UnpinMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1152,6 +1544,34 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinGroup",
 			Handler:    _ConversationService_JoinGroup_Handler,
+		},
+		{
+			MethodName: "ListGroupAvatars",
+			Handler:    _ConversationService_ListGroupAvatars_Handler,
+		},
+		{
+			MethodName: "AddGroupAvatar",
+			Handler:    _ConversationService_AddGroupAvatar_Handler,
+		},
+		{
+			MethodName: "SelectGroupAvatar",
+			Handler:    _ConversationService_SelectGroupAvatar_Handler,
+		},
+		{
+			MethodName: "DeleteGroupAvatar",
+			Handler:    _ConversationService_DeleteGroupAvatar_Handler,
+		},
+		{
+			MethodName: "SetChatMute",
+			Handler:    _ConversationService_SetChatMute_Handler,
+		},
+		{
+			MethodName: "SetChatArchived",
+			Handler:    _ConversationService_SetChatArchived_Handler,
+		},
+		{
+			MethodName: "SetChatPinned",
+			Handler:    _ConversationService_SetChatPinned_Handler,
 		},
 		{
 			MethodName: "ListMembers",
@@ -1222,12 +1642,28 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ConversationService_DeleteMessage_Handler,
 		},
 		{
+			MethodName: "ForwardMessages",
+			Handler:    _ConversationService_ForwardMessages_Handler,
+		},
+		{
 			MethodName: "MarkRead",
 			Handler:    _ConversationService_MarkRead_Handler,
 		},
 		{
 			MethodName: "ListReaders",
 			Handler:    _ConversationService_ListReaders_Handler,
+		},
+		{
+			MethodName: "ListPins",
+			Handler:    _ConversationService_ListPins_Handler,
+		},
+		{
+			MethodName: "PinMessage",
+			Handler:    _ConversationService_PinMessage_Handler,
+		},
+		{
+			MethodName: "UnpinMessage",
+			Handler:    _ConversationService_UnpinMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

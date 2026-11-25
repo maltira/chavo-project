@@ -91,6 +91,8 @@ type fakeSettings struct {
 	service.SettingsService
 	invites map[uuid.UUID]bool // наличие ключа = настройки есть
 	show    map[uuid.UUID]bool
+	// hideForward - кто скрывает имя в пересланных
+	hideForward map[uuid.UUID]bool
 }
 
 func (f *fakeSettings) GetSettings(_ context.Context, id uuid.UUID) (*models.Settings, error) {
@@ -101,6 +103,16 @@ func (f *fakeSettings) GetSettings(_ context.Context, id uuid.UUID) (*models.Set
 	return &models.Settings{UserID: id, AllowGroupInvites: allowed}, nil
 }
 
+func (f *fakeSettings) ForwardAuthorsHidden(_ context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	res := []uuid.UUID{}
+	for _, id := range ids {
+		if f.hideForward[id] {
+			res = append(res, id)
+		}
+	}
+	return res, nil
+}
+
 func (f *fakeSettings) ShowOnlineStatus(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
 	res := map[uuid.UUID]bool{}
 	for _, id := range ids {
@@ -109,6 +121,22 @@ func (f *fakeSettings) ShowOnlineStatus(_ context.Context, ids []uuid.UUID) (map
 		}
 	}
 	return res, nil
+}
+
+type fakeAvatars struct {
+	service.AvatarHistoryService
+	deleted *uuid.UUID
+	viewer  uuid.UUID
+}
+
+func (f *fakeAvatars) List(_ context.Context, viewer, owner uuid.UUID) ([]models.AvatarPhoto, error) {
+	f.viewer = viewer
+	return []models.AvatarPhoto{{ID: owner, URL: "/media/avatars/x.jpg", IsCurrent: true}}, nil
+}
+
+func (f *fakeAvatars) Delete(_ context.Context, _ uuid.UUID, id *uuid.UUID) (string, error) {
+	f.deleted = id
+	return "/media/avatars/x.jpg", nil
 }
 
 type fakePresence struct{ online map[uuid.UUID]bool }
@@ -160,6 +188,7 @@ type deps struct {
 	profiles *fakeProfiles
 	blocks   *fakeBlocks
 	settings *fakeSettings
+	avatars  *fakeAvatars
 	presence *fakePresence
 }
 
@@ -168,6 +197,7 @@ func newDeps() *deps {
 		profiles: &fakeProfiles{byID: map[uuid.UUID]models.Profile{}},
 		blocks:   &fakeBlocks{blocked: map[[2]uuid.UUID]bool{}},
 		settings: &fakeSettings{invites: map[uuid.UUID]bool{}, show: map[uuid.UUID]bool{}},
+		avatars:  &fakeAvatars{},
 		presence: &fakePresence{online: map[uuid.UUID]bool{}},
 	}
 }
@@ -178,7 +208,7 @@ func start(t *testing.T, d *deps) (userv1.UserServiceClient, userv1.UserInternal
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(zap.NewNop())))
 	statuses := service.NewStatusService(&fakeStatusRepo{profiles: d.profiles})
 	shapes := service.NewAvatarShapeService(&fakeShapeRepo{profiles: d.profiles})
-	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, shapes, d.presence)
+	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, shapes, d.avatars, d.presence)
 	userv1.RegisterUserServiceServer(srv, impl)
 	userv1.RegisterUserInternalServiceServer(srv, impl)
 	go func() { _ = srv.Serve(lis) }()
@@ -524,5 +554,56 @@ func TestAvatarShapeSetClearAndBlockHiding(t *testing.T) {
 	// повторное удаление - не ошибка
 	if _, err := users.ClearAvatarShape(as(owner), &userv1.ClearAvatarShapeRequest{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestForwardAuthorsHidden(t *testing.T) {
+	d := newDeps()
+	open, hidden := uuid.New(), uuid.New()
+	d.settings.hideForward = map[uuid.UUID]bool{hidden: true}
+	_, internal := start(t, d)
+
+	resp, err := internal.ForwardAuthorsHidden(context.Background(), &userv1.ForwardAuthorsHiddenRequest{
+		UserIds: []string{open.String(), hidden.String()},
+	})
+	if err != nil || len(resp.GetHiddenUserIds()) != 1 || resp.GetHiddenUserIds()[0] != hidden.String() {
+		t.Fatalf("hidden: %v %v", resp.GetHiddenUserIds(), err)
+	}
+	if _, err := internal.ForwardAuthorsHidden(context.Background(), &userv1.ForwardAuthorsHiddenRequest{
+		UserIds: []string{"not-a-uuid"},
+	}); grpcxCode(err) != codes.InvalidArgument {
+		t.Fatalf("bad id: %v", err)
+	}
+}
+
+func TestAvatarHistoryRPC(t *testing.T) {
+	d := newDeps()
+	me, owner := uuid.New(), uuid.New()
+	api, _ := start(t, d)
+
+	// список: viewer берётся из metadata, владелец - из запроса
+	resp, err := api.ListAvatars(as(me), &userv1.ListAvatarsRequest{UserId: owner.String()})
+	if err != nil || len(resp.GetItems()) != 1 || !resp.GetItems()[0].GetIsCurrent() || d.avatars.viewer != me {
+		t.Fatalf("list: %v %v viewer=%v", resp, err, d.avatars.viewer)
+	}
+	if _, err = api.ListAvatars(as(me), &userv1.ListAvatarsRequest{UserId: "x"}); grpcxCode(err) != codes.InvalidArgument {
+		t.Fatalf("bad owner id: %v", err)
+	}
+	if _, err = api.ListAvatars(context.Background(), &userv1.ListAvatarsRequest{UserId: owner.String()}); grpcxCode(err) != codes.Unauthenticated {
+		t.Fatalf("no identity: %v", err)
+	}
+
+	// без avatar_id удаляется текущее фото
+	del, err := api.DeleteAvatar(as(me), &userv1.DeleteAvatarRequest{})
+	if err != nil || del.GetRemovedUrl() != "/media/avatars/x.jpg" || d.avatars.deleted != nil {
+		t.Fatalf("delete current: %v %v %v", del, err, d.avatars.deleted)
+	}
+	id := uuid.NewString()
+	if _, err = api.DeleteAvatar(as(me), &userv1.DeleteAvatarRequest{AvatarId: &id}); err != nil || d.avatars.deleted == nil || d.avatars.deleted.String() != id {
+		t.Fatalf("delete by id: %v %v", err, d.avatars.deleted)
+	}
+	bad := "nope"
+	if _, err = api.DeleteAvatar(as(me), &userv1.DeleteAvatarRequest{AvatarId: &bad}); grpcxCode(err) != codes.InvalidArgument {
+		t.Fatalf("bad photo id: %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -6,6 +6,7 @@ import { cn } from '@/shared/lib'
 
 import { Icon } from '../Icon'
 import styles from './Modal.module.scss'
+import { useModalLayer } from './useModalLayer'
 
 interface Props {
     open: boolean
@@ -22,9 +23,6 @@ interface Props {
     className?: string
     children: ReactNode
 }
-
-// открытые окна, верхнее - последнее: Esc закрывает только его (подтверждение поверх профиля)
-const stack: symbol[] = []
 
 // модальное окно поверх приложения: закрывается крестиком, Esc и кликом по фону;
 // фокус уходит внутрь окна и возвращается туда, откуда его открыли
@@ -46,27 +44,7 @@ export function Modal({
     }
     const dialogRef = useRef<HTMLDivElement>(null)
 
-    useEffect(() => {
-        if (!open) {
-            return
-        }
-        const previous = document.activeElement as HTMLElement | null
-        const id = Symbol('modal')
-        stack.push(id)
-        dialogRef.current?.focus()
-
-        function onKeyDown(event: KeyboardEvent) {
-            if (event.key === 'Escape' && stack.at(-1) === id) {
-                onClose()
-            }
-        }
-        document.addEventListener('keydown', onKeyDown)
-        return () => {
-            document.removeEventListener('keydown', onKeyDown)
-            stack.splice(stack.indexOf(id), 1)
-            previous?.focus?.()
-        }
-    }, [open, onClose])
+    useModalLayer(open, onClose, dialogRef)
 
     if (!mounted) {
         return null

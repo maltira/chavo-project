@@ -95,6 +95,8 @@ func TestRecipients(t *testing.T) {
 		{TypeMemberAdded, map[string]any{"member_ids": []string{"a", "new"}}, []string{"a", "new"}},
 		{TypeMemberRemoved, map[string]any{"member_ids": []string{"a", "gone"}, "user_id": "gone"}, []string{"a", "gone"}},
 		{TypeJoinRequestApproved, map[string]any{"member_ids": []string{"a"}}, []string{"a"}},
+		{TypeChatSettingsUpdated, map[string]any{"member_ids": []string{"me"}, "user_id": "me"}, []string{"me"}},
+		{TypePinsChanged, map[string]any{"member_ids": []string{"a", "b"}}, []string{"a", "b"}},
 		{TypeJoinRequestCreated, map[string]any{"admin_ids": []string{"adm"}, "user_id": "x"}, []string{"adm"}},
 		{TypeMessageRead, map[string]any{"author_ids": []string{"a1", "a2"}, "reader_id": "r"}, []string{"a1", "a2", "r"}},
 		{TypeMessageRead, map[string]any{"author_ids": []string{}, "reader_id": "r"}, []string{"r"}},

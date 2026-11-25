@@ -28,6 +28,7 @@ const (
 	SystemAdded   = "added"   // админ добавил участника
 	SystemLeft    = "left"    // вышел сам (sender == target)
 	SystemRemoved = "removed" // админ исключил (в том числе с блокировкой)
+	SystemPinned  = "pinned"  // закрепил сообщение для всех (ссылка - ReplyToMessageID, TargetID нет)
 )
 
 type Conversation struct {
@@ -88,6 +89,39 @@ type Message struct {
 	TargetID         *uuid.UUID `json:"target_id"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        *time.Time `json:"updated_at"`
+	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор, nil - автор скрыл имя
+	IsForwarded         bool       `json:"is_forwarded"`
+	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id"`
+	// Entities - форматирование текста; пусто - обычный текст
+	Entities []Entity `json:"entities"`
+}
+
+// виды форматирования текста
+const (
+	EntityBold      = "bold"
+	EntityItalic    = "italic"
+	EntityUnderline = "underline"
+)
+
+// Entity - форматированный фрагмент текста; Offset и Length в единицах UTF-16 (как индексы строки JS)
+type Entity struct {
+	Type   string `json:"type"`
+	Offset int    `json:"offset"`
+	Length int    `json:"length"`
+}
+
+// Закреп сообщения: для всех участников или только для себя (личный чат)
+const (
+	PinScopeAll = "all"
+	PinScopeMe  = "me"
+)
+
+// PinnedMessage - закреплённое сообщение в том виде, в каком его видит участник
+type PinnedMessage struct {
+	Message  Message   `json:"message"`
+	Scope    string    `json:"scope"`
+	PinnedBy uuid.UUID `json:"pinned_by"`
+	PinnedAt time.Time `json:"pinned_at"`
 }
 
 type JoinRequest struct {
@@ -110,6 +144,16 @@ type ConversationSummary struct {
 	MembersCount    int  `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы, только для её админов и только в карточке чата
 	InviteCode *string `json:"invite_code,omitempty"`
+	// IsSaved - «Избранное»: личный чат с самим собой, PeerID у него нет
+	IsSaved bool `json:"is_saved"`
+	ChatSettings
+}
+
+// ChatSettings - личные настройки чата участника; видит и меняет только он сам
+type ChatSettings struct {
+	MutedUntil *time.Time `json:"muted_until"`
+	ArchivedAt *time.Time `json:"archived_at"`
+	PinnedAt   *time.Time `json:"pinned_at"`
 }
 
 // InviteInfo - краткая информация о группе по ссылке на чат

@@ -1,9 +1,13 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
+
+import { findSaved } from '@/entities/conversation'
 
 import { useMe, useProfileCard } from '@/entities/user'
 import { useLogout } from '@/features/auth/logout'
 import { useTheme } from '@/features/toggle-theme'
-import { ROUTES } from '@/shared/config'
+import { chatPath, newChatPath, ROUTES } from '@/shared/config'
 import { useDismiss } from '@/shared/lib'
 import { StatusButton, StatusEditor } from '@/features/set-status'
 import { Avatar, AvatarShape, Icon, IconButton, MenuItem, Modal, Switch } from '@/shared/ui'
@@ -25,6 +29,8 @@ export function ProfileMenu({ onSettings }: Props) {
     const openProfile = useProfileCard((state) => state.open)
     const { theme, toggle } = useTheme()
     const logout = useLogout()
+    const queryClient = useQueryClient()
+    const navigate = useNavigate()
 
     const show = () => {
         setMounted(true)
@@ -108,6 +114,22 @@ export function ProfileMenu({ onSettings }: Props) {
                             }
                         >
                             Тёмная тема
+                        </MenuItem>
+                        <MenuItem
+                            icon="star"
+                            onClick={() => {
+                                hide()
+                                // чата с собой ещё нет - его создаст первое сообщение
+                                const saved = findSaved(queryClient)
+                                navigate(
+                                    saved
+                                        ? chatPath(saved.id)
+                                        : newChatPath(profile?.user_id ?? ''),
+                                )
+                            }}
+                            disabled={!profile}
+                        >
+                            Избранное
                         </MenuItem>
                         <MenuItem
                             icon="settings"

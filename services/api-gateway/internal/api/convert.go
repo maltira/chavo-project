@@ -81,6 +81,8 @@ type settingsJSON struct {
 	UserID            string    `json:"user_id"`
 	AllowGroupInvites bool      `json:"allow_group_invites"`
 	ShowOnlineStatus  bool      `json:"show_online_status"`
+	HideForwardAuthor bool      `json:"hide_forward_author"`
+	FavoriteEmojis    []string  `json:"favorite_emojis"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -90,6 +92,8 @@ func toSettings(s *userv1.Settings) settingsJSON {
 		UserID:            s.GetUserId(),
 		AllowGroupInvites: s.GetAllowGroupInvites(),
 		ShowOnlineStatus:  s.GetShowOnlineStatus(),
+		HideForwardAuthor: s.GetHideForwardAuthor(),
+		FavoriteEmojis:    nonNil(s.GetFavoriteEmojis()),
 		CreatedAt:         s.GetCreatedAt().AsTime(),
 		UpdatedAt:         s.GetUpdatedAt().AsTime(),
 	}
@@ -168,6 +172,33 @@ type messageJSON struct {
 	Kind        string  `json:"kind"`
 	SystemEvent *string `json:"system_event"`
 	TargetID    *string `json:"target_id"`
+	// пересланная копия; forwarded_from_user_id - первый автор, null - автор скрыл имя
+	IsForwarded         bool    `json:"is_forwarded"`
+	ForwardedFromUserID *string `json:"forwarded_from_user_id"`
+	// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
+	Entities []entityJSON `json:"entities"`
+}
+
+type entityJSON struct {
+	Type   string `json:"type"`
+	Offset int32  `json:"offset"`
+	Length int32  `json:"length"`
+}
+
+func toEntities(in []*conversationv1.MessageEntity) []entityJSON {
+	out := make([]entityJSON, len(in))
+	for i, e := range in {
+		out[i] = entityJSON{Type: e.GetType(), Offset: e.GetOffset(), Length: e.GetLength()}
+	}
+	return out
+}
+
+func fromEntities(in []entityJSON) []*conversationv1.MessageEntity {
+	out := make([]*conversationv1.MessageEntity, len(in))
+	for i, e := range in {
+		out[i] = &conversationv1.MessageEntity{Type: e.Type, Offset: e.Offset, Length: e.Length}
+	}
+	return out
 }
 
 func toMessage(m *conversationv1.Message) *messageJSON {
@@ -187,6 +218,10 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		Kind:             m.GetKind(),
 		SystemEvent:      m.SystemEvent,
 		TargetID:         m.TargetId,
+
+		IsForwarded:         m.GetIsForwarded(),
+		ForwardedFromUserID: m.ForwardedFromUserId,
+		Entities:            toEntities(m.GetEntities()),
 	}
 }
 
@@ -201,6 +236,30 @@ type summaryJSON struct {
 	MembersCount    int32 `json:"members_count"`
 	// InviteCode - код ссылки закрытой группы; только у её админов в GET /conversations/:id
 	InviteCode *string `json:"invite_code"`
+	// IsSaved - «Избранное»: личный чат с самим собой
+	IsSaved bool `json:"is_saved"`
+	chatSettingsJSON
+}
+
+// chatSettingsJSON - личные настройки чата вызывающего
+type chatSettingsJSON struct {
+	MutedUntil *time.Time `json:"muted_until"`
+	ArchivedAt *time.Time `json:"archived_at"`
+	PinnedAt   *time.Time `json:"pinned_at"`
+}
+
+type chatSettingsResponseJSON struct {
+	ConversationID string `json:"conversation_id"`
+	chatSettingsJSON
+}
+
+func toChatSettings(s *conversationv1.ChatSettings) chatSettingsResponseJSON {
+	return chatSettingsResponseJSON{
+		ConversationID: s.GetConversationId(),
+		chatSettingsJSON: chatSettingsJSON{
+			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
+		},
+	}
 }
 
 func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
@@ -213,6 +272,10 @@ func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 		LastMessageRead:  s.GetLastMessageRead(),
 		MembersCount:     s.GetMembersCount(),
 		InviteCode:       s.InviteCode,
+		IsSaved:          s.GetIsSaved(),
+		chatSettingsJSON: chatSettingsJSON{
+			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
+		},
 	}
 }
 

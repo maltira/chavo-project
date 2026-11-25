@@ -14,6 +14,32 @@
     font-display: swap;
 }
 
+// жирный и курсив нужны только тексту сообщений с форматированием: браузер скачивает файл начертания,
+// когда оно впервые попадает на страницу, так что у остальных эти файлы не грузятся
+@font-face {
+    font-family: 'Inter 18pt';
+    src: url('./fonts/Inter_18pt-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter 18pt';
+    src: url('./fonts/Inter_18pt-RegularItalic.ttf') format('truetype');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter 18pt';
+    src: url('./fonts/Inter_18pt-BoldItalic.ttf') format('truetype');
+    font-weight: 700;
+    font-style: italic;
+    font-display: swap;
+}
+
 @font-face {
     font-family: 'Lora';
     src: url('./fonts/Lora-VariableFont.ttf') format('truetype');

@@ -23,3 +23,15 @@ const DURATION_LABELS: Record<string, string> = {
 export function durationLabel(key: string): string {
     return DURATION_LABELS[key] ?? key
 }
+
+// подписи сроков «без звука» для чата
+const MUTE_LABELS: Record<string, string> = {
+    '1h': 'На 1 час',
+    '8h': 'На 8 часов',
+    '2d': 'На 2 дня',
+    forever: 'Навсегда',
+}
+
+export function muteDurationLabel(key: string): string {
+    return MUTE_LABELS[key] ?? key
+}

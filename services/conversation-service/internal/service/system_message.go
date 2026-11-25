@@ -10,7 +10,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/repository"
 )
 
-// systemPoster пишет системные сообщения о составе группы в той же транзакции, что и само изменение
+// systemPoster пишет системные сообщения (состав группы, закреп) в той же транзакции, что и само изменение
 type systemPoster struct {
 	msgs   repository.MessageRepository
 	convs  repository.ConversationRepository
@@ -20,12 +20,27 @@ type systemPoster struct {
 // post вызывается после изменения состава: событие получают те, кто в группе сейчас
 // (исключённый или вышедший его уже не увидит); чат поднимается в списке, как от обычного сообщения
 func (p systemPoster) post(ctx context.Context, tx repository.DBTX, convID, actorID, targetID uuid.UUID, event string) error {
-	rec := &repository.MessageRecord{
+	return p.create(ctx, tx, &repository.MessageRecord{
 		ConversationID: convID,
 		SenderID:       actorID,
 		SystemEvent:    &event,
 		TargetID:       &targetID,
-	}
+	})
+}
+
+// postPinned - «закрепил сообщение»: только для общего закрепа, его видят все участники
+func (p systemPoster) postPinned(ctx context.Context, tx repository.DBTX, convID, actorID, messageID uuid.UUID) error {
+	event := models.SystemPinned
+	return p.create(ctx, tx, &repository.MessageRecord{
+		ConversationID:   convID,
+		SenderID:         actorID,
+		SystemEvent:      &event,
+		ReplyToMessageID: &messageID,
+	})
+}
+
+func (p systemPoster) create(ctx context.Context, tx repository.DBTX, rec *repository.MessageRecord) error {
+	convID, actorID := rec.ConversationID, rec.SenderID
 	if err := p.msgs.CreateSystem(ctx, tx, rec); err != nil {
 		return err
 	}
@@ -43,7 +58,9 @@ func (p systemPoster) post(ctx context.Context, tx repository.DBTX, convID, acto
 		CreatedAt:      rec.CreatedAt,
 		MemberIDs:      memberIDs,
 		Kind:           models.MessageSystem,
-		SystemEvent:    &event,
-		TargetID:       &targetID,
+		SystemEvent:    rec.SystemEvent,
+		TargetID:       rec.TargetID,
+		// у pinned - закреплённое сообщение
+		ReplyToMessageID: rec.ReplyToMessageID,
 	}))
 }

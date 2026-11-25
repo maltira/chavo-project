@@ -51,7 +51,7 @@ func TestPrivateInviteCode(t *testing.T) {
 	if err != nil || got.InviteCode != nil {
 		t.Fatalf("member must not see the code: %+v %v", got, err)
 	}
-	list, err := e.convs.List(ctx, admin, 10, 0)
+	list, err := e.convs.List(ctx, admin, false, 10, 0)
 	if err != nil || len(list) != 1 || list[0].InviteCode != nil {
 		t.Fatalf("list must not carry the code: %+v %v", list, err)
 	}

@@ -62,13 +62,21 @@ CREATE TABLE messages (
     sender_id UUID NOT NULL,
     -- AES-256-GCM: [nonce 12B][ciphertext][tag 16B]. NULL после удаления сообщения и у системных.
     content_enc BYTEA,
-    -- system - событие состава группы («вступил», «покинул», «исключил»): текста нет, его собирает клиент
-    -- по system_event, sender_id (кто совершил) и target_id (кого касается)
+    -- system - событие чата («вступил», «покинул», «исключил», «закрепил»): текста нет, его собирает клиент
+    -- по system_event, sender_id (кто совершил) и target_id (кого касается); у pinned вместо target_id
+    -- reply_to_message_id - закреплённое сообщение (NULL, если его строку удалили)
     kind VARCHAR(10) NOT NULL DEFAULT 'user' CHECK (kind IN ('user', 'system')),
     system_event VARCHAR(20),
     target_id UUID,
     reply_to_message_id UUID REFERENCES messages (id) ON DELETE SET NULL,
     is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+    -- пересланная копия: forwarded_from_user_id - первый автор, NULL - автор скрыл имя (hide_forward_author);
+    -- копия, пересланная «без указания автора», - обычное сообщение (is_forwarded = FALSE)
+    is_forwarded BOOLEAN NOT NULL DEFAULT FALSE,
+    forwarded_from_user_id UUID,
+    -- форматирование текста: [{"type": "bold|italic|underline", "offset": N, "length": N}], смещения в
+    -- единицах UTF-16 (как строки JS в клиенте). Это только разметка текста, самого текста тут нет
+    entities JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW (),
     updated_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
@@ -76,6 +84,11 @@ CREATE TABLE messages (
         deleted_at IS NOT NULL
         OR content_enc IS NOT NULL
         OR kind = 'system'
+    ),
+    CONSTRAINT messages_entities_check CHECK (entities IS NULL OR jsonb_typeof(entities) = 'array'),
+    CONSTRAINT messages_forward_check CHECK (
+        (is_forwarded OR forwarded_from_user_id IS NULL)
+        AND (kind = 'user' OR NOT is_forwarded)
     ),
     CONSTRAINT messages_system_check CHECK (
         (
@@ -90,12 +103,29 @@ CREATE TABLE messages (
             AND content_enc IS NULL
             AND reply_to_message_id IS NULL
         )
+        OR (
+            kind = 'system'
+            AND system_event = 'pinned'
+            AND target_id IS NULL
+            AND content_enc IS NULL
+        )
     )
 );
 
 CREATE INDEX idx_messages_conversation_cursor ON messages (conversation_id, created_at DESC, id DESC);
 
 CREATE INDEX idx_messages_reply_to ON messages (reply_to_message_id);
+
+-- История аватарок группы: до MaxAvatarHistory последних фото. Текущая - самая новая строка, её адрес
+-- дублируется в conversations.avatar_url; «сделать главной» поднимает фото наверх (created_at = сейчас).
+CREATE TABLE conversation_avatars (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+    avatar_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp ()
+);
+
+CREATE INDEX idx_conversation_avatars_conv ON conversation_avatars (conversation_id, created_at DESC);
 
 CREATE TABLE conversation_members (
     conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
@@ -105,10 +135,33 @@ CREATE TABLE conversation_members (
     last_read_message_id UUID REFERENCES messages (id) ON DELETE SET NULL,
     -- История видна участнику с этого момента (admin видит всё); clock_timestamp() согласован с messages.created_at.
     joined_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp (),
+    -- Личные настройки чата участника: без звука до (навсегда = 9999-12-31), в архиве с, закреплён с.
+    muted_until TIMESTAMPTZ,
+    archived_at TIMESTAMPTZ,
+    pinned_at TIMESTAMPTZ,
+    -- Личный чат удалён «только у меня»: участник не видит сообщений до этого момента (включительно).
+    cleared_at TIMESTAMPTZ,
+    -- Закреплённый чат не бывает в архиве.
+    CONSTRAINT conversation_members_pin_archive_check CHECK (pinned_at IS NULL OR archived_at IS NULL),
     PRIMARY KEY (conversation_id, user_id)
 );
 
 CREATE INDEX idx_conversation_members_user ON conversation_members (user_id);
+
+-- Закреплённые сообщения: owner_id NULL - закреп для всех участников, иначе виден только владельцу
+-- (так можно только в личном чате). Удаление сообщения или чата убирает закреп каскадом.
+CREATE TABLE pinned_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    conversation_id UUID NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+    message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+    owner_id UUID,
+    pinned_by UUID NOT NULL,
+    pinned_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp ()
+);
+
+CREATE UNIQUE INDEX idx_pinned_messages_shared ON pinned_messages (message_id) WHERE owner_id IS NULL;
+CREATE UNIQUE INDEX idx_pinned_messages_own ON pinned_messages (message_id, owner_id) WHERE owner_id IS NOT NULL;
+CREATE INDEX idx_pinned_messages_conversation ON pinned_messages (conversation_id);
 
 -- Чёрный список группы: забаненный не может вступить ни в открытую группу, ни подать заявку в закрытую.
 CREATE TABLE conversation_bans (

@@ -51,6 +51,12 @@
         color: var(--color-bg-primary);
         white-space: nowrap;
     }
+
+    // у чата без звука и в архиве счётчик серый
+    & .mutedBadge {
+        background-color: var(--color-bg-muted);
+        color: var(--color-text);
+    }
 }
 
 .texts {
@@ -101,5 +107,18 @@
         gap: 6px;
         color: alpha(var(--color-text), 0.6);
         white-space: nowrap;
+    }
+
+    // значки закрепа и «без звука» рядом со счётчиком
+    & .flags {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: auto;
+
+        & .flag {
+            display: inline-flex;
+            color: alpha(var(--color-text), 0.4);
+        }
     }
 }

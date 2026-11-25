@@ -2,7 +2,8 @@
 // о формате. Путь выдаёт Gateway после загрузки, user-service и conversation-service принимают только его
 //
 // путь - /media/avatars/<32 hex>.jpg: случайное имя (128 бит), поэтому его нельзя угадать,
-// а файл по нему - всегда JPEG, который перекодировал сервер
+// а файл по нему - всегда JPEG, который перекодировал сервер. Рядом лежит крупная версия для просмотра
+// на весь экран: тот же путь с суффиксом _l (/media/avatars/<32 hex>_l.jpg); в базе хранится только маленькая
 package media
 
 import (
@@ -20,13 +21,31 @@ const (
 	AvatarsDir = "avatars/"
 	// AvatarExt - аватарка всегда перекодируется в JPEG
 	AvatarExt = ".jpg"
+	// MaxAvatarHistory - сколько последних фото хранится в истории аватарок профиля или группы (с текущим);
+	// старые сверх этого удаляются вместе с файлами
+	MaxAvatarHistory = 5
 )
 
 var (
 	ErrInvalidAvatarURL = errors.New("invalid avatar url")
 
 	avatarName = regexp.MustCompile(`^[0-9a-f]{32}\.jpg$`)
+	// avatarFile - маленький или крупный файл аватарки: то, что отдаёт GET /media/avatars/<имя>
+	avatarFile = regexp.MustCompile(`^[0-9a-f]{32}(_l)?\.jpg$`)
 )
+
+// LargeSuffix - суффикс имени крупной версии аватарки
+const LargeSuffix = "_l"
+
+// LargeName - имя файла крупной версии по имени обычной: <32 hex>_l.jpg
+func LargeName(name string) string {
+	return strings.TrimSuffix(name, AvatarExt) + LargeSuffix + AvatarExt
+}
+
+// ValidAvatarFile - имя файла, который можно отдать: маленькая или крупная версия аватарки
+func ValidAvatarFile(name string) bool {
+	return avatarFile.MatchString(name)
+}
 
 // NewAvatarName - случайное имя файла аватарки: <32 hex>.jpg
 func NewAvatarName() (string, error) {

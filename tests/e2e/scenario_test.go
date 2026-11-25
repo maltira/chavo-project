@@ -226,6 +226,9 @@ func TestScenario(t *testing.T) {
 		elf := append([]byte("\x7fELF\x02\x01\x01\x00"), bytes.Repeat([]byte{0}, 128)...)
 		r = a.dev.upload(t, "/api/users/me/avatar", "photo.jpg", "image/jpeg", elf)
 		check(t, r.status == 415 && r.body["reason"] == "AVATAR_TYPE_UNSUPPORTED", "executable as avatar: %d %s", r.status, r.raw)
+		// фото меньше 512 px по любой стороне не принимается
+		r = a.dev.upload(t, "/api/users/me/avatar", "small.png", "image/png", pngPhotoSize(t, 511, 900))
+		check(t, r.status == 400 && r.body["reason"] == "AVATAR_TOO_SMALL", "small photo: %d %s", r.status, r.raw)
 		// полиглот: настоящая картинка с дописанным хвостом - хвост не сохраняется
 		marker := "E2E-PAYLOAD-" + w.run
 		r = a.dev.upload(t, "/api/users/me/avatar", "me.png", "image/png", append(pngPhoto(t), []byte("\x7fELF"+marker)...))
@@ -236,6 +239,35 @@ func TestScenario(t *testing.T) {
 		check(t, img.status == 200 && img.header.Get("Content-Type") == "image/jpeg" &&
 			img.header.Get("X-Content-Type-Options") == "nosniff" && strings.HasPrefix(img.raw, "\xff\xd8") &&
 			!strings.Contains(img.raw, marker), "served avatar: %d %v", img.status, img.header)
+		// крупная версия для просмотра на весь экран лежит рядом и отдаётся так же
+		big := a.dev.do(t, "GET", strings.TrimSuffix(avatarURL, ".jpg")+"_l.jpg", nil)
+		check(t, big.status == 200 && big.header.Get("Content-Type") == "image/jpeg" && strings.HasPrefix(big.raw, "\xff\xd8") &&
+			!strings.Contains(big.raw, marker) && len(big.raw) > len(img.raw), "large avatar: %d %v", big.status, big.header)
+		// история аватарок: второе фото становится текущим, первое остаётся; «сделать главной» возвращает его
+		second := a.dev.upload(t, "/api/users/me/avatar", "me2.png", "image/png", pngPhotoSize(t, 700, 600))
+		secondURL, _ := second.body["avatar_url"].(string)
+		check(t, second.status == 200 && secondURL != avatarURL, "second avatar: %d %s", second.status, second.raw)
+		hist := a.dev.do(t, "GET", "/api/users/me/avatars", nil)
+		items, _ := hist.body["items"].([]any)
+		check(t, hist.status == 200 && len(items) == 2, "avatar history: %d %s", hist.status, hist.raw)
+		newest, _ := items[0].(map[string]any)
+		older, _ := items[1].(map[string]any)
+		check(t, newest["avatar_url"] == secondURL && newest["is_current"] == true && older["avatar_url"] == avatarURL,
+			"history order: %s", hist.raw)
+		// собеседник видит историю так же, как аватар (его не блокировали)
+		seen := b.dev.do(t, "GET", "/api/users/"+a.id+"/avatars", nil)
+		check(t, seen.status == 200 && len(seen.body["items"].([]any)) == 2, "peer sees history: %d %s", seen.status, seen.raw)
+		r = a.dev.do(t, "POST", "/api/users/me/avatars/"+older["id"].(string)+"/select", nil)
+		check(t, r.status == 200, "select avatar: %d %s", r.status, r.raw)
+		me1 := a.dev.do(t, "GET", "/api/users/me", nil)
+		check(t, me1.body["avatar_url"] == avatarURL, "main avatar after select: %s", me1.raw)
+		// удалить именно второе фото: оно пропадает из истории и из хранилища, текущее не меняется
+		r = a.dev.do(t, "DELETE", "/api/users/me/avatars/"+newest["id"].(string), nil)
+		check(t, r.status == 200, "delete avatar photo: %d %s", r.status, r.raw)
+		gone := a.dev.do(t, "GET", secondURL, nil)
+		check(t, gone.status == 404, "deleted photo still served: %d", gone.status)
+		me2 := a.dev.do(t, "GET", "/api/users/me", nil)
+		check(t, me2.body["avatar_url"] == avatarURL, "avatar after deleting another photo: %s", me2.raw)
 		// внешний URL через PATCH больше не ставится: поле игнорируется
 		r = a.dev.do(t, "PATCH", "/api/users/me", map[string]string{"avatar_url": "https://example.com/e2e.png", "bio": "e2e"})
 		check(t, r.status == 200, "patch profile: %d %s", r.status, r.raw)
@@ -283,6 +315,11 @@ func TestScenario(t *testing.T) {
 		r = b.dev.do(t, "GET", "/api/users/"+a.id, nil)
 		check(t, r.body["status"] != nil && r.body["avatar_url"] != nil && r.body["avatar_shape"] != nil && r.body["online"] == true,
 			"other viewer lost fields: %s", r.raw)
+		// историю аватарок заблокированный тоже не видит, остальные - видят
+		r = c.dev.do(t, "GET", "/api/users/"+a.id+"/avatars", nil)
+		check(t, r.status == 200 && len(r.body["items"].([]any)) == 0, "blocked viewer sees avatar history: %d %s", r.status, r.raw)
+		r = b.dev.do(t, "GET", "/api/users/"+a.id+"/avatars", nil)
+		check(t, r.status == 200 && len(r.body["items"].([]any)) == 1, "other viewer history: %d %s", r.status, r.raw)
 
 		// новый статус заменяет прежний целиком
 		r = a.dev.do(t, "POST", "/api/users/me/status", body("moon", "Ночь", "#312E81", "#E0E7FF", "never"))

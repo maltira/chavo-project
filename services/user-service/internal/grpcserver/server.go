@@ -30,12 +30,15 @@ type Server struct {
 	settings service.SettingsService
 	statuses service.StatusService
 	shapes   service.AvatarShapeService
+	avatars  service.AvatarHistoryService
 	presence presence.Checker
 }
 
 func New(profiles service.ProfileService, blocks service.BlockService, settings service.SettingsService,
-	statuses service.StatusService, shapes service.AvatarShapeService, presence presence.Checker) *Server {
-	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, shapes: shapes, presence: presence}
+	statuses service.StatusService, shapes service.AvatarShapeService, avatars service.AvatarHistoryService,
+	presence presence.Checker) *Server {
+	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, shapes: shapes,
+		avatars: avatars, presence: presence}
 }
 
 // avatarShapeToProto - фигура, убранная из каталога после установки, считается отсутствующей
@@ -328,6 +331,8 @@ func (s *Server) GetSettings(ctx context.Context, _ *userv1.GetSettingsRequest) 
 		UserId:            st.UserID.String(),
 		AllowGroupInvites: st.AllowGroupInvites,
 		ShowOnlineStatus:  st.ShowOnlineStatus,
+		HideForwardAuthor: st.HideForwardAuthor,
+		FavoriteEmojis:    st.FavoriteEmojis,
 		CreatedAt:         ts(st.CreatedAt),
 		UpdatedAt:         ts(st.UpdatedAt),
 	}}, nil
@@ -344,6 +349,12 @@ func (s *Server) UpdateSettings(ctx context.Context, req *userv1.UpdateSettingsR
 	}
 	if req.ShowOnlineStatus != nil {
 		data["show_online_status"] = req.GetShowOnlineStatus()
+	}
+	if req.HideForwardAuthor != nil {
+		data["hide_forward_author"] = req.GetHideForwardAuthor()
+	}
+	if req.FavoriteEmojis != nil {
+		data["favorite_emojis"] = req.GetFavoriteEmojis().GetItems()
 	}
 	if err = s.settings.UpdateSettings(ctx, userID, data); err != nil {
 		return nil, err
@@ -483,6 +494,27 @@ func (s *Server) BlockedIDs(ctx context.Context, req *userv1.BlockedIDsRequest) 
 	return &userv1.BlockedIDsResponse{UserIds: out}, nil
 }
 
+// ForwardAuthorsHidden - кто из авторов скрывает имя в пересланных сообщениях (для conversation-service)
+func (s *Server) ForwardAuthorsHidden(ctx context.Context, req *userv1.ForwardAuthorsHiddenRequest) (*userv1.ForwardAuthorsHiddenResponse, error) {
+	ids := make([]uuid.UUID, 0, len(req.GetUserIds()))
+	for _, raw := range req.GetUserIds() {
+		id, err := parseID(raw)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	hidden, err := s.settings.ForwardAuthorsHidden(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(hidden))
+	for i, id := range hidden {
+		out[i] = id.String()
+	}
+	return &userv1.ForwardAuthorsHiddenResponse{HiddenUserIds: out}, nil
+}
+
 func (s *Server) SetStatus(ctx context.Context, req *userv1.SetStatusRequest) (*userv1.SetStatusResponse, error) {
 	userID, err := currentUser(ctx)
 	if err != nil {
@@ -530,4 +562,71 @@ func (s *Server) ClearAvatarShape(ctx context.Context, _ *userv1.ClearAvatarShap
 		return nil, err
 	}
 	return &userv1.ClearAvatarShapeResponse{}, nil
+}
+
+func (s *Server) ListAvatars(ctx context.Context, req *userv1.ListAvatarsRequest) (*userv1.ListAvatarsResponse, error) {
+	viewer, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	owner, err := parseID(req.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	photos, err := s.avatars.List(ctx, viewer, owner)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*userv1.AvatarPhoto, len(photos))
+	for i, p := range photos {
+		out[i] = &userv1.AvatarPhoto{Id: p.ID.String(), AvatarUrl: p.URL, CreatedAt: ts(p.CreatedAt), IsCurrent: p.IsCurrent}
+	}
+	return &userv1.ListAvatarsResponse{Items: out}, nil
+}
+
+func (s *Server) AddAvatar(ctx context.Context, req *userv1.AddAvatarRequest) (*userv1.AddAvatarResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	evicted, err := s.avatars.Add(ctx, userID, req.GetAvatarUrl())
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.AddAvatarResponse{EvictedUrls: evicted}, nil
+}
+
+func (s *Server) SelectAvatar(ctx context.Context, req *userv1.SelectAvatarRequest) (*userv1.SelectAvatarResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	photoID, err := parseID(req.GetAvatarId())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.avatars.Select(ctx, userID, photoID); err != nil {
+		return nil, err
+	}
+	return &userv1.SelectAvatarResponse{}, nil
+}
+
+func (s *Server) DeleteAvatar(ctx context.Context, req *userv1.DeleteAvatarRequest) (*userv1.DeleteAvatarResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var photoID *uuid.UUID
+	if req.AvatarId != nil {
+		id, err := parseID(req.GetAvatarId())
+		if err != nil {
+			return nil, err
+		}
+		photoID = &id
+	}
+	removed, err := s.avatars.Delete(ctx, userID, photoID)
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.DeleteAvatarResponse{RemovedUrl: &removed}, nil
 }

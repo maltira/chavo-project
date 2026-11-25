@@ -222,12 +222,14 @@ func (d *device) upload(t testing.TB, path, filename, contentType string, data [
 	return res
 }
 
-// pngPhoto - простая картинка для загрузки аватарки
-func pngPhoto(t testing.TB) []byte {
+// pngPhoto - простая картинка для загрузки аватарки: не меньше 512 px по каждой стороне
+func pngPhoto(t testing.TB) []byte { return pngPhotoSize(t, 640, 560) }
+
+func pngPhotoSize(t testing.TB, w, h int) []byte {
 	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 160, 120))
-	for y := 0; y < 120; y++ {
-		for x := 0; x < 160; x++ {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
 			img.Set(x, y, color.RGBA{217, 119, 87, 255})
 		}
 	}
@@ -356,13 +358,16 @@ func (w *world) cleanup(t testing.TB) {
 	// загруженные фото тестовых пользователей и их групп - до удаления строк, где записаны пути
 	var objects []string
 	for _, p := range strings.Fields(psql(t, cfg.userDB, fmt.Sprintf(
-		`SELECT avatar_url FROM profiles WHERE user_id::text IN (%s) AND avatar_url LIKE '/media/avatars/%%'`, quoted))) {
-		objects = append(objects, strings.TrimPrefix(p, "/media/"))
+		`SELECT avatar_url FROM profile_avatars WHERE user_id::text IN (%s) AND avatar_url LIKE '/media/avatars/%%'
+		 UNION SELECT avatar_url FROM profiles WHERE user_id::text IN (%[1]s) AND avatar_url LIKE '/media/avatars/%%'`, quoted))) {
+		objects = append(objects, strings.TrimPrefix(p, "/media/"), strings.TrimSuffix(strings.TrimPrefix(p, "/media/"), ".jpg")+"_l.jpg")
 	}
 	for _, p := range strings.Fields(psql(t, cfg.convDB, fmt.Sprintf(
-		`SELECT c.avatar_url FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id
-		 WHERE m.user_id::text IN (%s) AND c.avatar_url LIKE '/media/avatars/%%'`, quoted))) {
-		objects = append(objects, strings.TrimPrefix(p, "/media/"))
+		`SELECT a.avatar_url FROM conversation_avatars a JOIN conversation_members m ON m.conversation_id = a.conversation_id
+		 WHERE m.user_id::text IN (%s) AND a.avatar_url LIKE '/media/avatars/%%'
+		 UNION SELECT c.avatar_url FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id
+		 WHERE m.user_id::text IN (%[1]s) AND c.avatar_url LIKE '/media/avatars/%%'`, quoted))) {
+		objects = append(objects, strings.TrimPrefix(p, "/media/"), strings.TrimSuffix(strings.TrimPrefix(p, "/media/"), ".jpg")+"_l.jpg")
 	}
 	minioRemove(t, objects)
 

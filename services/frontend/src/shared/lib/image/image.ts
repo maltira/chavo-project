@@ -1,19 +1,40 @@
 // фото перед загрузкой: проверка файла, чтение с учётом поворота из EXIF, кроп в квадрат и кодирование в JPEG.
 // это удобство, а не защита: сервер всё равно проверяет и перекодирует файл сам
 
+// наименьшая сторона загружаемого фото: меньшее сервер не принимает (крупная версия была бы размытой)
+export const AVATAR_MIN_SIDE = 512
+
 // что показывает выбор файла; HEIC и SVG браузер в canvas не отрисует (а SVG сервер и не примет)
 export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp'
 const ACCEPTED_TYPES = IMAGE_ACCEPT.split(',')
 
-// больше нет смысла: на сервер уходит кроп 512×512, а исходник только читается в браузере
+// больше нет смысла: на сервер уходит кроп не больше 1024×1024, а исходник только читается в браузере
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
-// сторона квадрата, который уходит на сервер (сервер уменьшит до своего размера)
-export const AVATAR_UPLOAD_SIZE = 512
+// наибольшая сторона квадрата, который уходит на сервер: из него сервер делает маленькую аватарку и крупную
+// для просмотра на весь экран; фото меньшего размера не растягивается
+export const AVATAR_UPLOAD_SIZE = 1024
+// наименьшая сторона кропа на выходе: сервер принимает не меньше AVATAR_MIN_SIDE
+const AVATAR_MIN_SIZE = AVATAR_MIN_SIDE
+// весь запрос с фото на сервере ограничен 1 МиБ: кодируем с запасом на служебные части multipart
+const UPLOAD_BYTES_LIMIT = 900 * 1024
+// качества JPEG по убыванию: берём первое, при котором кроп укладывается в предел
+const JPEG_QUALITIES = [0.9, 0.8, 0.7, 0.55, 0.4]
 
 // масштаб в окне кропа: 1 - фото целиком закрывает круг, 4 - максимальное приближение
 export const MIN_ZOOM = 1
 export const MAX_ZOOM = 4
+
+// фото слишком маленькое для аватарки
+export function isTooSmall(width: number, height: number): boolean {
+    return Math.min(width, height) < AVATAR_MIN_SIDE
+}
+
+// наибольший зум: кроп не должен стать меньше AVATAR_MIN_SIDE реальных пикселей фото, иначе сервер его
+// не примет; короткая сторона фото при зуме z даёт кроп в min(w, h) / z пикселей
+export function maxZoomFor(width: number, height: number): number {
+    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(width, height) / AVATAR_MIN_SIDE))
+}
 
 // текст ошибки для выбранного файла или null, если его можно открыть
 export function checkImageFile(file: File): string | null {
@@ -57,7 +78,7 @@ export function clampCrop(
     height: number,
     viewport: number,
 ): CropState {
-    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, crop.zoom))
+    const zoom = Math.min(maxZoomFor(width, height), Math.max(MIN_ZOOM, crop.zoom))
     const scale = coverScale(width, height, viewport) * zoom
     const maxX = Math.max(0, (width * scale - viewport) / 2)
     const maxY = Math.max(0, (height * scale - viewport) / 2)
@@ -80,28 +101,37 @@ export function sourceRect(crop: CropState, width: number, height: number, viewp
     }
 }
 
-// вырезает квадрат и кодирует его в JPEG; прозрачность - на белый, как и на сервере
-export function encodeSquare(
+// вырезает квадрат и кодирует его в JPEG; прозрачность - на белый, как и на сервере.
+// Сторона - размер кропа в пикселях исходного фото, но не больше AVATAR_UPLOAD_SIZE и не меньше
+// AVATAR_MIN_SIZE (size можно задать явно); плотное фото сжимается сильнее, чтобы уложиться в предел запроса
+export async function encodeSquare(
     image: LoadedImage,
     rect: { sx: number; sy: number; size: number },
-    size = AVATAR_UPLOAD_SIZE,
+    size = Math.min(AVATAR_UPLOAD_SIZE, Math.max(AVATAR_MIN_SIZE, Math.round(rect.size))),
 ): Promise<Blob> {
     const canvas = document.createElement('canvas')
     canvas.width = size
     canvas.height = size
     const ctx = canvas.getContext('2d')
     if (!ctx) {
-        return Promise.reject(new Error('canvas is not available'))
+        throw new Error('canvas is not available')
     }
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, size, size)
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(image.source, rect.sx, rect.sy, rect.size, rect.size, 0, 0, size, size)
-    return new Promise((resolve, reject) =>
-        canvas.toBlob(
-            (blob) => (blob ? resolve(blob) : reject(new Error('encoding failed'))),
-            'image/jpeg',
-            0.9,
-        ),
-    )
+
+    let blob: Blob | null = null
+    for (const quality of JPEG_QUALITIES) {
+        blob = await new Promise<Blob | null>((resolve) =>
+            canvas.toBlob(resolve, 'image/jpeg', quality),
+        )
+        if (!blob) {
+            throw new Error('encoding failed')
+        }
+        if (blob.size <= UPLOAD_BYTES_LIMIT) {
+            break
+        }
+    }
+    return blob!
 }

@@ -1,0 +1,10 @@
+.root {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: $radius-full;
+    background-color: var(--color-accent);
+    color: var(--color-bg-primary);
+}

@@ -1,0 +1,55 @@
+.row {
+    width: 100%;
+    border: none;
+    background: none;
+    text-align: start;
+    cursor: pointer;
+}
+
+// плитка размером с аватар вместо фото
+.tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+
+    border-radius: $radius-full;
+    background-color: var(--color-bg-tertiary);
+}
+
+.header {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 16px 16px;
+    padding: 0;
+
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font: inherit;
+    opacity: 0.6;
+    transition: $transition-fast;
+    cursor: pointer;
+
+    &:hover {
+        opacity: 0.8;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+        opacity: 1;
+    }
+}
+
+.headerCompact {
+    justify-content: center;
+    padding: 6px 0;
+}
+
+.title {
+    @include type(button-medium);
+}

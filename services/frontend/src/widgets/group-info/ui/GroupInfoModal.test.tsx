@@ -37,6 +37,10 @@ const chat: ConversationSummary = {
     unread_count: 0,
     last_message_read: false,
     members_count: 2,
+    muted_until: null,
+    archived_at: null,
+    pinned_at: null,
+    is_saved: false,
     invite_code: 'abc123def456',
 }
 
@@ -251,7 +255,7 @@ describe('GroupInfoModal', () => {
     })
 
     it('an admin uploads and removes the group photo from the settings', async () => {
-        loadImage.mockResolvedValue({ source: {}, width: 300, height: 300 })
+        loadImage.mockResolvedValue({ source: {}, width: 800, height: 800 })
         encodeSquare.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }))
         renderModal({ ...chat, avatar_url: '/media/avatars/old.jpg' })
         act(() => useGroupCard.getState().openChat('g1'))
@@ -312,5 +316,64 @@ describe('GroupInfoModal reopening', () => {
         act(() => useGroupCard.getState().openChat('g1'))
         expect(screen.getByRole('dialog', { name: 'Группа: Крутые перцы' })).toBeInTheDocument()
         expect(screen.queryByRole('dialog', { name: 'Участники' })).toBeNull()
+    })
+
+    const photo = (c: string) => `/media/avatars/${c.repeat(32)}.jpg`
+    // история группы - три фото; перечитанная карточка группы остаётся прежней
+    const withHistory = (avatar_url: string, role: 'admin' | 'member') => {
+        const base = { ...chat, my_role: role, avatar_url }
+        const impl = fetchMock.getMockImplementation()!
+        fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+            if (url === '/api/conversations/g1/avatars') {
+                return Promise.resolve(
+                    json({
+                        items: ['a', 'b', 'c'].map((c, i) => ({
+                            id: `g-${c}`,
+                            avatar_url: photo(c),
+                            created_at: '2026-10-01T10:00:00Z',
+                            is_current: i === 0,
+                        })),
+                    }),
+                )
+            }
+            return impl(url, init)
+        })
+        return base
+    }
+
+    it('opens the group photo with its history; an admin manages it', async () => {
+        const summary = withHistory(photo('a'), 'admin')
+        renderModal(summary)
+        act(() => useGroupCard.getState().openChat('g1'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Открыть фото группы' }))
+        const viewer = screen.getByRole('dialog', { name: /^Фото: / })
+        expect(await within(viewer).findByText('1 из 3')).toBeInTheDocument()
+
+        // сделать главной не главное фото
+        fireEvent.keyDown(document, { key: 'ArrowLeft' })
+        fireEvent.click(within(viewer).getByRole('button', { name: 'Сделать главной' }))
+        await vi.waitFor(() =>
+            expect(calls('POST', '/api/conversations/g1/avatars/g-b/select')).toHaveLength(1),
+        )
+
+        // удалить именно показанное фото
+        fireEvent.click(within(viewer).getByRole('button', { name: 'Удалить фото' }))
+        const confirm = screen.getByRole('dialog', { name: 'Вы уверены?' })
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(calls('DELETE', '/api/conversations/g1/avatars/g-b')).toHaveLength(1),
+        )
+    })
+
+    it('a member can browse the group photos but not change them', async () => {
+        renderModal(withHistory(photo('a'), 'member'))
+        act(() => useGroupCard.getState().openChat('g1'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Открыть фото группы' }))
+        const viewer = screen.getByRole('dialog', { name: /^Фото: / })
+        expect(await within(viewer).findByText('1 из 3')).toBeInTheDocument()
+        fireEvent.keyDown(document, { key: 'ArrowLeft' })
+        expect(within(viewer).getByRole('button', { name: 'Скачать' })).toBeInTheDocument()
+        expect(within(viewer).queryByRole('button', { name: 'Удалить фото' })).toBeNull()
+        expect(within(viewer).queryByRole('button', { name: 'Сделать главной' })).toBeNull()
     })
 })

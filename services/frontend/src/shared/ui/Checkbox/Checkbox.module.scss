@@ -1,0 +1,77 @@
+$size: 18px;
+
+.root {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+
+    &.disabled {
+        opacity: 0.3;
+        pointer-events: none;
+    }
+}
+
+.control {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    width: $size;
+    height: $size;
+}
+
+.input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+
+    &:hover + .box {
+        border-color: alpha(var(--color-text), 0.6);
+    }
+
+    &:focus-visible + .box {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    &:checked + .box {
+        border-color: var(--color-accent);
+        background-color: var(--color-accent);
+        color: var(--color-bg-primary);
+    }
+
+    &:checked + .box .mark {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+
+    border: 2px solid alpha(var(--color-text), 0.3);
+    border-radius: 5px;
+    pointer-events: none;
+
+    transition: $transition-fast;
+}
+
+.mark {
+    opacity: 0;
+    transform: scale(0.5);
+    transition: $transition-fast;
+}
+
+.label {
+    @include type(main-regular);
+
+    color: var(--color-text);
+}

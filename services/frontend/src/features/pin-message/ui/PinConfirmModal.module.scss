@@ -1,0 +1,6 @@
+.text {
+    @include type(main-regular);
+
+    margin: -8px 0 0;
+    color: alpha(var(--color-text), 0.6);
+}

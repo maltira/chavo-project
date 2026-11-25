@@ -115,7 +115,7 @@ func TestSystemMessagesAreReadOnly(t *testing.T) {
 	}
 	sys := systemMessages(t, e, admin, conv)[0].ID
 
-	if _, err := e.msgs.Edit(ctx, admin, sys, "текст"); !errors.Is(err, apperror.ErrForbidden) {
+	if _, err := e.msgs.Edit(ctx, admin, sys, "текст", nil); !errors.Is(err, apperror.ErrForbidden) {
 		t.Fatalf("edit system: %v", err)
 	}
 	if err := e.msgs.Delete(ctx, admin, sys); !errors.Is(err, apperror.ErrForbidden) {

@@ -167,11 +167,15 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	p.DELETE("/users/me/status", h.clearMyStatus)
 	p.POST("/users/me/avatar-shape", h.setMyAvatarShape)
 	p.DELETE("/users/me/avatar-shape", h.clearMyAvatarShape)
+	p.GET("/users/me/avatars", h.listMyAvatars)
+	p.POST("/users/me/avatars/:id/select", h.selectMyAvatar)
 	if d.Media != nil {
 		p.POST("/users/me/avatar", append(uploadLimit, h.uploadMyAvatar)...)
 		p.DELETE("/users/me/avatar", h.deleteMyAvatar)
+		p.DELETE("/users/me/avatars/:id", h.deleteMyAvatarPhoto)
 	}
 	p.GET("/users/:user_id", h.getProfile)
+	p.GET("/users/:user_id/avatars", h.listUserAvatars)
 	p.GET("/users/:user_id/block-status", h.blockStatus)
 	p.POST("/users/:user_id/block", h.block)
 	p.DELETE("/users/:user_id/block", h.unblock)
@@ -189,8 +193,17 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/avatar-shape", h.clearGroupAvatarShape)
 	if d.Media != nil {
 		conv.POST("/:id/avatar", append(uploadLimit, h.uploadGroupAvatar)...)
+		conv.DELETE("/:id/avatars/:photo_id", h.deleteGroupAvatarPhoto)
 		conv.DELETE("/:id/avatar", h.deleteGroupAvatar)
 	}
+	conv.POST("/:id/mute", h.muteChat)
+	conv.DELETE("/:id/mute", h.unmuteChat)
+	conv.POST("/:id/archive", h.archiveChat(true))
+	conv.DELETE("/:id/archive", h.archiveChat(false))
+	conv.POST("/:id/pin", h.pinChat(true))
+	conv.DELETE("/:id/pin", h.pinChat(false))
+	conv.GET("/:id/avatars", h.listGroupAvatars)
+	conv.POST("/:id/avatars/:photo_id/select", h.selectGroupAvatar)
 	conv.POST("/:id/join", h.joinGroup)
 	conv.POST("/:id/invite-link/regenerate", h.regenerateInvite)
 	conv.POST("/:id/join-requests", h.requestJoin)
@@ -205,12 +218,17 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/bans/:user_id", h.unban)
 	conv.POST("/:id/read", h.markRead)
 	conv.GET("/:id/messages/:message_id/readers", h.listReaders)
+	conv.GET("/:id/pins", h.listPins)
+	conv.POST("/:id/pins", h.pinMessage)
+	conv.DELETE("/:id/pins/:message_id", h.unpinMessage)
 
 	p.GET("/invites/:token", h.inviteInfo)
 
 	msg := p.Group("/messages")
 	msg.GET("", h.listMessages)
 	msg.POST("", append(sendLimit, h.sendMessage)...)
+	// пересылка создаёт сообщения - под тем же лимитом, что и отправка
+	msg.POST("/forward", append(sendLimit, h.forwardMessages)...)
 	msg.GET("/:message_id", h.getMessage)
 	msg.PATCH("/:message_id", h.editMessage)
 	msg.DELETE("/:message_id", h.deleteMessage)

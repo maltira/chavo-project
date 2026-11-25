@@ -411,3 +411,20 @@ $tail-height: 14px;
 .selectMarkOff {
     visibility: hidden;
 }
+
+// кнопка открытия меню действий рядом с пузырём (для тач-экранов и мыши)
+.menuTrigger {
+    align-self: center;
+    opacity: 0;
+    transition: opacity $transition-fast;
+
+    .row:hover &,
+    .row:focus-within &,
+    &.menuTriggerOpen {
+        opacity: 1;
+    }
+
+    @media (hover: none) {
+        opacity: 0.7;
+    }
+}

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import type { ConversationSummary, Member } from '@/entities/conversation'
@@ -519,5 +519,43 @@ describe('ChatWindow', () => {
         // для чужого сообщения пункт «Кто прочитал» не показывается
         fireEvent.contextMenu(screen.getAllByText('Привет! Как дела?').at(-1)!)
         expect(screen.queryByRole('menuitem', { name: 'Кто прочитал' })).toBeNull()
+    })
+
+    it('opens message actions via keyboard, trigger button, and touch long-press', () => {
+        vi.useFakeTimers()
+        try {
+            renderWindow()
+            const body = screen.getByText('Отвечаю').closest('[tabindex="0"]') as HTMLElement
+            body.focus()
+
+            // клавиатура: Enter открывает меню, Esc закрывает и возвращает фокус
+            fireEvent.keyDown(body, { key: 'Enter' })
+            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+            fireEvent.keyDown(document, { key: 'Escape' })
+            expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
+            expect(document.activeElement).toBe(body)
+
+            // кнопка «⋮» рядом с пузырём
+            const triggers = screen.getAllByRole('button', { name: 'Действия с сообщением' })
+            fireEvent.click(triggers[0]!)
+            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+            fireEvent.click(triggers[0]!)
+            expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
+
+            // долгое нажатие на тач-экране
+            const touchDown = new Event('pointerdown', { bubbles: true })
+            Object.defineProperties(touchDown, {
+                pointerType: { value: 'touch' },
+                clientX: { value: 10 },
+                clientY: { value: 10 },
+            })
+            fireEvent(body, touchDown)
+            act(() => {
+                vi.advanceTimersByTime(450)
+            })
+            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })

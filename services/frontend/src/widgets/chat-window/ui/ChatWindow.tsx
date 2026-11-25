@@ -22,6 +22,7 @@ import { HeaderSkeleton, MessagesSkeleton } from './ChatSkeleton'
 import styles from './ChatWindow.module.scss'
 import { MessageList } from './MessageList'
 import { PinnedBar } from './PinnedBar'
+import { ReadersModal } from './ReadersModal'
 import { SelectionBar } from './SelectionBar'
 
 interface Props {
@@ -53,6 +54,8 @@ export function ChatWindow({ conversationId }: Props) {
     // режим выбора для пересылки: отмеченные сообщения; null - режим выключен
     const [selected, setSelected] = useState<string[] | null>(null)
     const [forwarding, setForwarding] = useState(false)
+    // просмотр списка прочитавших сообщение в группе
+    const [readersOf, setReadersOf] = useState<string | null>(null)
 
     // Esc выходит из режима выбора (открытое окно пересылки Esc закрывает само)
     useEffect(() => {
@@ -273,6 +276,7 @@ export function ChatWindow({ conversationId }: Props) {
                     onDelete={(message) => remove.mutate(message)}
                     pins={pinList}
                     onPin={(message) => togglePin(message.id)}
+                    onShowReaders={(message) => setReadersOf(message.id)}
                     jumpRequest={jumpRequest}
                     onForward={(message) => {
                         setReply(null)
@@ -294,6 +298,12 @@ export function ChatWindow({ conversationId }: Props) {
                     }}
                 />
             )}
+
+            <ReadersModal
+                conversationId={conversationId}
+                messageId={readersOf}
+                onClose={() => setReadersOf(null)}
+            />
 
             <div className={styles.composer}>
                 {selected !== null ? (

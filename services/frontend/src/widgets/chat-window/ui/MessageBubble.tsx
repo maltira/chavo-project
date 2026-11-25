@@ -35,6 +35,8 @@ interface Props {
     onDelete: (message: Message) => void
     onPin: (message: Message) => void
     onForward: (message: Message) => void
+    // кто прочитал сообщение (свои прочитанные сообщения в группе)
+    onShowReaders?: (message: Message) => void
     onJump: (messageId: string) => void
     // режим выбора для пересылки: нажатие отмечает сообщение, меню действий не открывается
     selecting: boolean
@@ -113,6 +115,7 @@ export function MessageBubble({
     onDelete,
     onPin,
     onForward,
+    onShowReaders,
     onJump,
     selecting,
     selected,
@@ -315,6 +318,14 @@ export function MessageBubble({
                                 icon="pinned"
                                 aria-label={pinned ? 'Открепить' : 'Закрепить'}
                                 onClick={() => act(() => onPin(message))}
+                            />
+                        )}
+                        {onShowReaders && (
+                            <IconButton
+                                role="menuitem"
+                                icon="check-double"
+                                aria-label="Кто прочитал"
+                                onClick={() => act(() => onShowReaders(message))}
                             />
                         )}
                         {canEdit && (

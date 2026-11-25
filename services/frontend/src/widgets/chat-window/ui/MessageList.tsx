@@ -31,6 +31,7 @@ interface Props {
     onDelete: (message: Message) => void
     pins: PinnedMessage[]
     onPin: (message: Message) => void
+    onShowReaders?: (message: Message) => void
     // переход к сообщению снаружи (плашка закрепов); n отличает повторный переход к тому же сообщению
     jumpRequest: { id: string; n: number } | null
     onForward: (message: Message) => void
@@ -71,6 +72,7 @@ export function MessageList({
     onDelete,
     pins,
     onPin,
+    onShowReaders,
     jumpRequest,
     onForward,
     selected,
@@ -245,6 +247,7 @@ export function MessageList({
                     const continued =
                         !newDay && sameAuthor(older, message, saved) && message.id !== firstUnreadId
 
+                    const read = readBoundary !== undefined && index >= readBoundary
                     return (
                         <Fragment key={message.local_key ?? message.id}>
                             <AppearRow appear={appears(message)} continued={continued}>
@@ -263,7 +266,7 @@ export function MessageList({
                                     <MessageBubble
                                         message={message}
                                         mine={mine}
-                                        read={readBoundary !== undefined && index >= readBoundary}
+                                        read={read}
                                         receipts={!chat.is_saved}
                                         showAuthor={showAuthor}
                                         avatar={avatar}
@@ -286,6 +289,9 @@ export function MessageList({
                                         pinned={canPin ? pinnedIds.has(message.id) : null}
                                         onPin={onPin}
                                         onForward={onForward}
+                                        onShowReaders={
+                                            isGroup && own && read ? onShowReaders : undefined
+                                        }
                                         selecting={selected !== null}
                                         selected={!!selected?.includes(message.id)}
                                         onToggleSelect={onToggleSelect}

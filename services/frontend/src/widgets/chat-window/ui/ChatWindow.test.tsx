@@ -474,4 +474,50 @@ describe('ChatWindow', () => {
         // скопированный текст не содержит разметки
         expect(text.textContent).toContain('привет мир')
     })
+
+    it('shows who read my message in a group', async () => {
+        const fetchMock = vi.fn((url: string) =>
+            Promise.resolve(
+                new Response(
+                    url === '/api/conversations/c1/messages/m3/readers'
+                        ? '{"user_ids":["peer"]}'
+                        : '{}',
+                ),
+            ),
+        )
+        vi.stubGlobal('fetch', fetchMock)
+        const { client } = renderWindow()
+        client.setQueryData(['conversation', 'c1'], {
+            ...chat,
+            conversation_type: 'group',
+            name: 'Команда',
+            peer_id: null,
+        })
+        client.setQueryData<Member[]>(
+            ['members', 'c1'],
+            [
+                { user_id: 'me', last_read_message_id: 'm3' } as Member,
+                { user_id: 'peer', last_read_message_id: 'm3' } as Member,
+            ],
+        )
+
+        await screen.findByRole('heading', { name: 'Команда' })
+        fireEvent.contextMenu(screen.getByText('Отвечаю'))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Кто прочитал' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Прочитали' })
+        expect(await within(dialog).findByText('Дорофей Гришин')).toBeInTheDocument()
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/conversations/c1/messages/m3/readers',
+            expect.anything(),
+        )
+
+        // при закрытии во время анимации список остаётся, скелетон не мелькает
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть' }))
+        expect(within(dialog).getByText('Дорофей Гришин')).toBeInTheDocument()
+        expect(dialog.querySelector('[aria-busy="true"]')).toBeNull()
+
+        // для чужого сообщения пункт «Кто прочитал» не показывается
+        fireEvent.contextMenu(screen.getAllByText('Привет! Как дела?').at(-1)!)
+        expect(screen.queryByRole('menuitem', { name: 'Кто прочитал' })).toBeNull()
+    })
 })

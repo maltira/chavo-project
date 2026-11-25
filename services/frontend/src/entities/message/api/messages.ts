@@ -88,3 +88,14 @@ export function markRead(conversationId: string, messageId: string): Promise<voi
         body: { message_id: messageId },
     })
 }
+
+// участники, чей курсор прочтения дошёл до сообщения (без его автора)
+export async function getMessageReaders(
+    conversationId: string,
+    messageId: string,
+): Promise<string[]> {
+    const res = await request<{ user_ids: string[] }>(
+        `/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/readers`,
+    )
+    return res.user_ids
+}

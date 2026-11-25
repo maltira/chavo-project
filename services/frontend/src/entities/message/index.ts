@@ -3,6 +3,7 @@ export {
     editMessage,
     forwardMessages,
     getMessage,
+    getMessageReaders,
     MAX_FORWARD_CHATS,
     MAX_FORWARD_MESSAGES,
     getMessages,
@@ -20,6 +21,7 @@ export {
     replaceMessage,
 } from './model/cache'
 export { useMessages } from './model/useMessages'
+export { readersKey, useReaders } from './model/useReaders'
 export { getPins, pinMessage, unpinMessage } from './api/pins'
 export type { PinnedMessage, PinScope } from './api/pins'
 export { applyPinsEvent, pinsKey, usePins } from './model/usePins'

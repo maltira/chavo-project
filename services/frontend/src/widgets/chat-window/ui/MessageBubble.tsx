@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { Message } from '@/entities/message'
 import { useProfileCard, UserAvatar, useUser } from '@/entities/user'
-import { cn, formatTime, notify, useDismiss } from '@/shared/lib'
+import { cn, copyRich, formatTime, notify, useDismiss } from '@/shared/lib'
 import { Icon, IconButton, RichText } from '@/shared/ui'
 
 import styles from './MessageBubble.module.scss'
@@ -182,9 +182,10 @@ export function MessageBubble({
     }
 
     function copy() {
-        void navigator.clipboard
-            ?.writeText(message.content ?? '')
-            .then(() => notify({ id: 'copied', icon: 'check', title: 'Текст скопирован' }))
+        void copyRich({
+            text: message.content ?? '',
+            entities: message.entities ?? [],
+        }).then(() => notify({ id: 'copied', icon: 'check', title: 'Текст скопирован' }))
     }
 
     // время, «изменено» и галочки - в правом нижнем углу пузыря, как в Telegram
@@ -291,7 +292,14 @@ export function MessageBubble({
                                         className={styles.quoteAuthor}
                                     />
                                     <span className={styles.quoteText}>
-                                        {replyTo.is_deleted ? 'Сообщение удалено' : replyTo.content}
+                                        {replyTo.is_deleted ? (
+                                            'Сообщение удалено'
+                                        ) : (
+                                            <RichText
+                                                text={replyTo.content ?? ''}
+                                                entities={replyTo.entities}
+                                            />
+                                        )}
                                     </span>
                                 </>
                             ) : (

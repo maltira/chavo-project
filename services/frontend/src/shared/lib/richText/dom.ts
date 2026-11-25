@@ -17,6 +17,7 @@ interface Run extends Flags {
 }
 
 const BLOCKS = new Set(['DIV', 'P', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3'])
+const IGNORED = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'TITLE', 'META'])
 
 function flagsOf(el: HTMLElement, parent: Flags): Flags {
     const flags = { ...parent }
@@ -82,6 +83,9 @@ function read(root: Node, keepTrailingBreak = false): { text: string; runs: Run[
             return
         }
         const el = node as HTMLElement
+        if (IGNORED.has(el.nodeName)) {
+            return
+        }
         if (el.nodeName === 'BR') {
             if (el !== skip) {
                 push('\n', flags)
@@ -236,4 +240,60 @@ export function render(root: HTMLElement, value: RichValue) {
     if (value.text.endsWith('\n')) {
         root.appendChild(document.createElement('br'))
     }
+}
+
+function escapeHtml(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// собирает чистый HTML с <b>, <i>, <u> и <br> для буфера обмена
+export function toHtml(value: RichValue): string {
+    return toSegments(value.text, value.entities)
+        .map((segment) => {
+            let chunk = escapeHtml(segment.text).replace(/\n/g, '<br>')
+            if (segment.underline) {
+                chunk = `<u>${chunk}</u>`
+            }
+            if (segment.italic) {
+                chunk = `<i>${chunk}</i>`
+            }
+            if (segment.bold) {
+                chunk = `<b>${chunk}</b>`
+            }
+            return chunk
+        })
+        .join('')
+}
+
+// разбирает HTML из буфера обмена в текст + поддерживаемые диапазоны; небезопасные теги отбрасываются
+export function fromHtml(html: string): RichValue {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const { text, runs } = read(doc.body, true)
+    return { text: text.replace(/\r\n?/g, '\n'), entities: entitiesOf(runs) }
+}
+
+// копирует в буфер текст и HTML (если есть разметка), с откатом на обычный writeText
+export async function copyRich(value: RichValue): Promise<void> {
+    const clipboard = navigator.clipboard
+    if (!clipboard) {
+        return
+    }
+    if (
+        value.entities.length > 0 &&
+        typeof ClipboardItem !== 'undefined' &&
+        typeof clipboard.write === 'function'
+    ) {
+        try {
+            await clipboard.write([
+                new ClipboardItem({
+                    'text/plain': new Blob([value.text], { type: 'text/plain' }),
+                    'text/html': new Blob([toHtml(value)], { type: 'text/html' }),
+                }),
+            ])
+            return
+        } catch {
+            // если браузер запретил text/html в буфере - копируем обычный текст
+        }
+    }
+    await clipboard.writeText(value.text)
 }

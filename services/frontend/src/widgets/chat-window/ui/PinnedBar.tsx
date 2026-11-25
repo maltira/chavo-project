@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import type { PinnedMessage } from '@/entities/message'
-import { IconButton } from '@/shared/ui'
+import { IconButton, RichText } from '@/shared/ui'
 
 import styles from './PinnedBar.module.scss'
 
@@ -41,7 +41,12 @@ export function PinnedBar({ pins, canUnpin, onJump, onUnpin }: Props) {
                     {label}
                     {pin.scope === 'me' && <span className={styles.own}> · только у вас</span>}
                 </span>
-                <span className={styles.text}>{pin.message.content}</span>
+                <span className={styles.text}>
+                    <RichText
+                        text={pin.message.content ?? ''}
+                        entities={pin.message.entities}
+                    />
+                </span>
             </button>
             {canUnpin(pin) && (
                 <IconButton

@@ -24,7 +24,9 @@ export {
 export type { CropState, LoadedImage } from './image'
 export type { SettleResult } from './settle'
 export {
+    copyRich,
     ENTITY_TYPES,
+    fromHtml,
     hasFormat,
     normalizeEntities,
     render as renderRich,
@@ -33,6 +35,7 @@ export {
     serialize as serializeRich,
     setSelectionOffsets,
     toggleFormat,
+    toHtml,
     toSegments,
     trimValue,
 } from './richText'

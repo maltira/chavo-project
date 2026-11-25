@@ -1,4 +1,12 @@
-export { render, selectionOffsets, serialize, setSelectionOffsets } from './dom'
+export {
+    copyRich,
+    fromHtml,
+    render,
+    selectionOffsets,
+    serialize,
+    setSelectionOffsets,
+    toHtml,
+} from './dom'
 export {
     ENTITY_TYPES,
     hasFormat,

@@ -1,4 +1,4 @@
-import { render, selectionOffsets, serialize, setSelectionOffsets } from './dom'
+import { fromHtml, render, selectionOffsets, serialize, setSelectionOffsets, toHtml } from './dom'
 import type { MessageEntity } from './model'
 
 const e = (type: MessageEntity['type'], offset: number, length: number): MessageEntity => ({
@@ -131,5 +131,25 @@ describe('selection offsets', () => {
         document.getSelection()!.removeAllRanges()
         document.getSelection()!.addRange(range)
         expect(selectionOffsets(root)).toBeNull()
+    })
+})
+
+describe('toHtml / fromHtml', () => {
+    it('round-trips formatted text with escaping and line breaks', () => {
+        const value = {
+            text: '<привет>\nмир',
+            entities: [e('bold', 0, 8), e('italic', 9, 3), e('underline', 9, 3)],
+        }
+        const html = toHtml(value)
+        expect(html).toBe('<b>&lt;привет&gt;</b><br><i><u>мир</u></i>')
+        expect(fromHtml(html)).toEqual(value)
+    })
+
+    it('drops unsafe tags like script and style when parsing pasted HTML', () => {
+        const parsed = fromHtml('<script>alert(1)</script><strong>жирный</strong><style>x{}</style>')
+        expect(parsed).toEqual({
+            text: 'жирный',
+            entities: [e('bold', 0, 6)],
+        })
     })
 })

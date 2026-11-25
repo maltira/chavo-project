@@ -4,17 +4,44 @@ import { ACCENTS, useAccent } from '@/features/accent-color'
 import { useTheme } from '@/features/toggle-theme'
 import { LANGUAGES, useLanguage } from '@/features/ui-language'
 import type { Language } from '@/features/ui-language'
-import { cn } from '@/shared/lib'
+import {
+    cn,
+    desktopPermission,
+    requestDesktopPermission,
+    useAlertPrefs,
+} from '@/shared/lib'
+import type { DesktopPermission } from '@/shared/lib'
 import { Button, ColorPicker, MenuItem, Switch } from '@/shared/ui'
 
 import styles from './InterfaceScreen.module.scss'
 import common from './SettingsModal.module.scss'
 
-// настройки интерфейса: язык, тема, акцентный цвет - только для этого устройства
+// настройки интерфейса: язык, тема, акцентный цвет и уведомления - только для этого устройства
 export function InterfaceScreen({ onLanguage }: { onLanguage: () => void }) {
     const { theme, toggle } = useTheme()
     const { accent, setAccent } = useAccent()
     const [pickingAccent, setPickingAccent] = useState(false)
+    const sound = useAlertPrefs((state) => state.sound)
+    const desktop = useAlertPrefs((state) => state.desktop)
+    const setSound = useAlertPrefs((state) => state.setSound)
+    const setDesktop = useAlertPrefs((state) => state.setDesktop)
+    const [permission, setPermission] = useState<DesktopPermission>(desktopPermission)
+
+    async function toggleDesktop() {
+        if (desktop && permission === 'granted') {
+            setDesktop(false)
+            return
+        }
+        if (permission === 'default') {
+            const next = await requestDesktopPermission()
+            setPermission(next)
+            setDesktop(next === 'granted')
+            return
+        }
+        if (permission === 'granted') {
+            setDesktop(!desktop)
+        }
+    }
 
     return (
         <div className={common.body}>
@@ -62,6 +89,41 @@ export function InterfaceScreen({ onLanguage }: { onLanguage: () => void }) {
                 <p className={common.hint}>
                     Влияет только на элементы текущего устройства и не заметно другим пользователям.
                 </p>
+            </div>
+
+            <div className={common.card}>
+                <MenuItem
+                    icon={sound ? 'notif' : 'notif-off'}
+                    trailing={
+                        <Switch
+                            aria-label="Звук уведомлений"
+                            checked={sound}
+                            onChange={() => setSound(!sound)}
+                        />
+                    }
+                >
+                    Звук уведомлений
+                </MenuItem>
+                {permission !== 'unsupported' && (
+                    <MenuItem
+                        icon="notif"
+                        trailing={
+                            <Switch
+                                aria-label="Уведомления в браузере"
+                                checked={desktop && permission === 'granted'}
+                                disabled={permission === 'denied'}
+                                onChange={() => void toggleDesktop()}
+                            />
+                        }
+                    >
+                        Уведомления в браузере
+                    </MenuItem>
+                )}
+                {permission === 'denied' && (
+                    <p className={common.hint}>
+                        Уведомления заблокированы в настройках браузера.
+                    </p>
+                )}
             </div>
         </div>
     )

@@ -1,4 +1,13 @@
 export { cn, plural } from './utils'
+export {
+    desktopPermission,
+    playNotificationSound,
+    requestDesktopPermission,
+    showDesktopNotification,
+    updateTabBadge,
+    useAlertPrefs,
+} from './browserAlerts'
+export type { DesktopNoticeInput, DesktopPermission } from './browserAlerts'
 export { dismiss, notify, useNotifications } from './notifications'
 export type { Notice } from './notifications'
 export { newPasswordSchema, PASSWORD_HINT } from './password'

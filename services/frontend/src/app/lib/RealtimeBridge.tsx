@@ -3,7 +3,14 @@ import type { QueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 
-import { applyConversationEvent, moveReadCursor, useGroupCard } from '@/entities/conversation'
+import {
+    applyConversationEvent,
+    conversationsKey,
+    isMuted,
+    moveReadCursor,
+    useGroupCard,
+} from '@/entities/conversation'
+import type { ConversationSummary } from '@/entities/conversation'
 import { applyMessageEvent, applyPinsEvent, messagesKey } from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
@@ -11,7 +18,7 @@ import type { Presence, Profile } from '@/entities/user'
 import { connectSocket } from '@/shared/api'
 import { chatPath } from '@/shared/config'
 import type { ServerEvent } from '@/shared/api'
-import { dismiss, notify } from '@/shared/lib'
+import { dismiss, notify, updateTabBadge } from '@/shared/lib'
 import type { Notice } from '@/shared/lib'
 
 import { applyGroupEvent, notifyGroupEvent } from './groupEvents'
@@ -144,6 +151,34 @@ export function RealtimeBridge() {
     useEffect(() => {
         navigateRef.current = navigate
     }, [navigate])
+
+    // держим заголовок вкладки и точку на favicon синхронизированными с непрочитанными немьюченных чатов
+    useEffect(() => {
+        const syncBadge = () => {
+            const data = queryClient.getQueryData<{ pages: ConversationSummary[][] }>(
+                conversationsKey,
+            )
+            let unread = 0
+            for (const page of data?.pages ?? []) {
+                for (const chat of page) {
+                    if (!isMuted(chat) && chat.unread_count > 0) {
+                        unread += chat.unread_count
+                    }
+                }
+            }
+            updateTabBadge(unread)
+        }
+        syncBadge()
+        const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+            if (event.query.queryKey[0] === conversationsKey[0]) {
+                syncBadge()
+            }
+        })
+        return () => {
+            unsubscribe()
+            updateTabBadge(0)
+        }
+    }, [queryClient])
 
     useEffect(() => {
         // перед закрытием соединения с кодом 4001 сервер присылает session.revoked с причиной

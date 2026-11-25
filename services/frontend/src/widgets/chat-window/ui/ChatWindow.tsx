@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { useConversation, useMembers } from '@/entities/conversation'
-import { MAX_FORWARD_MESSAGES, useMessages, usePins } from '@/entities/message'
+import { getDraft, MAX_FORWARD_MESSAGES, useMessages, usePins } from '@/entities/message'
 import type { Message, PinnedMessage } from '@/entities/message'
 import { useMe, useUser } from '@/entities/user'
 import { MessageComposer } from '@/features/compose-message'
@@ -92,6 +92,10 @@ export function ChatWindow({ conversationId }: Props) {
     // меню «⋮» в шапке - под кнопкой
     const [menuAt, setMenuAt] = useState<MenuPosition | null>(null)
     const [reply, setReply] = useState<Message | null>(null)
+    // ответ, восстановленный из черновика чата
+    const [draftReply, setDraftReply] = useState<ReplyTarget | null>(
+        () => getDraft(conversationId)?.replyTo ?? null,
+    )
     const [editing, setEditing] = useState<Message | null>(null)
     const replyAuthor = useUser(reply && reply.sender_id !== myId ? reply.sender_id : null)
 
@@ -191,7 +195,7 @@ export function ChatWindow({ conversationId }: Props) {
               author: reply.sender_id === myId ? 'Вы' : (replyAuthor.data?.display_name ?? ''),
               text: reply.content ?? '',
           }
-        : null
+        : draftReply
 
     return (
         <div className={styles.root}>
@@ -267,10 +271,12 @@ export function ChatWindow({ conversationId }: Props) {
                     findMessage={findMessage}
                     onReply={(message) => {
                         setEditing(null)
+                        setDraftReply(null)
                         setReply(message)
                     }}
                     onEdit={(message) => {
                         setReply(null)
+                        setDraftReply(null)
                         setEditing(message)
                     }}
                     onDelete={(message) => remove.mutate(message)}
@@ -320,8 +326,12 @@ export function ChatWindow({ conversationId }: Props) {
                         replyTo={replyTarget}
                         editing={editing}
                         onCancel={() => {
+                            if (editing) {
+                                setEditing(null)
+                                return
+                            }
                             setReply(null)
-                            setEditing(null)
+                            setDraftReply(null)
                         }}
                     />
                 ) : (

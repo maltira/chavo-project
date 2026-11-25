@@ -20,6 +20,8 @@ export {
     removeMessage,
     replaceMessage,
 } from './model/cache'
+export { getDraft, useDraft, useDrafts } from './model/drafts'
+export type { DraftReply, MessageDraft } from './model/drafts'
 export { useMessages } from './model/useMessages'
 export { readersKey, useReaders } from './model/useReaders'
 export { getPins, pinMessage, unpinMessage } from './api/pins'

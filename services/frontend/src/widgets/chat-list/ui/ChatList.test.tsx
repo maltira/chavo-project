@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import type { ConversationSummary } from '@/entities/conversation'
+import { useDrafts } from '@/entities/message'
 import { useNotifications } from '@/shared/lib'
 
 import { ChatList } from './ChatList'
@@ -76,6 +77,7 @@ describe('ChatList', () => {
     afterEach(() => {
         vi.unstubAllGlobals()
         useNotifications.setState({ items: [] })
+        useDrafts.getState().clearAll()
     })
 
     it('shows the chat with my last message and marks the open chat', () => {
@@ -204,5 +206,13 @@ describe('ChatList', () => {
         // в «Избранном» все сообщения свои - без «Вы:»
         expect(within(link).getByText('Привет всем')).toBeInTheDocument()
         expect(link.querySelector('img')).toBeNull()
+    })
+
+    it('shows the draft label in the preview when a chat has an unsent draft', () => {
+        useDrafts.getState().setDraft('c1', { text: 'недописано', entities: [] })
+        renderList([base])
+        expect(screen.getByText(/Черновик:/)).toBeInTheDocument()
+        expect(screen.getByText(/недописано/)).toBeInTheDocument()
+        expect(screen.queryByText('Вы: Привет всем')).toBeNull()
     })
 })

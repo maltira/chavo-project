@@ -3,7 +3,7 @@ import { NavLink } from 'react-router'
 
 import { isMuted, SAVED_NAME, SavedAvatar } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
-import { isSystem, useSystemText } from '@/entities/message'
+import { isSystem, useDraft, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { ChatActionsMenu } from '@/features/chat-actions'
 import { chatPath } from '@/shared/config'
@@ -53,6 +53,8 @@ export function ChatListItem({ chat, myId, compact }: Props) {
     const online = isDirect && (presence?.online ?? peer.data?.online ?? false)
 
     const systemText = useSystemText(chat.last_message)
+    const draft = useDraft(chat.id)
+    const draftText = draft?.text.trim() ?? ''
     // галочки - только у моих обычных сообщений; в «Избранном» читать некому
     const mine =
         !saved &&
@@ -98,7 +100,14 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                         <span className={cn(styles.texts, unread && styles.unread)}>
                             <span className={styles.name}>{name || ' '}</span>
                             <span className={styles.preview}>
-                                {preview(chat, myId, systemText)}
+                                {draftText ? (
+                                    <>
+                                        <span className={styles.draft}>Черновик: </span>
+                                        {draftText}
+                                    </>
+                                ) : (
+                                    preview(chat, myId, systemText)
+                                )}
                             </span>
                         </span>
 

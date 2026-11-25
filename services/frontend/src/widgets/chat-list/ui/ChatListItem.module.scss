@@ -83,6 +83,10 @@
         color: alpha(var(--color-text), 0.6);
     }
 
+    & .draft {
+        color: var(--color-danger);
+    }
+
     // у чата с непрочитанными превью ярче и жирнее
     &.unread .preview {
         @include type(tag-medium);

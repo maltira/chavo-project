@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 
+import { useDrafts } from '@/entities/message'
 import type { Message } from '@/entities/message'
 import { selectionOffsets, setSelectionOffsets } from '@/shared/lib'
 import { renderWithProviders, typeMessage } from '@/shared/lib/testing'
@@ -26,6 +27,7 @@ describe('MessageComposer', () => {
     })
     afterEach(() => {
         vi.unstubAllGlobals()
+        useDrafts.getState().clearAll()
     })
 
     it('sends on Enter, keeps Shift+Enter as a line break and clears the field', async () => {
@@ -264,5 +266,20 @@ describe('MessageComposer', () => {
                 favorite_emojis: [firstEmoji(people)],
             })
         })
+    })
+
+    it('restores a saved draft with formatting on mount and clears it on send', async () => {
+        useDrafts.getState().setDraft('c1', {
+            text: 'незаконченный текст',
+            entities: [{ type: 'bold', offset: 0, length: 13 }],
+        })
+        renderWithProviders(<MessageComposer conversationId="c1" myId="me" onCancel={vi.fn()} />)
+        const field = screen.getByLabelText('Сообщение')
+        expect(field).toHaveTextContent('незаконченный текст')
+        expect(field.querySelector('b')?.textContent).toBe('незаконченный')
+
+        fireEvent.keyDown(field, { key: 'Enter' })
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+        expect(useDrafts.getState().items.c1).toBeUndefined()
     })
 })

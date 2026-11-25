@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import type { ConversationSummary, Member } from '@/entities/conversation'
-import { addMessage } from '@/entities/message'
+import { addMessage, useDrafts } from '@/entities/message'
 import type { Message } from '@/entities/message'
 
 import { ChatWindow } from './ChatWindow'
@@ -91,6 +91,7 @@ describe('ChatWindow', () => {
     })
     afterEach(() => {
         vi.unstubAllGlobals()
+        useDrafts.getState().clearAll()
     })
 
     it('shows the peer, the day and the history', () => {

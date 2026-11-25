@@ -357,6 +357,13 @@ func (f *fakeConversations) UnpinMessage(_ context.Context, req *conversationv1.
 	return &conversationv1.UnpinMessageResponse{}, nil
 }
 
+func (*fakeConversations) DeleteMessages(_ context.Context, req *conversationv1.DeleteMessagesRequest) (*conversationv1.DeleteMessagesResponse, error) {
+	if len(req.GetMessageIds()) == 0 {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.DeleteMessagesResponse{}, nil
+}
+
 func (*fakeConversations) ForwardMessages(_ context.Context, req *conversationv1.ForwardMessagesRequest) (*conversationv1.ForwardMessagesResponse, error) {
 	if len(req.GetMessageIds()) == 0 {
 		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
@@ -1183,6 +1190,16 @@ func TestForwardEndpoint(t *testing.T) {
 		t.Fatalf("forwarded: %v", chat)
 	}
 	expect(t, e.do(http.MethodPost, "/api/messages/forward", tok, `{"conversation_ids":["`+conv+`"]}`), http.StatusBadRequest, "")
+}
+
+func TestDeleteMessagesEndpoint(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	w := e.do(http.MethodPost, "/api/messages/delete", tok, `{"message_ids":["`+uuid.NewString()+`"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete batch: %d %s", w.Code, w.Body.String())
+	}
+	expect(t, e.do(http.MethodPost, "/api/messages/delete", tok, `{"message_ids":[]}`), http.StatusBadRequest, "")
 }
 
 func TestUpdateSettingsReturnsSettings(t *testing.T) {

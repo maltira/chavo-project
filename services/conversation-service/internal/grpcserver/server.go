@@ -494,6 +494,21 @@ func (s *Server) DeleteMessage(ctx context.Context, req *conversationv1.DeleteMe
 	return &conversationv1.DeleteMessageResponse{}, nil
 }
 
+func (s *Server) DeleteMessages(ctx context.Context, req *conversationv1.DeleteMessagesRequest) (*conversationv1.DeleteMessagesResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	msgIDs, err := parseIDs(req.GetMessageIds())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.msgs.DeleteBatch(ctx, user, msgIDs); err != nil {
+		return nil, err
+	}
+	return &conversationv1.DeleteMessagesResponse{}, nil
+}
+
 func (s *Server) MarkRead(ctx context.Context, req *conversationv1.MarkReadRequest) (*conversationv1.MarkReadResponse, error) {
 	user, err := currentUser(ctx)
 	if err != nil {

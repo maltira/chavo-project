@@ -559,4 +559,58 @@ describe('ChatWindow', () => {
             vi.useRealTimers()
         }
     })
+
+    it('copies and batch-deletes selected messages in selection mode', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')))
+        vi.stubGlobal('fetch', fetchMock)
+        const writeText = vi.fn(() => Promise.resolve())
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true,
+        })
+
+        const { client } = renderWindow()
+        client.setQueryData(['messages', 'c1'], {
+            pages: [
+                {
+                    items: [
+                        msg('m3', 'me', 'второе'),
+                        msg('m1', 'me', 'первое'),
+                    ],
+                    limit: 50,
+                    next_before: null,
+                },
+            ],
+            pageParams: [undefined],
+        })
+
+        await screen.findByText('первое')
+        // выделяем оба своих сообщения: доступно копирование и удаление
+        fireEvent.contextMenu(screen.getByText('второе'))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Переслать' }))
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать сообщение: первое' }))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Копировать выбранные' }))
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('первое\n\nвторое'))
+        await vi.waitFor(() => expect(screen.queryByText(/Выбрано:/)).toBeNull())
+
+        // теперь массово удаляем
+        fireEvent.contextMenu(screen.getByText('второе'))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Переслать' }))
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать сообщение: первое' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить выбранные' }))
+
+        const dialog = screen.getByRole('dialog', { name: 'Удалить сообщения?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/messages/delete',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ message_ids: ['m3', 'm1'] }),
+                }),
+            ),
+        )
+        await vi.waitFor(() => expect(screen.queryByText(/Выбрано:/)).toBeNull())
+    })
 })

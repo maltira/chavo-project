@@ -19,3 +19,13 @@
     width: auto;
     padding: 0 20px;
 }
+
+.root .danger {
+    border-color: transparent;
+    background-color: alpha(var(--color-danger), 0.1);
+    color: var(--color-danger);
+
+    &:hover {
+        background-color: alpha(var(--color-danger), 0.2);
+    }
+}

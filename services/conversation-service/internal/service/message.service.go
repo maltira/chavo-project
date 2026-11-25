@@ -34,6 +34,7 @@ type MessageService interface {
 	Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error)
 	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
+	DeleteBatch(ctx context.Context, userID uuid.UUID, messageIDs []uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
 	Forward(ctx context.Context, userID uuid.UUID, in ForwardInput) ([]ForwardResult, error)
 	Readers(ctx context.Context, userID, convID, messageID uuid.UUID) ([]uuid.UUID, error)
@@ -419,6 +420,80 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 			DeletedBy:      userID,
 			MemberIDs:      memberIDs,
 		})
+	})
+}
+
+// DeleteBatch мягко удаляет до maxForwardMessages сообщений одного чата в одной транзакции:
+// если хотя бы одно недоступно или запрещено - откатывается всё целиком
+func (s *messageService) DeleteBatch(ctx context.Context, userID uuid.UUID, messageIDs []uuid.UUID) error {
+	ids := uniqueIDs(messageIDs)
+	if len(ids) == 0 || len(ids) > maxForwardMessages {
+		return apperror.ErrIncorrectData
+	}
+
+	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		var convID uuid.UUID
+		var access *repository.Access
+		for _, id := range ids {
+			rec, err := s.msgs.FindByID(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if convID == uuid.Nil {
+				convID = rec.ConversationID
+				access, err = s.convs.Access(ctx, tx, convID, userID)
+				if err != nil {
+					return err
+				}
+			} else if rec.ConversationID != convID {
+				return apperror.ErrIncorrectData
+			}
+			if _, err = s.msgs.FindVisible(ctx, tx, id, userID); err != nil {
+				return err
+			}
+			isAuthor := rec.SenderID == userID
+			isGroupAdmin := access.Type == models.ConversationGroup && access.Role == models.RoleAdmin
+			if (!isAuthor && !isGroupAdmin) || rec.Kind == models.MessageSystem {
+				return apperror.ErrForbidden
+			}
+		}
+
+		memberIDs, err := s.convs.MemberIDs(ctx, tx, convID)
+		if err != nil {
+			return err
+		}
+		var pinOwners []*uuid.UUID
+		for _, id := range ids {
+			deleted, err := s.msgs.SoftDelete(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if !deleted {
+				continue
+			}
+			if err = s.outbox.ScrubMessageContent(ctx, tx, id); err != nil {
+				return err
+			}
+			owners, err := s.pins.DeleteForMessage(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			pinOwners = append(pinOwners, owners...)
+			if err = s.publish(ctx, tx, events.TopicMessageEvents, convID, events.TypeMessageDeleted, events.MessageDeletedPayload{
+				ConversationID: convID,
+				MessageID:      id,
+				DeletedBy:      userID,
+				MemberIDs:      memberIDs,
+			}); err != nil {
+				return err
+			}
+		}
+		if len(pinOwners) > 0 {
+			if err = s.publishPinsChanged(ctx, tx, convID, pinOwners); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

@@ -115,3 +115,19 @@ func (h *Handler) deleteMessage(c *gin.Context) {
 	}
 	httpx.Success(c, http.StatusOK, "Сообщение удалено")
 }
+
+func (h *Handler) deleteMessages(c *gin.Context) {
+	var body struct {
+		MessageIDs []string `json:"message_ids"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	if _, err := h.conversations.DeleteMessages(c.Request.Context(), &conversationv1.DeleteMessagesRequest{
+		MessageIds: body.MessageIDs,
+	}); err != nil {
+		h.fail(c, err)
+		return
+	}
+	httpx.Success(c, http.StatusOK, "Сообщения удалены")
+}

@@ -81,6 +81,13 @@ export function deleteMessage(id: string): Promise<void> {
     return request<void>(`/messages/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+export function deleteMessages(messageIds: string[]): Promise<void> {
+    return request<void>('/messages/delete', {
+        method: 'POST',
+        body: { message_ids: messageIds },
+    })
+}
+
 // курсор прочтения: всё до этого сообщения включительно прочитано
 export function markRead(conversationId: string, messageId: string): Promise<void> {
     return request<void>(`/conversations/${encodeURIComponent(conversationId)}/read`, {

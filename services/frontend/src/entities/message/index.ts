@@ -1,5 +1,6 @@
 export {
     deleteMessage,
+    deleteMessages,
     editMessage,
     forwardMessages,
     getMessage,

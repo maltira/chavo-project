@@ -5,7 +5,7 @@ import { getUser, userKey } from '@/entities/user'
 import type { Profile } from '@/entities/user'
 import type { ServerEvent } from '@/shared/api'
 import { chatPath } from '@/shared/config'
-import { notify } from '@/shared/lib'
+import { notify, playNotificationSound, showDesktopNotification } from '@/shared/lib'
 
 interface CreatedData {
     conversation_id?: string
@@ -69,15 +69,28 @@ export async function notifyNewMessage(
         }
         const isGroup = chat.conversation_type === 'group'
         const text = data.content ?? ''
+        const title = isGroup ? (chat.name ?? 'Группа') : sender.display_name
+        // в группе видно, кто написал
+        const description = isGroup ? `${sender.display_name}: ${text}` : text
+        const onClick = open ? () => open.chat(chatId) : undefined
         notify({
             // новое сообщение того же чата заменяет прежнее уведомление, а не копит их
             id: `message-${chatId}`,
             icon: 'shape-message',
-            title: isGroup ? (chat.name ?? 'Группа') : sender.display_name,
-            // в группе видно, кто написал
-            description: isGroup ? `${sender.display_name}: ${text}` : text,
-            onClick: open ? () => open.chat(chatId) : undefined,
+            title,
+            description,
+            onClick,
         })
+        playNotificationSound()
+        // если вкладка свёрнута или неактивна - показываем системное уведомление браузера
+        if (document.visibilityState !== 'visible') {
+            showDesktopNotification({
+                title,
+                body: description,
+                tag: `message-${chatId}`,
+                onClick,
+            })
+        }
     } catch {
         // не узнали имя (сеть, нет доступа) - без уведомления, сообщение всё равно в списке чатов
     }

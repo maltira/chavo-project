@@ -61,6 +61,8 @@ service ConversationService {
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
   rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
   rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+  // DeleteMessages - массовое удаление сообщений одного чата (до 20 за раз)
+  rpc DeleteMessages(DeleteMessagesRequest) returns (DeleteMessagesResponse);
   // ForwardMessages - копии сообщений одного чата (до 20) в мои чаты (до 5) и/или в «Избранное»
   rpc ForwardMessages(ForwardMessagesRequest) returns (ForwardMessagesResponse);
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
@@ -514,6 +516,11 @@ message DeleteMessageRequest {
   string message_id = 1;
 }
 message DeleteMessageResponse {}
+
+message DeleteMessagesRequest {
+  repeated string message_ids = 1;
+}
+message DeleteMessagesResponse {}
 
 message MarkReadRequest {
   string conversation_id = 1;

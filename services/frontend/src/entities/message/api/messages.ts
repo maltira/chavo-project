@@ -81,10 +81,28 @@ export function deleteMessage(id: string): Promise<void> {
     return request<void>(`/messages/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+export function deleteMessages(messageIds: string[]): Promise<void> {
+    return request<void>('/messages/delete', {
+        method: 'POST',
+        body: { message_ids: messageIds },
+    })
+}
+
 // курсор прочтения: всё до этого сообщения включительно прочитано
 export function markRead(conversationId: string, messageId: string): Promise<void> {
     return request<void>(`/conversations/${encodeURIComponent(conversationId)}/read`, {
         method: 'POST',
         body: { message_id: messageId },
     })
+}
+
+// участники, чей курсор прочтения дошёл до сообщения (без его автора)
+export async function getMessageReaders(
+    conversationId: string,
+    messageId: string,
+): Promise<string[]> {
+    const res = await request<{ user_ids: string[] }>(
+        `/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/readers`,
+    )
+    return res.user_ids
 }

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { useDrafts } from '@/entities/message'
 import { useSession } from '@/entities/session'
 
 import { logout } from '../api/logout'
@@ -13,6 +14,7 @@ export function useLogout() {
         mutationFn: logout,
         onSettled: () => {
             signOut()
+            useDrafts.getState().clearAll()
             // данные прошлого пользователя не должны остаться в кеше
             queryClient.clear()
         },

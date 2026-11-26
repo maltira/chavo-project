@@ -170,6 +170,46 @@ describe('applyToConversations', () => {
             'ignore',
         )
     })
+
+    it('updates content and entities of last_message on message.updated', () => {
+        const withLast = [
+            chat('a', '2026-10-14T10:00:00Z', {
+                last_message: {
+                    id: 'm1',
+                    conversation_id: 'a',
+                    sender_id: ME,
+                    content: 'старый текст',
+                    entities: [{ type: 'bold', offset: 0, length: 6 }],
+                    reply_to_message_id: null,
+                    is_edited: false,
+                    is_deleted: false,
+                    created_at: '2026-10-14T10:00:00Z',
+                    updated_at: null,
+                },
+            }),
+        ]
+        const update = applyToConversations(
+            withLast,
+            {
+                type: 'message.updated',
+                data: {
+                    conversation_id: 'a',
+                    message_id: 'm1',
+                    content: 'новый текст',
+                    entities: [{ type: 'italic', offset: 0, length: 5 }],
+                    updated_at: '2026-10-14T10:05:00Z',
+                },
+            },
+            ME,
+        )
+        if (update.kind !== 'list') throw new Error(update.kind)
+        expect(update.list[0]!.last_message).toMatchObject({
+            content: 'новый текст',
+            entities: [{ type: 'italic', offset: 0, length: 5 }],
+            is_edited: true,
+            updated_at: '2026-10-14T10:05:00Z',
+        })
+    })
 })
 
 describe('applyChatSettings', () => {

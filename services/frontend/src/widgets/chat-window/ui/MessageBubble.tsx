@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { Message } from '@/entities/message'
 import { useProfileCard, UserAvatar, useUser } from '@/entities/user'
-import { cn, formatTime, notify, useDismiss } from '@/shared/lib'
+import { cn, copyRich, formatTime, notify, useDismiss } from '@/shared/lib'
 import { Icon, IconButton, RichText } from '@/shared/ui'
 
 import styles from './MessageBubble.module.scss'
@@ -35,6 +35,8 @@ interface Props {
     onDelete: (message: Message) => void
     onPin: (message: Message) => void
     onForward: (message: Message) => void
+    // кто прочитал сообщение (свои прочитанные сообщения в группе)
+    onShowReaders?: (message: Message) => void
     onJump: (messageId: string) => void
     // режим выбора для пересылки: нажатие отмечает сообщение, меню действий не открывается
     selecting: boolean
@@ -64,6 +66,9 @@ function AuthorAvatar({ userId }: { userId: string | null }) {
 
 // высота панели действий с отступом от сообщения
 const ACTIONS_SPACE = 68
+// задержка долгого нажатия на тач-экране, мс
+const LONG_PRESS_MS = 450
+const LONG_PRESS_MOVE = 10
 
 function AuthorName({ userId, className }: { userId: string; className?: string }) {
     const user = useUser(userId)
@@ -113,6 +118,7 @@ export function MessageBubble({
     onDelete,
     onPin,
     onForward,
+    onShowReaders,
     onJump,
     selecting,
     selected,
@@ -122,20 +128,50 @@ export function MessageBubble({
 
     const [above, setAbove] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
-    useDismiss(open, rootRef, () => setOpen(false))
+    const bodyRef = useRef<HTMLDivElement>(null)
+    const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(
+        null,
+    )
+
+    function clearLongPress() {
+        if (longPressRef.current) {
+            clearTimeout(longPressRef.current.timer)
+            longPressRef.current = null
+        }
+    }
+
+    useEffect(() => clearLongPress, [])
+
+    useDismiss(open, rootRef, () => {
+        const inside = rootRef.current?.contains(document.activeElement)
+        setOpen(false)
+        if (inside) {
+            bodyRef.current?.focus()
+        }
+    })
 
     const deleted = message.is_deleted
     const interactive = !deleted && !message.pending
 
+    function computeAbove() {
+        const row = rootRef.current
+        const log = row?.closest('[role="log"]')
+        if (row && log) {
+            const space = log.getBoundingClientRect().bottom - row.getBoundingClientRect().bottom
+            setAbove(space < ACTIONS_SPACE)
+        }
+    }
+
+    function openMenu() {
+        if (!open) {
+            computeAbove()
+        }
+        setOpen(true)
+    }
+
     function toggle() {
         if (!open) {
-            const row = rootRef.current
-            const log = row?.closest('[role="log"]')
-            if (row && log) {
-                const space =
-                    log.getBoundingClientRect().bottom - row.getBoundingClientRect().bottom
-                setAbove(space < ACTIONS_SPACE)
-            }
+            computeAbove()
         }
         setOpen((value) => !value)
     }
@@ -146,9 +182,10 @@ export function MessageBubble({
     }
 
     function copy() {
-        void navigator.clipboard
-            ?.writeText(message.content ?? '')
-            .then(() => notify({ id: 'copied', icon: 'check', title: 'Текст скопирован' }))
+        void copyRich({
+            text: message.content ?? '',
+            entities: message.entities ?? [],
+        }).then(() => notify({ id: 'copied', icon: 'check', title: 'Текст скопирован' }))
     }
 
     // время, «изменено» и галочки - в правом нижнем углу пузыря, как в Telegram
@@ -211,6 +248,20 @@ export function MessageBubble({
                 </span>
             )}
 
+            {mine && interactive && !selecting && (
+                <IconButton
+                    icon="menu-dot"
+                    size={28}
+                    aria-label="Действия с сообщением"
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                    tabIndex={-1}
+                    className={cn(styles.menuTrigger, open && styles.menuTriggerOpen)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={toggle}
+                />
+            )}
+
             <div className={styles.column}>
                 <div
                     className={cn(
@@ -241,7 +292,14 @@ export function MessageBubble({
                                         className={styles.quoteAuthor}
                                     />
                                     <span className={styles.quoteText}>
-                                        {replyTo.is_deleted ? 'Сообщение удалено' : replyTo.content}
+                                        {replyTo.is_deleted ? (
+                                            'Сообщение удалено'
+                                        ) : (
+                                            <RichText
+                                                text={replyTo.content ?? ''}
+                                                entities={replyTo.entities}
+                                            />
+                                        )}
                                     </span>
                                 </>
                             ) : (
@@ -250,6 +308,7 @@ export function MessageBubble({
                         </button>
                     )}
                     <div
+                        ref={bodyRef}
                         className={styles.body}
                         tabIndex={interactive && !selecting ? 0 : undefined}
                         aria-haspopup={interactive && !selecting ? 'menu' : undefined}
@@ -261,6 +320,50 @@ export function MessageBubble({
                             event.preventDefault()
                             toggle()
                         }}
+                        onKeyDown={(event) => {
+                            if (!interactive || selecting) {
+                                return
+                            }
+                            if (
+                                event.key === 'Enter' ||
+                                event.key === ' ' ||
+                                event.key === 'ContextMenu' ||
+                                (event.key === 'F10' && event.shiftKey)
+                            ) {
+                                event.preventDefault()
+                                toggle()
+                            }
+                        }}
+                        onPointerDown={(event) => {
+                            if (!interactive || selecting || event.pointerType !== 'touch') {
+                                return
+                            }
+                            clearLongPress()
+                            const x = event.clientX
+                            const y = event.clientY
+                            longPressRef.current = {
+                                x,
+                                y,
+                                timer: setTimeout(() => {
+                                    longPressRef.current = null
+                                    openMenu()
+                                }, LONG_PRESS_MS),
+                            }
+                        }}
+                        onPointerMove={(event) => {
+                            const lp = longPressRef.current
+                            if (!lp) {
+                                return
+                            }
+                            if (
+                                Math.hypot(event.clientX - lp.x, event.clientY - lp.y) >
+                                LONG_PRESS_MOVE
+                            ) {
+                                clearLongPress()
+                            }
+                        }}
+                        onPointerUp={clearLongPress}
+                        onPointerCancel={clearLongPress}
                     >
                         <span className={styles.text}>
                             {deleted ? (
@@ -317,6 +420,14 @@ export function MessageBubble({
                                 onClick={() => act(() => onPin(message))}
                             />
                         )}
+                        {onShowReaders && (
+                            <IconButton
+                                role="menuitem"
+                                icon="check-double"
+                                aria-label="Кто прочитал"
+                                onClick={() => act(() => onShowReaders(message))}
+                            />
+                        )}
                         {canEdit && (
                             <IconButton
                                 role="menuitem"
@@ -337,6 +448,20 @@ export function MessageBubble({
                     </div>
                 )}
             </div>
+
+            {!mine && interactive && !selecting && (
+                <IconButton
+                    icon="menu-dot"
+                    size={28}
+                    aria-label="Действия с сообщением"
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                    tabIndex={-1}
+                    className={cn(styles.menuTrigger, open && styles.menuTriggerOpen)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={toggle}
+                />
+            )}
         </div>
     )
 }

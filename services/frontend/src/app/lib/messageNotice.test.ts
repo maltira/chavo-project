@@ -90,4 +90,31 @@ describe('notifyNewMessage', () => {
         await notifyNewMessage(created(), client, 'me')
         expect(notices()).toHaveLength(1)
     })
+
+    it('shows a desktop notification when the tab is hidden', async () => {
+        const shown: { title: string; body?: string }[] = []
+        class FakeNotification {
+            static permission: NotificationPermission = 'granted'
+            constructor(title: string, options?: NotificationOptions) {
+                shown.push({ title, body: options?.body })
+            }
+        }
+        vi.stubGlobal('Notification', FakeNotification)
+        const prev = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+        try {
+            await notifyNewMessage(created(), setup('direct'), 'me')
+            expect(shown).toEqual([{ title: 'Давыд', body: 'Привет!' }])
+        } finally {
+            if (prev) {
+                Object.defineProperty(document, 'visibilityState', prev)
+            } else {
+                Object.defineProperty(document, 'visibilityState', {
+                    value: 'visible',
+                    configurable: true,
+                })
+            }
+            vi.unstubAllGlobals()
+        }
+    })
 })

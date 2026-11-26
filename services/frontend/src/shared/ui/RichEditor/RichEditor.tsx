@@ -10,14 +10,16 @@ import type { ClipboardEvent, KeyboardEvent, Ref } from 'react'
 
 import {
     cn,
+    fromHtml,
     hasFormat,
+    normalizeEntities,
     renderRich,
     selectionOffsets,
     serializeRich,
     setSelectionOffsets,
     toggleFormat,
 } from '@/shared/lib'
-import type { EntityType, RichValue } from '@/shared/lib'
+import type { EntityType, MessageEntity, RichValue } from '@/shared/lib'
 
 import { Icon } from '../Icon'
 import styles from './RichEditor.module.scss'
@@ -300,9 +302,94 @@ export function RichEditor({
         return () => root.removeEventListener('beforeinput', onBeforeInput)
     })
 
+    const insertRich = useCallback(
+        (incoming: RichValue) => {
+            const root = rootRef.current
+            if (!root || incoming.text === '') {
+                return
+            }
+            restoreSelection()
+            const current = serializeRich(root)
+            const offsets = selectionOffsets(root) ?? {
+                start: current.text.length,
+                end: current.text.length,
+            }
+            let room =
+                maxLength === undefined
+                    ? Infinity
+                    : maxLength - (current.text.length - (offsets.end - offsets.start))
+            let accepted = ''
+            for (const char of incoming.text.replace(/\r\n?/g, '\n')) {
+                if (char.length > room) {
+                    break
+                }
+                accepted += char
+                room -= char.length
+            }
+            if (accepted === '') {
+                return
+            }
+            const insertedLen = accepted.length
+            const delta = insertedLen - (offsets.end - offsets.start)
+            const mergedEntities: MessageEntity[] = []
+            // сохраняем существующие диапазоны до и после заменённого фрагмента
+            for (const e of current.entities) {
+                const from = e.offset
+                const to = e.offset + e.length
+                if (to <= offsets.start) {
+                    mergedEntities.push(e)
+                } else if (from >= offsets.end) {
+                    mergedEntities.push({ type: e.type, offset: from + delta, length: e.length })
+                } else {
+                    if (from < offsets.start) {
+                        mergedEntities.push({
+                            type: e.type,
+                            offset: from,
+                            length: offsets.start - from,
+                        })
+                    }
+                    if (to > offsets.end) {
+                        mergedEntities.push({
+                            type: e.type,
+                            offset: offsets.start + insertedLen,
+                            length: to - offsets.end,
+                        })
+                    }
+                }
+            }
+            // добавляем диапазоны вставленного фрагмента (обрезанные по принятой длине)
+            for (const e of incoming.entities) {
+                const from = Math.max(0, e.offset)
+                const to = Math.min(insertedLen, e.offset + e.length)
+                if (to > from) {
+                    mergedEntities.push({
+                        type: e.type,
+                        offset: offsets.start + from,
+                        length: to - from,
+                    })
+                }
+            }
+            const next: RichValue = {
+                text: current.text.slice(0, offsets.start) + accepted + current.text.slice(offsets.end),
+                entities: normalizeEntities(mergedEntities),
+            }
+            renderRich(root, next)
+            setSelectionOffsets(root, offsets.start + insertedLen)
+            emit()
+        },
+        [emit, maxLength, restoreSelection],
+    )
+
     function onPaste(event: ClipboardEvent<HTMLDivElement>) {
-        // только простой текст: чужое оформление и картинки в сообщение не попадают
         event.preventDefault()
+        const html = event.clipboardData.getData('text/html')
+        if (html) {
+            const parsed = fromHtml(html)
+            if (parsed.entities.length > 0) {
+                insertRich(parsed)
+                return
+            }
+        }
         insert(event.clipboardData.getData('text/plain'))
     }
 

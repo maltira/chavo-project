@@ -110,6 +110,7 @@ export function applyToConversations(
                     last_message: {
                         ...c.last_message!,
                         content: data.content ?? c.last_message!.content,
+                        entities: data.entities ?? [],
                         is_edited: true,
                         updated_at: data.updated_at ?? c.last_message!.updated_at,
                     },

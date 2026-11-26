@@ -81,7 +81,7 @@ export function ProfileMenu({ onSettings }: Props) {
                                 shape={profile.avatar_shape?.shape}
                                 color={profile.avatar_shape?.color}
                             >
-                                <Avatar src={profile.avatar_url} size={42} alt="" />
+                                <Avatar src={profile.avatar_url} size={44} alt="" />
                             </AvatarShape>
                             <div className={styles.names}>
                                 <span className={styles.name}>{profile.display_name}</span>

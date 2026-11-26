@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { MAX_MESSAGE_LENGTH } from '@/entities/message'
+import { getDraft, MAX_MESSAGE_LENGTH, useDrafts } from '@/entities/message'
 import type { Message } from '@/entities/message'
 import { useFavoriteEmojis } from '@/entities/user'
 import { sameValue, trimValue, useDismiss } from '@/shared/lib'
@@ -38,6 +38,12 @@ function valueOf(message: Message | null | undefined): RichValue {
     return { text: message?.content ?? '', entities: message?.entities ?? [] }
 }
 
+// сохранённый черновик чата
+function draftValue(chatKey: string | undefined): RichValue {
+    const draft = getDraft(chatKey)
+    return draft ? { text: draft.text, entities: draft.entities } : EMPTY
+}
+
 // поле ввода сообщения: отправка, ответ и редактирование; жирный, курсив и подчёркивание (панель над
 // выделением и Ctrl/Cmd + B / I / U); Enter - отправить, Shift+Enter - перенос
 export function MessageComposer({
@@ -49,7 +55,14 @@ export function MessageComposer({
     editing,
     onCancel,
 }: Props) {
-    const [value, setValue] = useState<RichValue>(() => valueOf(editing))
+    const draftKey = conversationId ?? (recipientId ? `new:${recipientId}` : undefined)
+    const setDraft = useDrafts((state) => state.setDraft)
+    const clearDraft = useDrafts((state) => state.clearDraft)
+    const [initial] = useState<RichValue>(() =>
+        editing ? valueOf(editing) : draftValue(draftKey),
+    )
+    const [value, setValue] = useState<RichValue>(initial)
+    const valueRef = useRef(value)
     const editorRef = useRef<RichEditorHandle>(null)
     const send = useSendMessage(myId, onSent)
     // панель эмодзи: кнопка и панель - одна область, клик вне неё и Esc закрывают панель
@@ -58,6 +71,34 @@ export function MessageComposer({
     const closeEmoji = useCallback(() => setEmojiOpen(false), [])
     useDismiss(emojiOpen, emojiRef, closeEmoji)
     const favorites = useFavoriteEmojis(emojiOpen)
+
+    // при изменении ответа синхронизируем черновик (после первого рендера, чтобы не писать пустой)
+    const replyMountedRef = useRef(false)
+    useEffect(() => {
+        if (!replyMountedRef.current) {
+            replyMountedRef.current = true
+            return
+        }
+        if (!editing && draftKey) {
+            setDraft(draftKey, {
+                text: valueRef.current.text,
+                entities: valueRef.current.entities,
+                replyTo: replyTo ?? null,
+            })
+        }
+    }, [replyTo, editing, draftKey, setDraft])
+
+    function handleChange(next: RichValue) {
+        valueRef.current = next
+        setValue(next)
+        if (!editing && draftKey) {
+            setDraft(draftKey, {
+                text: next.text,
+                entities: next.entities,
+                replyTo: replyTo ?? null,
+            })
+        }
+    }
 
     // при открытии чата фокуса нет - пользователь сам нажмёт на поле;
     // при редактировании - фокус и курсор в конце текста
@@ -101,7 +142,11 @@ export function MessageComposer({
             ...(trimmed.entities.length > 0 ? { entities: trimmed.entities } : {}),
             reply_to_message_id: replyTo?.id ?? null,
         })
-        // поле очищается, форматирование сбрасывается
+        // поле и черновик очищаются, форматирование сбрасывается
+        if (draftKey) {
+            clearDraft(draftKey)
+        }
+        valueRef.current = EMPTY
         editorRef.current?.setValue(EMPTY)
         onCancel()
     }
@@ -144,11 +189,11 @@ export function MessageComposer({
                 <RichEditor
                     ref={editorRef}
                     className={styles.field}
-                    initial={valueOf(editing)}
+                    initial={initial}
                     placeholder="Введите сообщение"
                     aria-label="Сообщение"
                     maxLength={MAX_MESSAGE_LENGTH}
-                    onChange={setValue}
+                    onChange={handleChange}
                     onSubmit={submit}
                     onEscape={() => {
                         if (editing || replyTo) {

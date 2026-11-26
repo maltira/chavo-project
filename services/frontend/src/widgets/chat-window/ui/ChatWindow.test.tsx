@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import type { ConversationSummary, Member } from '@/entities/conversation'
-import { addMessage } from '@/entities/message'
+import { addMessage, useDrafts } from '@/entities/message'
 import type { Message } from '@/entities/message'
 
 import { ChatWindow } from './ChatWindow'
@@ -91,6 +91,7 @@ describe('ChatWindow', () => {
     })
     afterEach(() => {
         vi.unstubAllGlobals()
+        useDrafts.getState().clearAll()
     })
 
     it('shows the peer, the day and the history', () => {
@@ -473,5 +474,143 @@ describe('ChatWindow', () => {
         expect(text.querySelector('em u')?.textContent).toBe('мир')
         // скопированный текст не содержит разметки
         expect(text.textContent).toContain('привет мир')
+    })
+
+    it('shows who read my message in a group', async () => {
+        const fetchMock = vi.fn((url: string) =>
+            Promise.resolve(
+                new Response(
+                    url === '/api/conversations/c1/messages/m3/readers'
+                        ? '{"user_ids":["peer"]}'
+                        : '{}',
+                ),
+            ),
+        )
+        vi.stubGlobal('fetch', fetchMock)
+        const { client } = renderWindow()
+        client.setQueryData(['conversation', 'c1'], {
+            ...chat,
+            conversation_type: 'group',
+            name: 'Команда',
+            peer_id: null,
+        })
+        client.setQueryData<Member[]>(
+            ['members', 'c1'],
+            [
+                { user_id: 'me', last_read_message_id: 'm3' } as Member,
+                { user_id: 'peer', last_read_message_id: 'm3' } as Member,
+            ],
+        )
+
+        await screen.findByRole('heading', { name: 'Команда' })
+        fireEvent.contextMenu(screen.getByText('Отвечаю'))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Кто прочитал' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Прочитали' })
+        expect(await within(dialog).findByText('Дорофей Гришин')).toBeInTheDocument()
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/conversations/c1/messages/m3/readers',
+            expect.anything(),
+        )
+
+        // при закрытии во время анимации список остаётся, скелетон не мелькает
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть' }))
+        expect(within(dialog).getByText('Дорофей Гришин')).toBeInTheDocument()
+        expect(dialog.querySelector('[aria-busy="true"]')).toBeNull()
+
+        // для чужого сообщения пункт «Кто прочитал» не показывается
+        fireEvent.contextMenu(screen.getAllByText('Привет! Как дела?').at(-1)!)
+        expect(screen.queryByRole('menuitem', { name: 'Кто прочитал' })).toBeNull()
+    })
+
+    it('opens message actions via keyboard, trigger button, and touch long-press', () => {
+        vi.useFakeTimers()
+        try {
+            renderWindow()
+            const body = screen.getByText('Отвечаю').closest('[tabindex="0"]') as HTMLElement
+            body.focus()
+
+            // клавиатура: Enter открывает меню, Esc закрывает и возвращает фокус
+            fireEvent.keyDown(body, { key: 'Enter' })
+            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+            fireEvent.keyDown(document, { key: 'Escape' })
+            expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
+            expect(document.activeElement).toBe(body)
+
+            // кнопка «⋮» рядом с пузырём
+            const triggers = screen.getAllByRole('button', { name: 'Действия с сообщением' })
+            fireEvent.click(triggers[0]!)
+            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+            fireEvent.click(triggers[0]!)
+            expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
+
+            // долгое нажатие на тач-экране
+            const touchDown = new Event('pointerdown', { bubbles: true })
+            Object.defineProperties(touchDown, {
+                pointerType: { value: 'touch' },
+                clientX: { value: 10 },
+                clientY: { value: 10 },
+            })
+            fireEvent(body, touchDown)
+            act(() => {
+                vi.advanceTimersByTime(450)
+            })
+            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('copies and batch-deletes selected messages in selection mode', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')))
+        vi.stubGlobal('fetch', fetchMock)
+        const writeText = vi.fn(() => Promise.resolve())
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true,
+        })
+
+        const { client } = renderWindow()
+        client.setQueryData(['messages', 'c1'], {
+            pages: [
+                {
+                    items: [
+                        msg('m3', 'me', 'второе'),
+                        msg('m1', 'me', 'первое'),
+                    ],
+                    limit: 50,
+                    next_before: null,
+                },
+            ],
+            pageParams: [undefined],
+        })
+
+        await screen.findByText('первое')
+        // выделяем оба своих сообщения: доступно копирование и удаление
+        fireEvent.contextMenu(screen.getByText('второе'))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Переслать' }))
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать сообщение: первое' }))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Копировать выбранные' }))
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('первое\n\nвторое'))
+        await vi.waitFor(() => expect(screen.queryByText(/Выбрано:/)).toBeNull())
+
+        // теперь массово удаляем
+        fireEvent.contextMenu(screen.getByText('второе'))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Переслать' }))
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать сообщение: первое' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить выбранные' }))
+
+        const dialog = screen.getByRole('dialog', { name: 'Удалить сообщения?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/messages/delete',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ message_ids: ['m3', 'm1'] }),
+                }),
+            ),
+        )
+        await vi.waitFor(() => expect(screen.queryByText(/Выбрано:/)).toBeNull())
     })
 })

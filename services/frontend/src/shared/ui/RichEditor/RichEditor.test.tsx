@@ -146,17 +146,39 @@ describe('RichEditor', () => {
         expect(last(onChange)).toEqual({ text: 'abc', entities: [] })
     })
 
-    it('pastes plain text only, with line breaks', () => {
+    it('pastes plain text with line breaks when clipboard has no rich formatting', () => {
         const { field, onChange } = setup()
         type(field, 'ac')
         setSelectionOffsets(field, 1)
         fireEvent.paste(field, {
             clipboardData: {
-                getData: (type: string) => (type === 'text/plain' ? 'X\nY' : '<b>жирный</b>'),
+                getData: (type: string) => (type === 'text/plain' ? 'X\nY' : '<span>обычный</span>'),
             },
         })
         expect(last(onChange).text).toBe('aX\nYc')
         expect(field.querySelector('b')).toBeNull()
+    })
+
+    it('pastes supported formatting from HTML clipboard and drops unsafe markup', () => {
+        const { field, onChange } = setup()
+        type(field, 'ac')
+        setSelectionOffsets(field, 1)
+        fireEvent.paste(field, {
+            clipboardData: {
+                getData: (type: string) =>
+                    type === 'text/html'
+                        ? '<script>bad()</script><b>жирный</b> и <i>курсив</i>'
+                        : 'жирный и курсив',
+            },
+        })
+        expect(last(onChange)).toEqual({
+            text: 'aжирный и курсивc',
+            entities: [
+                { type: 'bold', offset: 1, length: 6 },
+                { type: 'italic', offset: 10, length: 6 },
+            ],
+        })
+        expect(field.querySelector('script')).toBeNull()
     })
 
     it('inserts at the caret through the handle and keeps the caret after it', () => {

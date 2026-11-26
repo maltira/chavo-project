@@ -494,3 +494,58 @@ func TestReadEventInDirectWhenReaderMarksOwnMessage(t *testing.T) {
 		t.Fatalf("authors = %v, want [%s]", got, a)
 	}
 }
+
+func TestDeleteBatch(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	a, b := uuid.New(), uuid.New()
+
+	m1, err := e.msgs.Send(ctx, a, service.SendMessageInput{RecipientID: &b, Content: "один"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conv := m1.ConversationID
+	m2, err := e.msgs.Send(ctx, a, service.SendMessageInput{ConversationID: &conv, Content: "два"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m3, err := e.msgs.Send(ctx, b, service.SendMessageInput{ConversationID: &conv, Content: "чужое"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// пустой список отклоняется
+	if err = e.msgs.DeleteBatch(ctx, a, nil); !errors.Is(err, apperror.ErrIncorrectData) {
+		t.Fatalf("empty = %v, want ErrIncorrectData", err)
+	}
+	// попытка удалить чужое в личке откатывает весь пакет
+	if err = e.msgs.DeleteBatch(ctx, a, []uuid.UUID{m1.ID, m3.ID}); !errors.Is(err, apperror.ErrForbidden) {
+		t.Fatalf("forbidden = %v, want ErrForbidden", err)
+	}
+	// m1 не удалилось после отката
+	list, err := e.msgs.List(ctx, a, conv, nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range list {
+		if m.ID == m1.ID && m.IsDeleted {
+			t.Fatal("m1 should stay intact after rollback")
+		}
+	}
+
+	// пакет своих сообщений удаляется целиком (с дедупликацией)
+	if err = e.msgs.DeleteBatch(ctx, a, []uuid.UUID{m1.ID, m2.ID, m1.ID}); err != nil {
+		t.Fatalf("delete batch: %v", err)
+	}
+	list, err = e.msgs.List(ctx, a, conv, nil, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted := map[uuid.UUID]bool{}
+	for _, m := range list {
+		deleted[m.ID] = m.IsDeleted
+	}
+	if !deleted[m1.ID] || !deleted[m2.ID] || deleted[m3.ID] {
+		t.Fatalf("deleted map = %v, want m1=true m2=true m3=false", deleted)
+	}
+}

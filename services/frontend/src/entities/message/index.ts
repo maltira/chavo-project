@@ -1,8 +1,10 @@
 export {
     deleteMessage,
+    deleteMessages,
     editMessage,
     forwardMessages,
     getMessage,
+    getMessageReaders,
     MAX_FORWARD_CHATS,
     MAX_FORWARD_MESSAGES,
     getMessages,
@@ -19,7 +21,10 @@ export {
     removeMessage,
     replaceMessage,
 } from './model/cache'
+export { getDraft, useDraft, useDrafts } from './model/drafts'
+export type { DraftReply, MessageDraft } from './model/drafts'
 export { useMessages } from './model/useMessages'
+export { readersKey, useReaders } from './model/useReaders'
 export { getPins, pinMessage, unpinMessage } from './api/pins'
 export type { PinnedMessage, PinScope } from './api/pins'
 export { applyPinsEvent, pinsKey, usePins } from './model/usePins'

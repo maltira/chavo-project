@@ -55,7 +55,7 @@ func TestSetupAndConfirmTOTPRejectedWhenAlreadyEnabled(t *testing.T) {
 			},
 		},
 	}
-	svc := NewAuthService(users, nil, nil, nil, nil, nil, nil, nil, nil, nil, &config.Config{}, zap.NewNop())
+	svc := NewAuthService(users, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &config.Config{}, zap.NewNop())
 
 	if _, _, err := svc.SetupTOTP(context.Background(), uid, "Secret123!"); !errors.Is(err, apperror.ErrTOTPAlreadyEnabled) {
 		t.Fatalf("SetupTOTP on enabled TOTP = %v, want ErrTOTPAlreadyEnabled", err)
@@ -115,7 +115,7 @@ func TestGenerateTokensRejectedForDeletedUser(t *testing.T) {
 	}
 	svc := newTestTokenService(&repo.memTokens)
 	_ = svc
-	tokenSvc := NewTokenService(repo, nil, nil, &config.Config{JWTSecret: "test"}, zap.NewNop())
+	tokenSvc := NewTokenService(repo, nil, nil, nil, nil, &config.Config{JWTSecret: "test"}, zap.NewNop())
 
 	if _, err := tokenSvc.GenerateTokens(context.Background(), uuid.New(), "", "", ""); !errors.Is(err, apperror.ErrUnauthorized) {
 		t.Fatalf("GenerateTokens for deleted user = %v, want ErrUnauthorized", err)

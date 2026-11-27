@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/repository"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/utils"
-	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
 )
 
 const (
@@ -45,26 +45,32 @@ type TokenService interface {
 }
 
 type tokenService struct {
-	repo     repository.TokenRepository
-	rdb      *redis.Client
-	producer *kafka.Producer
-	cfg      *config.Config
-	log      *zap.Logger
+	repo         repository.TokenRepository
+	outboxRepo   repository.OutboxRepository
+	pool         *pgxpool.Pool
+	rdb          *redis.Client
+	notifyOutbox func()
+	cfg          *config.Config
+	log          *zap.Logger
 }
 
 func NewTokenService(
 	repo repository.TokenRepository,
+	outboxRepo repository.OutboxRepository,
+	pool *pgxpool.Pool,
 	rdb *redis.Client,
-	producer *kafka.Producer,
+	notifyOutbox func(),
 	cfg *config.Config,
 	log *zap.Logger,
 ) TokenService {
 	return &tokenService{
-		repo:     repo,
-		rdb:      rdb,
-		producer: producer,
-		cfg:      cfg,
-		log:      log,
+		repo:         repo,
+		outboxRepo:   outboxRepo,
+		pool:         pool,
+		rdb:          rdb,
+		notifyOutbox: notifyOutbox,
+		cfg:          cfg,
+		log:          log,
 	}
 }
 
@@ -222,40 +228,46 @@ func (s *tokenService) revoke(ctx context.Context, userID, sessionID uuid.UUID, 
 		return apperror.ErrForbidden
 	}
 
-	if err = s.repo.RevokeByID(ctx, sessionID); err != nil {
-		return err
+	if s.pool != nil && s.outboxRepo != nil {
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin revoke tx: %w", err)
+		}
+		defer tx.Rollback(ctx)
+
+		if err = s.repo.RevokeByIDTx(ctx, tx, sessionID); err != nil {
+			return err
+		}
+		ev := events.NewEvent(events.TypeSessionRevoked, events.SessionRevokedPayload{
+			SessionID: sessionID,
+			UserID:    userID,
+			Reason:    reason,
+		})
+		if err = s.outboxRepo.InsertTx(ctx, tx, events.TopicAuthEvents, userID.String(), ev); err != nil {
+			return err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit revoke tx: %w", err)
+		}
+		if s.notifyOutbox != nil {
+			s.notifyOutbox()
+		}
+	} else {
+		if err = s.repo.RevokeByID(ctx, sessionID); err != nil {
+			return err
+		}
 	}
 
-	// Удаляем из Redis
-	_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
-
-	// Публикуем событие в Kafka
-	s.publishRevokedEvent(ctx, sessionID, userID, reason)
+	// удаляем из Redis
+	if s.rdb != nil {
+		_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
+	}
 
 	return nil
 }
 
 func (s *tokenService) ListActiveSessions(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error) {
 	return s.repo.ListActiveByUser(ctx, userID)
-}
-
-func (s *tokenService) publishRevokedEvent(ctx context.Context, sessionID, userID uuid.UUID, reason string) {
-	if s.producer == nil {
-		return
-	}
-
-	ev := events.NewEvent(events.TypeSessionRevoked, events.SessionRevokedPayload{
-		SessionID: sessionID,
-		UserID:    userID,
-		Reason:    reason,
-	})
-
-	if err := s.producer.Publish(ctx, events.TopicAuthEvents, userID.String(), ev); err != nil {
-		s.log.Error("Failed to publish session.revoked event",
-			zap.String("session_id", sessionID.String()),
-			zap.Error(err),
-		)
-	}
 }
 
 func truncate(s string, maxLen int) string {

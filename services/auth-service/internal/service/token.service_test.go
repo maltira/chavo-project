@@ -63,6 +63,10 @@ func (m *memTokens) RevokeByID(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (m *memTokens) RevokeByIDTx(ctx context.Context, _ pgx.Tx, id uuid.UUID) error {
+	return m.RevokeByID(ctx, id)
+}
+
 func (m *memTokens) Rotate(_ context.Context, id uuid.UUID, oldHash, newHash string, exp time.Time, _, _, _ *string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -86,7 +90,7 @@ func newTestTokenService(repo *memTokens) TokenService {
 	// Redis недоступен: запись whitelist только логируется, логика сессий от неё не зависит.
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 50 * time.Millisecond, MaxRetries: -1})
 	cfg := &config.Config{JWTSecret: "test", AccessTokenDuration: time.Minute, RefreshTokenDuration: time.Hour}
-	return NewTokenService(repo, rdb, nil, cfg, zap.NewNop())
+	return NewTokenService(repo, nil, nil, rdb, nil, cfg, zap.NewNop())
 }
 
 func TestRefreshKeepsSessionID(t *testing.T) {

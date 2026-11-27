@@ -19,6 +19,7 @@ type TokenRepository interface {
 	FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*models.RefreshToken, error)
 	RevokeByID(ctx context.Context, id uuid.UUID) error
+	RevokeByIDTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) error
 	// Rotate заменяет refresh-токен действующей сессии, если её хэш всё ещё oldHash; false — токен уже сменили или отозвали.
 	Rotate(ctx context.Context, id uuid.UUID, oldHash, newHash string, expiresAt time.Time, ip, userAgent, device *string) (bool, error)
 	RevokeAllByUserTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, excludeID *uuid.UUID) ([]uuid.UUID, error)
@@ -77,6 +78,18 @@ func (r *tokenRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.R
 
 func (r *tokenRepository) RevokeByID(ctx context.Context, id uuid.UUID) error {
 	ct, err := r.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return apperror.ErrNotFound
+	}
+	return nil
+}
+
+func (r *tokenRepository) RevokeByIDTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	ct, err := tx.Exec(ctx,
 		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, id)
 	if err != nil {
 		return err

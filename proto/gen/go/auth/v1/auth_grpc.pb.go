@@ -19,19 +19,25 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_Register_FullMethodName             = "/auth.v1.AuthService/Register"
-	AuthService_VerifyRegister_FullMethodName       = "/auth.v1.AuthService/VerifyRegister"
-	AuthService_Login_FullMethodName                = "/auth.v1.AuthService/Login"
-	AuthService_VerifyOTP_FullMethodName            = "/auth.v1.AuthService/VerifyOTP"
-	AuthService_ResendOTP_FullMethodName            = "/auth.v1.AuthService/ResendOTP"
-	AuthService_Refresh_FullMethodName              = "/auth.v1.AuthService/Refresh"
-	AuthService_Logout_FullMethodName               = "/auth.v1.AuthService/Logout"
-	AuthService_RequestPasswordReset_FullMethodName = "/auth.v1.AuthService/RequestPasswordReset"
-	AuthService_ConfirmPasswordReset_FullMethodName = "/auth.v1.AuthService/ConfirmPasswordReset"
-	AuthService_ChangePassword_FullMethodName       = "/auth.v1.AuthService/ChangePassword"
-	AuthService_ListSessions_FullMethodName         = "/auth.v1.AuthService/ListSessions"
-	AuthService_TerminateSession_FullMethodName     = "/auth.v1.AuthService/TerminateSession"
-	AuthService_ResolveSession_FullMethodName       = "/auth.v1.AuthService/ResolveSession"
+	AuthService_Register_FullMethodName              = "/auth.v1.AuthService/Register"
+	AuthService_VerifyRegister_FullMethodName        = "/auth.v1.AuthService/VerifyRegister"
+	AuthService_Login_FullMethodName                 = "/auth.v1.AuthService/Login"
+	AuthService_VerifyOTP_FullMethodName             = "/auth.v1.AuthService/VerifyOTP"
+	AuthService_ResendOTP_FullMethodName             = "/auth.v1.AuthService/ResendOTP"
+	AuthService_Refresh_FullMethodName               = "/auth.v1.AuthService/Refresh"
+	AuthService_Logout_FullMethodName                = "/auth.v1.AuthService/Logout"
+	AuthService_RequestPasswordReset_FullMethodName  = "/auth.v1.AuthService/RequestPasswordReset"
+	AuthService_ConfirmPasswordReset_FullMethodName  = "/auth.v1.AuthService/ConfirmPasswordReset"
+	AuthService_ChangePassword_FullMethodName        = "/auth.v1.AuthService/ChangePassword"
+	AuthService_ListSessions_FullMethodName          = "/auth.v1.AuthService/ListSessions"
+	AuthService_TerminateSession_FullMethodName      = "/auth.v1.AuthService/TerminateSession"
+	AuthService_ResolveSession_FullMethodName        = "/auth.v1.AuthService/ResolveSession"
+	AuthService_GetTwoFactor_FullMethodName          = "/auth.v1.AuthService/GetTwoFactor"
+	AuthService_SetupTOTP_FullMethodName             = "/auth.v1.AuthService/SetupTOTP"
+	AuthService_ConfirmTOTP_FullMethodName           = "/auth.v1.AuthService/ConfirmTOTP"
+	AuthService_SwitchTwoFactorMethod_FullMethodName = "/auth.v1.AuthService/SwitchTwoFactorMethod"
+	AuthService_RegenerateBackupCodes_FullMethodName = "/auth.v1.AuthService/RegenerateBackupCodes"
+	AuthService_DeleteAccount_FullMethodName         = "/auth.v1.AuthService/DeleteAccount"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -55,6 +61,14 @@ type AuthServiceClient interface {
 	TerminateSession(ctx context.Context, in *TerminateSessionRequest, opts ...grpc.CallOption) (*TerminateSessionResponse, error)
 	// ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway)
 	ResolveSession(ctx context.Context, in *ResolveSessionRequest, opts ...grpc.CallOption) (*ResolveSessionResponse, error)
+	// Двухфакторная аутентификация (обязательная: email или totp)
+	GetTwoFactor(ctx context.Context, in *GetTwoFactorRequest, opts ...grpc.CallOption) (*GetTwoFactorResponse, error)
+	SetupTOTP(ctx context.Context, in *SetupTOTPRequest, opts ...grpc.CallOption) (*SetupTOTPResponse, error)
+	ConfirmTOTP(ctx context.Context, in *ConfirmTOTPRequest, opts ...grpc.CallOption) (*ConfirmTOTPResponse, error)
+	SwitchTwoFactorMethod(ctx context.Context, in *SwitchTwoFactorMethodRequest, opts ...grpc.CallOption) (*SwitchTwoFactorMethodResponse, error)
+	RegenerateBackupCodes(ctx context.Context, in *RegenerateBackupCodesRequest, opts ...grpc.CallOption) (*RegenerateBackupCodesResponse, error)
+	// Необратимое удаление аккаунта
+	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*DeleteAccountResponse, error)
 }
 
 type authServiceClient struct {
@@ -195,6 +209,66 @@ func (c *authServiceClient) ResolveSession(ctx context.Context, in *ResolveSessi
 	return out, nil
 }
 
+func (c *authServiceClient) GetTwoFactor(ctx context.Context, in *GetTwoFactorRequest, opts ...grpc.CallOption) (*GetTwoFactorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTwoFactorResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetTwoFactor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) SetupTOTP(ctx context.Context, in *SetupTOTPRequest, opts ...grpc.CallOption) (*SetupTOTPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetupTOTPResponse)
+	err := c.cc.Invoke(ctx, AuthService_SetupTOTP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ConfirmTOTP(ctx context.Context, in *ConfirmTOTPRequest, opts ...grpc.CallOption) (*ConfirmTOTPResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmTOTPResponse)
+	err := c.cc.Invoke(ctx, AuthService_ConfirmTOTP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) SwitchTwoFactorMethod(ctx context.Context, in *SwitchTwoFactorMethodRequest, opts ...grpc.CallOption) (*SwitchTwoFactorMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SwitchTwoFactorMethodResponse)
+	err := c.cc.Invoke(ctx, AuthService_SwitchTwoFactorMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) RegenerateBackupCodes(ctx context.Context, in *RegenerateBackupCodesRequest, opts ...grpc.CallOption) (*RegenerateBackupCodesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegenerateBackupCodesResponse)
+	err := c.cc.Invoke(ctx, AuthService_RegenerateBackupCodes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*DeleteAccountResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAccountResponse)
+	err := c.cc.Invoke(ctx, AuthService_DeleteAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -216,6 +290,14 @@ type AuthServiceServer interface {
 	TerminateSession(context.Context, *TerminateSessionRequest) (*TerminateSessionResponse, error)
 	// ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway)
 	ResolveSession(context.Context, *ResolveSessionRequest) (*ResolveSessionResponse, error)
+	// Двухфакторная аутентификация (обязательная: email или totp)
+	GetTwoFactor(context.Context, *GetTwoFactorRequest) (*GetTwoFactorResponse, error)
+	SetupTOTP(context.Context, *SetupTOTPRequest) (*SetupTOTPResponse, error)
+	ConfirmTOTP(context.Context, *ConfirmTOTPRequest) (*ConfirmTOTPResponse, error)
+	SwitchTwoFactorMethod(context.Context, *SwitchTwoFactorMethodRequest) (*SwitchTwoFactorMethodResponse, error)
+	RegenerateBackupCodes(context.Context, *RegenerateBackupCodesRequest) (*RegenerateBackupCodesResponse, error)
+	// Необратимое удаление аккаунта
+	DeleteAccount(context.Context, *DeleteAccountRequest) (*DeleteAccountResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -264,6 +346,24 @@ func (UnimplementedAuthServiceServer) TerminateSession(context.Context, *Termina
 }
 func (UnimplementedAuthServiceServer) ResolveSession(context.Context, *ResolveSessionRequest) (*ResolveSessionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResolveSession not implemented")
+}
+func (UnimplementedAuthServiceServer) GetTwoFactor(context.Context, *GetTwoFactorRequest) (*GetTwoFactorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTwoFactor not implemented")
+}
+func (UnimplementedAuthServiceServer) SetupTOTP(context.Context, *SetupTOTPRequest) (*SetupTOTPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetupTOTP not implemented")
+}
+func (UnimplementedAuthServiceServer) ConfirmTOTP(context.Context, *ConfirmTOTPRequest) (*ConfirmTOTPResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmTOTP not implemented")
+}
+func (UnimplementedAuthServiceServer) SwitchTwoFactorMethod(context.Context, *SwitchTwoFactorMethodRequest) (*SwitchTwoFactorMethodResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SwitchTwoFactorMethod not implemented")
+}
+func (UnimplementedAuthServiceServer) RegenerateBackupCodes(context.Context, *RegenerateBackupCodesRequest) (*RegenerateBackupCodesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegenerateBackupCodes not implemented")
+}
+func (UnimplementedAuthServiceServer) DeleteAccount(context.Context, *DeleteAccountRequest) (*DeleteAccountResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAccount not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -520,6 +620,114 @@ func _AuthService_ResolveSession_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_GetTwoFactor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTwoFactorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetTwoFactor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetTwoFactor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetTwoFactor(ctx, req.(*GetTwoFactorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_SetupTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetupTOTPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).SetupTOTP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_SetupTOTP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).SetupTOTP(ctx, req.(*SetupTOTPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ConfirmTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmTOTPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ConfirmTOTP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ConfirmTOTP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ConfirmTOTP(ctx, req.(*ConfirmTOTPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_SwitchTwoFactorMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SwitchTwoFactorMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).SwitchTwoFactorMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_SwitchTwoFactorMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).SwitchTwoFactorMethod(ctx, req.(*SwitchTwoFactorMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_RegenerateBackupCodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegenerateBackupCodesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).RegenerateBackupCodes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_RegenerateBackupCodes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).RegenerateBackupCodes(ctx, req.(*RegenerateBackupCodesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_DeleteAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAccountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).DeleteAccount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_DeleteAccount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).DeleteAccount(ctx, req.(*DeleteAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -578,6 +786,30 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolveSession",
 			Handler:    _AuthService_ResolveSession_Handler,
+		},
+		{
+			MethodName: "GetTwoFactor",
+			Handler:    _AuthService_GetTwoFactor_Handler,
+		},
+		{
+			MethodName: "SetupTOTP",
+			Handler:    _AuthService_SetupTOTP_Handler,
+		},
+		{
+			MethodName: "ConfirmTOTP",
+			Handler:    _AuthService_ConfirmTOTP_Handler,
+		},
+		{
+			MethodName: "SwitchTwoFactorMethod",
+			Handler:    _AuthService_SwitchTwoFactorMethod_Handler,
+		},
+		{
+			MethodName: "RegenerateBackupCodes",
+			Handler:    _AuthService_RegenerateBackupCodes_Handler,
+		},
+		{
+			MethodName: "DeleteAccount",
+			Handler:    _AuthService_DeleteAccount_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

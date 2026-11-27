@@ -30,6 +30,14 @@ type fakeProfiles struct {
 
 func (f *fakeProfiles) FindByID(_ context.Context, id uuid.UUID) (*models.Profile, error) {
 	p, ok := f.byID[id]
+	if !ok || p.DeletedAt != nil {
+		return nil, apperror.ErrNotFound
+	}
+	return &p, nil
+}
+
+func (f *fakeProfiles) FindByIDIncludeDeleted(_ context.Context, id uuid.UUID) (*models.Profile, error) {
+	p, ok := f.byID[id]
 	if !ok {
 		return nil, apperror.ErrNotFound
 	}
@@ -605,5 +613,50 @@ func TestAvatarHistoryRPC(t *testing.T) {
 	bad := "nope"
 	if _, err = api.DeleteAvatar(as(me), &userv1.DeleteAvatarRequest{AvatarId: &bad}); grpcxCode(err) != codes.InvalidArgument {
 		t.Fatalf("bad photo id: %v", err)
+	}
+}
+
+func TestDeletedProfileDisplayAndMessagingBlocked(t *testing.T) {
+	d := newDeps()
+	viewer, deleted := uuid.New(), uuid.New()
+	now := time.Now().UTC()
+	bio := "old bio"
+	avatar := "/media/avatars/old.jpg"
+	d.profiles.byID[viewer] = models.Profile{UserID: viewer, Username: "alice", DisplayName: "Alice"}
+	d.profiles.byID[deleted] = models.Profile{
+		UserID:      deleted,
+		Username:    "old_user",
+		DisplayName: "Old Name",
+		Bio:         &bio,
+		AvatarURL:   &avatar,
+		Status:      &models.Status{Icon: "moon", Text: "Hi", Background: "#000000", Foreground: "#FFFFFF"},
+		AvatarShape: &models.AvatarShape{Shape: "circle", Color: "#000000"},
+		LastSeenAt:  now,
+		DeletedAt:   &now,
+	}
+	d.presence.online[deleted] = true
+	d.settings.show[deleted] = true
+	users, internal := start(t, d)
+
+	got, err := users.GetProfile(as(viewer), &userv1.GetProfileRequest{UserId: deleted.String()})
+	if err != nil {
+		t.Fatalf("GetProfile deleted: %v", err)
+	}
+	p := got.GetProfile()
+	if !p.GetIsDeleted() || p.GetDisplayName() != "Удалённый аккаунт" || p.GetUsername() != "" {
+		t.Fatalf("unexpected deleted profile: %+v", p)
+	}
+	if p.Bio != nil || p.AvatarUrl != nil || p.Status != nil || p.AvatarShape != nil || p.GetOnline() || p.LastSeenAt != nil {
+		t.Fatalf("deleted profile leaks private fields: %+v", p)
+	}
+
+	if _, err := users.GetMe(as(deleted), &userv1.GetMeRequest{}); grpcxCode(err) != codes.NotFound {
+		t.Fatalf("GetMe deleted must return NotFound, got %v", err)
+	}
+	if exists, err := internal.UserExists(context.Background(), &userv1.UserExistsRequest{UserId: deleted.String()}); err != nil || exists.GetExists() {
+		t.Fatalf("UserExists deleted: %v %v", exists, err)
+	}
+	if allowed, err := internal.MessagingAllowed(context.Background(), &userv1.MessagingAllowedRequest{SenderId: viewer.String(), RecipientId: deleted.String()}); err != nil || allowed.GetAllowed() {
+		t.Fatalf("MessagingAllowed deleted: %v %v", allowed, err)
 	}
 }

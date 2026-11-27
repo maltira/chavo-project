@@ -37,14 +37,30 @@ func (r *tokenRepository) Save(ctx context.Context, token *models.RefreshToken) 
 	if token.ID == uuid.Nil {
 		token.ID = uuid.New()
 	}
-	_, err := r.pool.Exec(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin save token tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// FOR SHARE сериализует выдачу сессии с SoftDeleteTx (UPDATE users берёт FOR UPDATE)
+	var active int
+	if err = tx.QueryRow(ctx, `SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, token.UserID).Scan(&active); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperror.ErrUnauthorized
+		}
+		return fmt.Errorf("check active user: %w", err)
+	}
+	if _, err = tx.Exec(ctx,
 		`INSERT INTO refresh_tokens (id, user_id, token_hash, device_name, user_agent, ip_address, expires_at, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
 		token.ID, token.UserID, token.TokenHash,
 		token.DeviceName, token.UserAgent, token.IPAddress,
 		token.ExpiresAt,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *tokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
@@ -143,7 +159,27 @@ func (r *tokenRepository) scanToken(ctx context.Context, query string, args ...a
 }
 
 func (r *tokenRepository) Rotate(ctx context.Context, id uuid.UUID, oldHash, newHash string, expiresAt time.Time, ip, userAgent, device *string) (bool, error) {
-	ct, err := r.pool.Exec(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin rotate token tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// блокируем активного пользователя FOR SHARE, чтобы ротация не обогнала удаление аккаунта
+	var userID uuid.UUID
+	if err = tx.QueryRow(ctx,
+		`SELECT u.id FROM refresh_tokens rt
+		 JOIN users u ON u.id = rt.user_id
+		 WHERE rt.id = $1 AND u.deleted_at IS NULL
+		 FOR SHARE OF u`, id,
+	).Scan(&userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("lock active user for rotate: %w", err)
+	}
+
+	ct, err := tx.Exec(ctx,
 		`UPDATE refresh_tokens
 		 SET token_hash = $3, expires_at = $4,
 		     ip_address = COALESCE($5::inet, ip_address),
@@ -153,6 +189,9 @@ func (r *tokenRepository) Rotate(ctx context.Context, id uuid.UUID, oldHash, new
 		id, oldHash, newHash, expiresAt, ip, userAgent, device)
 	if err != nil {
 		return false, fmt.Errorf("rotate refresh token: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit rotate token tx: %w", err)
 	}
 	return ct.RowsAffected() == 1, nil
 }

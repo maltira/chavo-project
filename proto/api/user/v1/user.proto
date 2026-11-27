@@ -71,6 +71,8 @@ message Profile {
   status.v1.Status status = 10;
   // не задана - фигуры нет или она скрыта от заблокированного
   avatarshape.v1.AvatarShape avatar_shape = 11;
+  // аккаунт удалён: показывается как «Удалённый аккаунт» без username и фото
+  bool is_deleted = 12;
 }
 
 message AvatarPhoto {

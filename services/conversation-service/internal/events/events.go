@@ -9,6 +9,9 @@ import (
 const (
 	TopicConversationEvents = "conversation-events"
 	TopicMessageEvents      = "message-events"
+	TopicAuthEvents         = "auth-events"
+
+	TypeAccountDeleted = "user.account_deleted"
 
 	TypeConversationCreated = "conversation.created"
 	TypeConversationUpdated = "conversation.updated"

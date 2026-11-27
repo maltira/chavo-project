@@ -134,6 +134,12 @@ type ConversationRepository interface {
 	// FindBySlug ищет открытую группу по коду ссылки без учёта регистра; ErrNotFound, если такой нет
 	FindBySlug(ctx context.Context, q DBTX, slug string) (*models.Conversation, error)
 	SearchPublicGroups(ctx context.Context, q DBTX, userID uuid.UUID, query string, limit, offset int) ([]models.PublicGroup, error)
+	// UserGroupIDs возвращает ID всех групп, в которых состоит пользователь (direct не включаются)
+	UserGroupIDs(ctx context.Context, q DBTX, userID uuid.UUID) ([]uuid.UUID, error)
+	// OldestOtherMember возвращает самого раннего участника группы, кроме excludeUserID
+	OldestOtherMember(ctx context.Context, q DBTX, convID, excludeUserID uuid.UUID) (uuid.UUID, bool, error)
+	// DeletePendingJoinRequestsByUser удаляет активные заявки пользователя на вступление в группы
+	DeletePendingJoinRequestsByUser(ctx context.Context, q DBTX, userID uuid.UUID) error
 }
 
 type NewGroup struct {
@@ -712,6 +718,54 @@ func (r *conversationRepository) SetAvatarShape(ctx context.Context, q DBTX, con
 func (r *conversationRepository) ClearAvatarShape(ctx context.Context, q DBTX, convID uuid.UUID) error {
 	if _, err := q.Exec(ctx, `DELETE FROM conversation_avatar_shapes WHERE conversation_id = $1`, convID); err != nil {
 		return fmt.Errorf("clear group avatar shape: %w", err)
+	}
+	return nil
+}
+
+func (r *conversationRepository) UserGroupIDs(ctx context.Context, q DBTX, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx,
+		`SELECT c.id
+		 FROM conversation_members cm
+		 JOIN conversations c ON c.id = cm.conversation_id
+		 WHERE cm.user_id = $1 AND c.conversation_type = 'group'
+		 ORDER BY c.id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user group ids: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan user group id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *conversationRepository) OldestOtherMember(ctx context.Context, q DBTX, convID, excludeUserID uuid.UUID) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	err := q.QueryRow(ctx,
+		`SELECT user_id
+		 FROM conversation_members
+		 WHERE conversation_id = $1 AND user_id <> $2
+		 ORDER BY joined_at ASC, user_id ASC
+		 LIMIT 1`, convID, excludeUserID).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, false, nil
+		}
+		return uuid.Nil, false, fmt.Errorf("oldest other member: %w", err)
+	}
+	return id, true, nil
+}
+
+func (r *conversationRepository) DeletePendingJoinRequestsByUser(ctx context.Context, q DBTX, userID uuid.UUID) error {
+	if _, err := q.Exec(ctx,
+		`DELETE FROM conversation_join_requests WHERE user_id = $1 AND request_status = 'pending'`, userID); err != nil {
+		return fmt.Errorf("delete pending join requests by user: %w", err)
 	}
 	return nil
 }

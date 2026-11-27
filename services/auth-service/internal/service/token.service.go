@@ -99,6 +99,9 @@ func (s *tokenService) GenerateTokens(ctx context.Context, userID uuid.UUID, ip,
 		ExpiresAt:  expiresAt,
 	}
 	if err = s.repo.Save(ctx, rt); err != nil {
+		if errors.Is(err, apperror.ErrUnauthorized) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("save refresh token to db: %w", err)
 	}
 	return s.issue(ctx, rt.UserID, rt.ID, plainRefreshToken, expiresAt)
@@ -117,6 +120,12 @@ func (s *tokenService) issue(ctx context.Context, userID, sessionID uuid.UUID, r
 	}
 	if err = s.rdb.Set(ctx, SessionKeyPrefix+sessionID.String(), userID.String(), ttl).Err(); err != nil {
 		s.log.Error("Failed to cache session in Redis", zap.String("session_id", sessionID.String()), zap.Error(err))
+	}
+
+	// страховка от гонки с удалением аккаунта между Save/Rotate и записью ключа в Redis
+	if current, err := s.repo.FindByID(ctx, sessionID); err == nil && current.RevokedAt != nil {
+		_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
+		return nil, apperror.ErrUnauthorized
 	}
 
 	return &Tokens{

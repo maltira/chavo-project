@@ -31,14 +31,15 @@ import (
 )
 
 type App struct {
-	cfg      *config.Config
-	log      *zap.Logger
-	pool     *pgxpool.Pool
-	rdb      *redis.Client
-	producer *pkgkafka.Producer
-	consumer *consumer.PresenceConsumer
-	server   *grpc.Server
-	health   *health.Server
+	cfg          *config.Config
+	log          *zap.Logger
+	pool         *pgxpool.Pool
+	rdb          *redis.Client
+	producer     *pkgkafka.Producer
+	consumer     *consumer.PresenceConsumer
+	authConsumer *consumer.AuthConsumer
+	server       *grpc.Server
+	health       *health.Server
 }
 
 func New() (*App, error) {
@@ -86,14 +87,15 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg:      cfg,
-		log:      log,
-		pool:     pool,
-		rdb:      rdb,
-		producer: producer,
-		consumer: consumer.NewPresenceConsumer(cfg.KafkaBrokers, profileSvc, log),
-		server:   server,
-		health:   healthSrv,
+		cfg:          cfg,
+		log:          log,
+		pool:         pool,
+		rdb:          rdb,
+		producer:     producer,
+		consumer:     consumer.NewPresenceConsumer(cfg.KafkaBrokers, profileSvc, log),
+		authConsumer: consumer.NewAuthConsumer(cfg.KafkaBrokers, profileSvc, log),
+		server:       server,
+		health:       healthSrv,
 	}, nil
 }
 
@@ -117,10 +119,14 @@ func (a *App) Start() error {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		a.consumer.Run(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		a.authConsumer.Run(ctx)
 	}()
 
 	serverErr := make(chan error, 1)
@@ -160,6 +166,9 @@ func (a *App) Start() error {
 func (a *App) Close() {
 	if a.consumer != nil {
 		_ = a.consumer.Close()
+	}
+	if a.authConsumer != nil {
+		_ = a.authConsumer.Close()
 	}
 	if a.producer != nil {
 		_ = a.producer.Close()

@@ -22,6 +22,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/conversation-service/config"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/client/userclient"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/grpcserver"
+	consumer "github.com/maltira/chavo-project-backend/services/conversation-service/internal/kafka"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/outbox"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/repository"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/service"
@@ -34,14 +35,15 @@ import (
 const healthCheckInterval = 10 * time.Second
 
 type App struct {
-	cfg       *config.Config
-	log       *zap.Logger
-	pool      *pgxpool.Pool
-	userConn  *grpc.ClientConn
-	producer  *pkgkafka.Producer
-	publisher *outbox.Publisher
-	server    *grpc.Server
-	health    *health.Server
+	cfg          *config.Config
+	log          *zap.Logger
+	pool         *pgxpool.Pool
+	userConn     *grpc.ClientConn
+	producer     *pkgkafka.Producer
+	publisher    *outbox.Publisher
+	authConsumer *consumer.AuthConsumer
+	server       *grpc.Server
+	health       *health.Server
 }
 
 // New инициализирует инфраструктуру и собирает все зависимости приложения
@@ -85,9 +87,10 @@ func New() (*App, error) {
 	producer := pkgkafka.NewProducer(cfg.KafkaBrokers, log)
 	publisher := outbox.NewPublisher(db, outboxRepo, producer, cipher, log, outbox.DefaultOptions())
 
+	groupSvc := service.NewGroupService(db, convRepo, outboxRepo, users, banRepo, repository.NewAvatarHistoryRepository(), cipher, msgRepo)
 	srv := grpcserver.New(
 		service.NewConversationService(db, convRepo, outboxRepo, cipher),
-		service.NewGroupService(db, convRepo, outboxRepo, users, banRepo, repository.NewAvatarHistoryRepository(), cipher, msgRepo),
+		groupSvc,
 		service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo, cipher, msgRepo),
 		service.NewMessageService(db, convRepo, msgRepo, repository.NewPinRepository(), outboxRepo, users, cipher, log),
 	)
@@ -102,14 +105,15 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg:       cfg,
-		log:       log,
-		pool:      pool,
-		userConn:  userConn,
-		producer:  producer,
-		publisher: publisher,
-		server:    server,
-		health:    healthSrv,
+		cfg:          cfg,
+		log:          log,
+		pool:         pool,
+		userConn:     userConn,
+		producer:     producer,
+		publisher:    publisher,
+		authConsumer: consumer.NewAuthConsumer(cfg.KafkaBrokers, groupSvc, log),
+		server:       server,
+		health:       healthSrv,
 	}, nil
 }
 
@@ -135,7 +139,7 @@ func (a *App) Start() error {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		a.publisher.Run(ctx)
@@ -143,6 +147,10 @@ func (a *App) Start() error {
 	go func() {
 		defer wg.Done()
 		a.watchDatabase(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		a.authConsumer.Run(ctx)
 	}()
 
 	serverErr := make(chan error, 1)
@@ -212,6 +220,9 @@ func (a *App) watchDatabase(ctx context.Context) {
 
 // Close закрывает все открытые соединения и ресурсы.
 func (a *App) Close() {
+	if a.authConsumer != nil {
+		_ = a.authConsumer.Close()
+	}
 	if a.userConn != nil {
 		_ = a.userConn.Close()
 	}

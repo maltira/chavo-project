@@ -131,6 +131,42 @@ func (fakeAuth) ListSessions(context.Context, *authv1.ListSessionsRequest) (*aut
 	return &authv1.ListSessionsResponse{}, nil
 }
 
+func (fakeAuth) GetTwoFactor(context.Context, *authv1.GetTwoFactorRequest) (*authv1.GetTwoFactorResponse, error) {
+	return &authv1.GetTwoFactorResponse{Method: "totp", BackupCodesRemaining: 8}, nil
+}
+
+func (fakeAuth) SetupTOTP(_ context.Context, req *authv1.SetupTOTPRequest) (*authv1.SetupTOTPResponse, error) {
+	if req.GetPassword() == "" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &authv1.SetupTOTPResponse{Secret: "JBSWY3DPEHPK3PXP", OtpauthUrl: "otpauth://totp/Chavo:u@example.com?secret=JBSWY3DPEHPK3PXP"}, nil
+}
+
+func (fakeAuth) ConfirmTOTP(_ context.Context, req *authv1.ConfirmTOTPRequest) (*authv1.ConfirmTOTPResponse, error) {
+	if req.GetCode() == "" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &authv1.ConfirmTOTPResponse{BackupCodes: []string{"AAAA-BBBB"}}, nil
+}
+
+func (fakeAuth) SwitchTwoFactorMethod(_ context.Context, req *authv1.SwitchTwoFactorMethodRequest) (*authv1.SwitchTwoFactorMethodResponse, error) {
+	if req.GetMethod() != "email" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &authv1.SwitchTwoFactorMethodResponse{}, nil
+}
+
+func (fakeAuth) RegenerateBackupCodes(context.Context, *authv1.RegenerateBackupCodesRequest) (*authv1.RegenerateBackupCodesResponse, error) {
+	return &authv1.RegenerateBackupCodesResponse{BackupCodes: []string{"CCCC-DDDD"}}, nil
+}
+
+func (fakeAuth) DeleteAccount(_ context.Context, req *authv1.DeleteAccountRequest) (*authv1.DeleteAccountResponse, error) {
+	if req.GetPassword() == "" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &authv1.DeleteAccountResponse{}, nil
+}
+
 type fakeUsers struct {
 	userv1.UnimplementedUserServiceServer
 	userv1.UnimplementedUserInternalServiceServer
@@ -1200,6 +1236,41 @@ func TestDeleteMessagesEndpoint(t *testing.T) {
 		t.Fatalf("delete batch: %d %s", w.Code, w.Body.String())
 	}
 	expect(t, e.do(http.MethodPost, "/api/messages/delete", tok, `{"message_ids":[]}`), http.StatusBadRequest, "")
+}
+
+func TestTwoFactorAndDeleteAccountEndpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, false)
+
+	w := e.do(http.MethodGet, "/api/auth/2fa", tok, "")
+	if w.Code != http.StatusOK || decode(t, w)["method"] != "totp" {
+		t.Fatalf("get 2fa: %d %s", w.Code, w.Body.String())
+	}
+
+	w = e.do(http.MethodPost, "/api/auth/2fa/totp/setup", tok, `{"password":"secret123"}`)
+	if w.Code != http.StatusOK || decode(t, w)["secret"] != "JBSWY3DPEHPK3PXP" {
+		t.Fatalf("setup totp: %d %s", w.Code, w.Body.String())
+	}
+
+	w = e.do(http.MethodPost, "/api/auth/2fa/totp/confirm", tok, `{"code":"123456"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("confirm totp: %d %s", w.Code, w.Body.String())
+	}
+
+	w = e.do(http.MethodPost, "/api/auth/2fa/method", tok, `{"method":"email","password":"secret123","code":"123456"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("switch 2fa: %d %s", w.Code, w.Body.String())
+	}
+
+	w = e.do(http.MethodPost, "/api/auth/2fa/backup-codes/regenerate", tok, `{"password":"secret123","code":"123456"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("regenerate codes: %d %s", w.Code, w.Body.String())
+	}
+
+	w = e.do(http.MethodDelete, "/api/auth/account", tok, `{"password":"secret123"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete account: %d %s", w.Code, w.Body.String())
+	}
 }
 
 func TestUpdateSettingsReturnsSettings(t *testing.T) {

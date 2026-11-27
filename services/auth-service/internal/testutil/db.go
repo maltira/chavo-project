@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 	"time"
 
@@ -54,12 +55,19 @@ func Pool(t *testing.T, schema string) *pgxpool.Pool {
 	t.Cleanup(pool.Close)
 
 	_, file, _, _ := runtime.Caller(0)
-	migration, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../../migrations/auth/000001_init.up.sql"))
-	if err != nil {
-		t.Fatal(err)
+	files, err := filepath.Glob(filepath.Join(filepath.Dir(file), "../../../../migrations/auth/*.up.sql"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("find auth migrations: %v (%d files)", err, len(files))
 	}
-	if _, err = pool.Exec(ctx, string(migration)); err != nil {
-		t.Fatal(err)
+	sort.Strings(files)
+	for _, f := range files {
+		migration, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, string(migration)); err != nil {
+			t.Fatalf("apply %s: %v", filepath.Base(f), err)
+		}
 	}
 	return pool
 }

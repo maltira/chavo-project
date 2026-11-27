@@ -22,28 +22,43 @@ import (
 	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
 )
 
+const (
+	totpPendingKeyPrefix = "auth:totp:pending:"
+	totpPendingTTL       = 10 * time.Minute
+	totpIssuer           = "Chavo"
+	backupCodesCount     = 8
+)
+
 type AuthService interface {
 	Register(ctx context.Context, email, password string) error
 	VerifyRegister(ctx context.Context, token string) error
-	Login(ctx context.Context, email, password string) (challengeID string, err error)
+	Login(ctx context.Context, email, password string) (challengeID, method string, err error)
 	RequestPasswordReset(ctx context.Context, email string) error
 	ConfirmPasswordReset(ctx context.Context, token, newPassword string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error
 	FindByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+
+	GetTwoFactor(ctx context.Context, userID uuid.UUID) (method string, backupRemaining int, err error)
+	SetupTOTP(ctx context.Context, userID uuid.UUID, password string) (secret, otpauthURL string, err error)
+	ConfirmTOTP(ctx context.Context, userID uuid.UUID, code string) ([]string, error)
+	SwitchTwoFactorMethod(ctx context.Context, userID uuid.UUID, method, password, code string) error
+	RegenerateBackupCodes(ctx context.Context, userID uuid.UUID, password, code string) ([]string, error)
+	DeleteAccount(ctx context.Context, userID uuid.UUID, password string, code *string) error
 }
 
 type authService struct {
-	userRepo  repository.UserRepository
-	verRepo   repository.VerificationRepository
-	resetRepo repository.PasswordResetRepository
-	tokenRepo repository.TokenRepository
-	otpSvc    OtpService
-	pool      *pgxpool.Pool
-	rdb       *redis.Client
-	producer  *kafka.Producer
-	mail      email.EmailSender
-	cfg       *config.Config
-	log       *zap.Logger
+	userRepo   repository.UserRepository
+	verRepo    repository.VerificationRepository
+	resetRepo  repository.PasswordResetRepository
+	tokenRepo  repository.TokenRepository
+	backupRepo repository.BackupCodeRepository
+	otpSvc     OtpService
+	pool       *pgxpool.Pool
+	rdb        *redis.Client
+	producer   *kafka.Producer
+	mail       email.EmailSender
+	cfg        *config.Config
+	log        *zap.Logger
 }
 
 func NewAuthService(
@@ -51,6 +66,7 @@ func NewAuthService(
 	verRepo repository.VerificationRepository,
 	resetRepo repository.PasswordResetRepository,
 	tokenRepo repository.TokenRepository,
+	backupRepo repository.BackupCodeRepository,
 	otpSvc OtpService,
 	pool *pgxpool.Pool,
 	rdb *redis.Client,
@@ -60,17 +76,18 @@ func NewAuthService(
 	log *zap.Logger,
 ) AuthService {
 	return &authService{
-		userRepo:  userRepo,
-		verRepo:   verRepo,
-		resetRepo: resetRepo,
-		tokenRepo: tokenRepo,
-		otpSvc:    otpSvc,
-		pool:      pool,
-		rdb:       rdb,
-		producer:  producer,
-		mail:      mail,
-		cfg:       cfg,
-		log:       log,
+		userRepo:   userRepo,
+		verRepo:    verRepo,
+		resetRepo:  resetRepo,
+		tokenRepo:  tokenRepo,
+		backupRepo: backupRepo,
+		otpSvc:     otpSvc,
+		pool:       pool,
+		rdb:        rdb,
+		producer:   producer,
+		mail:       mail,
+		cfg:        cfg,
+		log:        log,
 	}
 }
 
@@ -142,30 +159,34 @@ func (s *authService) VerifyRegister(ctx context.Context, token string) error {
 	return nil
 }
 
-func (s *authService) Login(ctx context.Context, email, password string) (string, error) {
+func (s *authService) Login(ctx context.Context, email, password string) (string, string, error) {
 	user, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, apperror.ErrNotFound) {
-			return "", apperror.ErrInvalidCredentials
+			return "", "", apperror.ErrInvalidCredentials
 		}
-		return "", err
+		return "", "", err
 	}
 
 	if !user.EmailVerified {
-		return "", apperror.ErrAccountNotVerified
+		return "", "", apperror.ErrAccountNotVerified
 	}
 
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
-		return "", apperror.ErrInvalidCredentials
+		return "", "", apperror.ErrInvalidCredentials
 	}
 
-	// Пароль верный -> создаем OTP challenge
-	challengeID, err := s.otpSvc.CreateChallenge(ctx, user.ID, user.Email)
+	method := models.TwoFactorEmail
+	if user.TwoFactorMethod == models.TwoFactorTOTP && len(user.TOTPSecretEnc) > 0 {
+		method = models.TwoFactorTOTP
+	}
+
+	challengeID, err := s.otpSvc.CreateChallenge(ctx, user.ID, user.Email, method)
 	if err != nil {
-		return "", fmt.Errorf("create otp challenge: %w", err)
+		return "", "", fmt.Errorf("create otp challenge: %w", err)
 	}
 
-	return challengeID, nil
+	return challengeID, method, nil
 }
 
 func (s *authService) RequestPasswordReset(ctx context.Context, email string) error {
@@ -326,4 +347,249 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, curr
 
 func (s *authService) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	return s.userRepo.FindByID(ctx, id)
+}
+
+func (s *authService) GetTwoFactor(ctx context.Context, userID uuid.UUID) (string, int, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return "", 0, err
+	}
+	method := user.TwoFactorMethod
+	if method != models.TwoFactorTOTP || len(user.TOTPSecretEnc) == 0 {
+		return models.TwoFactorEmail, 0, nil
+	}
+	remaining, err := s.backupRepo.CountRemaining(ctx, userID)
+	if err != nil {
+		return "", 0, fmt.Errorf("count backup codes: %w", err)
+	}
+	return models.TwoFactorTOTP, remaining, nil
+}
+
+func (s *authService) SetupTOTP(ctx context.Context, userID uuid.UUID, password string) (string, string, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return "", "", err
+	}
+	if user.TwoFactorMethod == models.TwoFactorTOTP {
+		return "", "", apperror.ErrTOTPAlreadyEnabled
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		return "", "", apperror.ErrWrongPassword
+	}
+
+	secret, err := utils.GenerateTOTPSecret()
+	if err != nil {
+		return "", "", err
+	}
+	enc, err := utils.EncryptAESGCM(s.cfg.TOTPEncryptionKey, []byte(secret))
+	if err != nil {
+		return "", "", fmt.Errorf("encrypt pending totp secret: %w", err)
+	}
+	if err = s.rdb.Set(ctx, totpPendingKeyPrefix+userID.String(), enc, totpPendingTTL).Err(); err != nil {
+		return "", "", fmt.Errorf("save pending totp secret: %w", err)
+	}
+	return secret, utils.BuildOTPAuthURL(totpIssuer, user.Email, secret), nil
+}
+
+func (s *authService) ConfirmTOTP(ctx context.Context, userID uuid.UUID, code string) ([]string, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.TwoFactorMethod == models.TwoFactorTOTP {
+		return nil, apperror.ErrTOTPAlreadyEnabled
+	}
+	key := totpPendingKeyPrefix + userID.String()
+	enc, err := s.rdb.Get(ctx, key).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, apperror.ErrTOTPNotPending
+		}
+		return nil, fmt.Errorf("get pending totp secret: %w", err)
+	}
+	secretBytes, err := utils.DecryptAESGCM(s.cfg.TOTPEncryptionKey, enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt pending totp secret: %w", err)
+	}
+	step, ok := utils.ValidateTOTP(string(secretBytes), code, time.Now())
+	if !ok {
+		return nil, apperror.ErrInvalidOTP
+	}
+
+	plainCodes, err := utils.GenerateBackupCodes(backupCodesCount)
+	if err != nil {
+		return nil, err
+	}
+	hashes := make([]string, len(plainCodes))
+	for i, c := range plainCodes {
+		hashes[i] = utils.HashBackupCode(c)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err = s.userRepo.EnableTOTPTx(ctx, tx, userID, enc); err != nil {
+		return nil, err
+	}
+	if err = s.backupRepo.ReplaceAllTx(ctx, tx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("save backup codes: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	_ = s.rdb.Del(ctx, key).Err()
+	usedKey := fmt.Sprintf("%s%s:%d", TOTPUsedKeyPrefix, userID.String(), step)
+	_ = s.rdb.SetNX(ctx, usedKey, "1", TOTPUsedTTL).Err()
+
+	return plainCodes, nil
+}
+
+func (s *authService) SwitchTwoFactorMethod(ctx context.Context, userID uuid.UUID, method, password, code string) error {
+	// 2FA обязательна: сюда переходим только для возврата с totp на email
+	if method != models.TwoFactorEmail {
+		return apperror.ErrIncorrectData
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.TwoFactorMethod != models.TwoFactorTOTP {
+		return apperror.ErrTOTPNotEnabled
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		return apperror.ErrWrongPassword
+	}
+	valid, err := s.otpSvc.VerifyTOTPCode(ctx, user, code, true)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return apperror.ErrInvalidOTP
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err = s.userRepo.SwitchToEmail2FATx(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err = s.backupRepo.DeleteByUserIDTx(ctx, tx, userID); err != nil {
+		return fmt.Errorf("delete backup codes: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *authService) RegenerateBackupCodes(ctx context.Context, userID uuid.UUID, password, code string) ([]string, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.TwoFactorMethod != models.TwoFactorTOTP {
+		return nil, apperror.ErrTOTPNotEnabled
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		return nil, apperror.ErrWrongPassword
+	}
+	// для перевыпуска резервных кодов нужен живой код из приложения
+	valid, err := s.otpSvc.VerifyTOTPCode(ctx, user, code, false)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, apperror.ErrInvalidOTP
+	}
+
+	plainCodes, err := utils.GenerateBackupCodes(backupCodesCount)
+	if err != nil {
+		return nil, err
+	}
+	hashes := make([]string, len(plainCodes))
+	for i, c := range plainCodes {
+		hashes[i] = utils.HashBackupCode(c)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err = s.backupRepo.ReplaceAllTx(ctx, tx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("replace backup codes: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+	return plainCodes, nil
+}
+
+func (s *authService) DeleteAccount(ctx context.Context, userID uuid.UUID, password string, code *string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		return apperror.ErrWrongPassword
+	}
+	if user.TwoFactorMethod == models.TwoFactorTOTP {
+		if code == nil || *code == "" {
+			return apperror.ErrInvalidOTP
+		}
+		valid, err := s.otpSvc.VerifyTOTPCode(ctx, user, *code, true)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return apperror.ErrInvalidOTP
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err = s.userRepo.SoftDeleteTx(ctx, tx, user.ID); err != nil {
+		return err
+	}
+	if err = s.backupRepo.DeleteByUserIDTx(ctx, tx, user.ID); err != nil {
+		return fmt.Errorf("delete backup codes: %w", err)
+	}
+	if err = s.verRepo.DeleteByUserIDTx(ctx, tx, user.ID); err != nil {
+		return fmt.Errorf("delete verifications: %w", err)
+	}
+	if err = s.resetRepo.DeleteByUserIDTx(ctx, tx, user.ID); err != nil {
+		return fmt.Errorf("delete password resets: %w", err)
+	}
+	revokedIDs, err := s.tokenRepo.RevokeAllByUserTx(ctx, tx, user.ID, nil)
+	if err != nil {
+		return fmt.Errorf("revoke all tokens on account delete: %w", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	_ = s.rdb.Del(ctx, totpPendingKeyPrefix+user.ID.String()).Err()
+	for _, sid := range revokedIDs {
+		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
+	}
+	if s.producer != nil {
+		evMsg := events.NewEvent(events.TypeAccountDeleted, events.AccountDeletedPayload{
+			UserID: user.ID,
+		})
+		if err = s.producer.Publish(ctx, events.TopicAuthEvents, user.ID.String(), evMsg); err != nil {
+			s.log.Error("Failed to publish account_deleted event", zap.String("user_id", user.ID.String()), zap.Error(err))
+		}
+	}
+
+	return nil
 }

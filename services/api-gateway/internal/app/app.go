@@ -154,8 +154,11 @@ func New() (*App, error) {
 		a.Close()
 		return nil, err
 	}
+	previews := linkpreview.NewFetcher(linkpreview.NewRedisCache(rdb), log).WithSigningSecret(cfg.JWTSecret)
 	sessions := auth.NewRedisSessions(rdb)
-	evRouter := events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log).WithSessions(sessions)
+	evRouter := events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log).
+		WithSessions(sessions).
+		WithImageProxy(previews)
 	evRouter.SetMembershipCache(typingSvc)
 	a.consumer = events.NewConsumer(cfg.KafkaBrokers, evRouter, log)
 
@@ -176,19 +179,21 @@ func New() (*App, error) {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router, err := api.NewRouter(api.Deps{
-		Auth:           authClient,
-		Users:          userv1.NewUserServiceClient(userConn),
-		Conversations:  conversationv1.NewConversationServiceClient(convConn),
-		Verifier:       auth.NewVerifier(cfg.JWTSecret, sessions),
-		Profiles:       profiles,
-		Health:         health,
-		Limiter:        ratelimit.New(ratelimit.NewRedisCounter(rdb)),
-		Limits:         limits,
-		WS:             wsHandler.Handle,
-		Media:          store,
-		Previews:       linkpreview.NewFetcher(linkpreview.NewRedisCache(rdb), log),
-		TrustedProxies: cfg.TrustedProxies,
-		Log:            log,
+		Auth:                  authClient,
+		Users:                 userv1.NewUserServiceClient(userConn),
+		UsersInternal:         userInternal,
+		Conversations:         conversationv1.NewConversationServiceClient(convConn),
+		ConversationsInternal: convInternal,
+		Verifier:              auth.NewVerifier(cfg.JWTSecret, sessions),
+		Profiles:              profiles,
+		Health:                health,
+		Limiter:               ratelimit.New(ratelimit.NewRedisCounter(rdb)),
+		Limits:                limits,
+		WS:                    wsHandler.Handle,
+		Media:                 store,
+		Previews:              previews,
+		TrustedProxies:        cfg.TrustedProxies,
+		Log:                   log,
 	})
 	if err != nil {
 		a.Close()

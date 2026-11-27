@@ -195,7 +195,18 @@ type linkPreviewJSON struct {
 	SiteName    *string `json:"site_name,omitempty"`
 }
 
-func toLinkPreview(lp *conversationv1.LinkPreview) *linkPreviewJSON {
+func (h *Handler) signPreviewImage(raw *string) *string {
+	if raw == nil || *raw == "" || h.previews == nil {
+		return nil
+	}
+	proxied := h.previews.ProxyImageURL(*raw)
+	if proxied == "" {
+		return nil
+	}
+	return &proxied
+}
+
+func (h *Handler) toLinkPreview(lp *conversationv1.LinkPreview) *linkPreviewJSON {
 	if lp == nil {
 		return nil
 	}
@@ -203,7 +214,7 @@ func toLinkPreview(lp *conversationv1.LinkPreview) *linkPreviewJSON {
 		URL:         lp.GetUrl(),
 		Title:       lp.Title,
 		Description: lp.Description,
-		ImageURL:    lp.ImageUrl,
+		ImageURL:    h.signPreviewImage(lp.ImageUrl),
 		SiteName:    lp.SiteName,
 	}
 }
@@ -267,7 +278,7 @@ func fromEntities(in []entityJSON) []*conversationv1.MessageEntity {
 	return out
 }
 
-func toMessage(m *conversationv1.Message) *messageJSON {
+func (h *Handler) toMessage(m *conversationv1.Message) *messageJSON {
 	if m == nil {
 		return nil
 	}
@@ -290,7 +301,7 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		Entities:            toEntities(m.GetEntities()),
 		IsSilent:            m.GetIsSilent(),
 		Reactions:           toReactions(m.GetReactions()),
-		LinkPreview:         toLinkPreview(m.GetLinkPreview()),
+		LinkPreview:         h.toLinkPreview(m.GetLinkPreview()),
 	}
 }
 
@@ -332,18 +343,18 @@ func toChatSettings(s *conversationv1.ChatSettings) chatSettingsResponseJSON {
 	}
 }
 
-func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
+func (h *Handler) toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 	return summaryJSON{
-		conversationJSON: toConversation(s.GetConversation()),
-		MyRole:           s.GetMyRole(),
-		PeerID:           s.PeerId,
-		LastMessage:         toMessage(s.GetLastMessage()),
+		conversationJSON:    toConversation(s.GetConversation()),
+		MyRole:              s.GetMyRole(),
+		PeerID:              s.PeerId,
+		LastMessage:         h.toMessage(s.GetLastMessage()),
 		UnreadCount:         s.GetUnreadCount(),
 		UnreadMentionsCount: s.GetUnreadMentionsCount(),
-		LastMessageRead:  s.GetLastMessageRead(),
-		MembersCount:     s.GetMembersCount(),
-		InviteCode:       s.InviteCode,
-		IsSaved:          s.GetIsSaved(),
+		LastMessageRead:     s.GetLastMessageRead(),
+		MembersCount:        s.GetMembersCount(),
+		InviteCode:          s.InviteCode,
+		IsSaved:             s.GetIsSaved(),
 		chatSettingsJSON: chatSettingsJSON{
 			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
 		},

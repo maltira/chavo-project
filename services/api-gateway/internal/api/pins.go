@@ -18,9 +18,9 @@ type pinJSON struct {
 	PinnedAt time.Time    `json:"pinned_at"`
 }
 
-func toPin(p *conversationv1.PinnedMessage) pinJSON {
+func (h *Handler) toPin(p *conversationv1.PinnedMessage) pinJSON {
 	return pinJSON{
-		Message:  toMessage(p.GetMessage()),
+		Message:  h.toMessage(p.GetMessage()),
 		Scope:    p.GetScope(),
 		PinnedBy: p.GetPinnedBy(),
 		PinnedAt: p.GetPinnedAt().AsTime(),
@@ -35,7 +35,7 @@ func (h *Handler) listPins(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	items := mapSlice(resp.GetItems(), toPin)
+	items := mapSlice(resp.GetItems(), h.toPin)
 	if items == nil {
 		items = []pinJSON{}
 	}
@@ -57,7 +57,7 @@ func (h *Handler) pinMessage(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, toPin(resp.GetPin()))
+	c.JSON(http.StatusCreated, h.toPin(resp.GetPin()))
 }
 
 // unpinMessage: ?scope=me - свой личный закреп, иначе общий

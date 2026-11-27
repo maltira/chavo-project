@@ -6,7 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
+	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/reqctx"
 )
 
 func (h *Handler) listConversations(c *gin.Context) {
@@ -18,7 +20,7 @@ func (h *Handler) listConversations(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, listJSON[summaryJSON]{
-		Items: mapSlice(resp.GetItems(), toSummary), Limit: resp.GetLimit(), Offset: resp.GetOffset(),
+		Items: mapSlice(resp.GetItems(), h.toSummary), Limit: resp.GetLimit(), Offset: resp.GetOffset(),
 	})
 }
 
@@ -43,7 +45,7 @@ func (h *Handler) getConversation(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toSummary(resp.GetConversation()))
+	c.JSON(http.StatusOK, h.toSummary(resp.GetConversation()))
 }
 
 func (h *Handler) createGroup(c *gin.Context) {
@@ -320,6 +322,51 @@ func (h *Handler) listUnreadMentions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message_ids": nonNil(resp.GetMessageIds())})
+}
+
+// searchMembers ищет участников группы по username/display_name среди всего состава (до 5000 человек)
+func (h *Handler) searchMembers(c *gin.Context) {
+	if h.conversationsInternal == nil || h.usersInternal == nil {
+		httpx.Unavailable(c)
+		return
+	}
+	ctx := c.Request.Context()
+	myID := reqctx.From(ctx).UserID
+	membersResp, err := h.conversationsInternal.ListMemberIDs(ctx, &conversationv1.ListMemberIDsRequest{
+		ConversationId: c.Param("id"),
+		UserId:         myID,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	excludeMe := c.Query("exclude_me") == "true" || c.Query("exclude_me") == "1"
+	ids := make([]string, 0, len(membersResp.GetUserIds()))
+	for _, id := range membersResp.GetUserIds() {
+		if excludeMe && id == myID {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{"items": []profileJSON{}})
+		return
+	}
+	limit := queryInt(c, "limit")
+	if limit <= 0 {
+		limit = 6
+	}
+	searchResp, err := h.usersInternal.SearchProfilesByIDs(ctx, &userv1.SearchProfilesByIDsRequest{
+		UserIds:  ids,
+		Query:    c.Query("q"),
+		Limit:    limit,
+		ViewerId: &myID,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": mapSlice(searchResp.GetProfiles(), toProfile)})
 }
 
 // muteChat: тело {duration} - срок из каталога (GET /api/customization)

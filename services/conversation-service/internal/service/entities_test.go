@@ -45,13 +45,15 @@ func TestFormattedMessageRoundTrip(t *testing.T) {
 		t.Fatalf("summary: %+v", list[0].LastMessage)
 	}
 
-	// в событии - разметка, а в БД текста по-прежнему нет
+	// в outbox-событии разметка и текст лежат зашифрованными (entities_enc/content_enc), plaintext в БД не попадает
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->>'event_type' = 'message.created'
-		AND jsonb_array_length(payload->'payload'->'entities') = 3 AND payload->'payload'->>'content' IS NULL`); n != 1 {
-		t.Fatalf("created events with entities = %d", n)
+		AND payload->'payload'->>'entities_enc' IS NOT NULL
+		AND payload->'payload'->'entities' IS NULL
+		AND payload->'payload'->>'content' IS NULL`); n != 1 {
+		t.Fatalf("created events with encrypted entities = %d", n)
 	}
-	if n := count(t, e.pool, `SELECT COUNT(*) FROM messages WHERE entities::text LIKE '%привет%'`); n != 0 {
-		t.Fatal("entities hold text")
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM messages WHERE entities IS NOT NULL`); n != 0 {
+		t.Fatal("plaintext entities column must stay NULL for new messages")
 	}
 
 	// правка заменяет текст и разметку целиком; без разметки - обычный текст
@@ -60,14 +62,14 @@ func TestFormattedMessageRoundTrip(t *testing.T) {
 		t.Fatalf("edit: %+v %v", edited, err)
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->>'event_type' = 'message.updated'
-		AND jsonb_array_length(payload->'payload'->'entities') = 1`); n != 1 {
-		t.Fatalf("updated events with entities = %d", n)
+		AND payload->'payload'->>'entities_enc' IS NOT NULL`); n != 1 {
+		t.Fatalf("updated events with encrypted entities = %d", n)
 	}
 	plain, err := e.msgs.Edit(ctx, a, m.ID, "новый", nil)
 	if err != nil || len(plain.Entities) != 0 {
 		t.Fatalf("edit to plain: %+v %v", plain, err)
 	}
-	if n := count(t, e.pool, `SELECT COUNT(*) FROM messages WHERE id = $1 AND entities IS NULL`, m.ID); n != 1 {
+	if n := count(t, e.pool, `SELECT COUNT(*) FROM messages WHERE id = $1 AND entities IS NULL AND entities_enc IS NULL`, m.ID); n != 1 {
 		t.Fatal("plain message must store NULL")
 	}
 }
@@ -140,7 +142,8 @@ func TestForwardKeepsFormatting(t *testing.T) {
 		t.Fatalf("forwarded: %+v", copyMsg)
 	}
 	if n := count(t, e.pool, `SELECT COUNT(*) FROM outbox_events WHERE payload->'payload'->>'message_id' = $1
-		AND jsonb_array_length(payload->'payload'->'entities') = 1`, copyMsg.ID.String()); n != 1 {
-		t.Fatalf("forward event entities = %d", n)
+		AND payload->'payload'->>'entities_enc' IS NOT NULL
+		AND payload->'payload'->'entities' IS NULL`, copyMsg.ID.String()); n != 1 {
+		t.Fatalf("forward event encrypted entities = %d", n)
 	}
 }

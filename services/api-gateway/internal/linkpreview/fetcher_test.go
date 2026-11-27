@@ -184,3 +184,98 @@ func TestExtractFirstURL(t *testing.T) {
 		t.Fatalf("no url = %q", got)
 	}
 }
+
+func TestExtractFirstVisibleURLSkipsSpoilerAndCode(t *testing.T) {
+	// ссылка целиком под спойлером не должна получать превью
+	text := "секрет https://secret.example/x и код https://code.example/y"
+	// UTF-16: "секрет " = 7, url = 24 (7..31); " и код " = 7 (31..38), url2 = 22 (38..60)
+	entities := []EntitySpan{
+		{Type: "spoiler", Offset: 7, Length: 24},
+		{Type: "code", Offset: 38, Length: 22},
+	}
+	if got := ExtractFirstVisibleURL(text, entities); got != "" {
+		t.Fatalf("expected empty preview URL for spoiler+code links, got %q", got)
+	}
+
+	// если после спойлера есть открытая ссылка (с учётом эмодзи - суррогатной пары UTF-16), берётся она
+	text2 := "😀 https://hidden.example/a и https://visible.example/b"
+	// UTF-16: "😀" = 2, " " = 1 => url1 at 3..27
+	entities2 := []EntitySpan{
+		{Type: "spoiler", Offset: 3, Length: 24},
+	}
+	if got := ExtractFirstVisibleURL(text2, entities2); got != "https://visible.example/b" {
+		t.Fatalf("expected visible URL after spoiler, got %q", got)
+	}
+
+	// text_link внутри спойлера тоже пропускается
+	entities3 := []EntitySpan{
+		{Type: "spoiler", Offset: 0, Length: 6},
+		{Type: "text_link", Offset: 0, Length: 6, URL: "https://spoiler-link.example"},
+	}
+	if got := ExtractFirstVisibleURL("ссылка", entities3); got != "" {
+		t.Fatalf("expected empty URL for spoiler text_link, got %q", got)
+	}
+}
+
+func TestImageProxySigningAndFetch(t *testing.T) {
+	// минимальный валидный 1x1 PNG
+	pngBytes := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+		0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+		0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+		0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+		0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
+		0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+		0x42, 0x60, 0x82,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/ok.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(pngBytes)
+		case "/evil.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`))
+		case "/fake.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write([]byte(`<html>not an image</html>`))
+		}
+	}))
+	defer srv.Close()
+
+	f := newFetcherWithTransport(srv.Client().Transport, nil, zap.NewNop()).WithSigningSecret("test-secret")
+	proxied := f.ProxyImageURL(srv.URL + "/ok.png")
+	if !strings.HasPrefix(proxied, "/api/link-preview/image?") {
+		t.Fatalf("unexpected proxy url: %q", proxied)
+	}
+	parsed, err := url.Parse(proxied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canon, ok := f.VerifyImageSignature(parsed.Query().Get("url"), parsed.Query().Get("sig"))
+	if !ok || canon != srv.URL+"/ok.png" {
+		t.Fatalf("verify valid signature = (%q, %v)", canon, ok)
+	}
+	if _, ok := f.VerifyImageSignature(srv.URL+"/other.png", parsed.Query().Get("sig")); ok {
+		t.Fatal("tampered URL must fail HMAC verification")
+	}
+
+	data, ct, err := f.FetchImage(context.Background(), srv.URL+"/ok.png")
+	if err != nil || ct != "image/png" || len(data) != len(pngBytes) {
+		t.Fatalf("FetchImage ok.png = (%d bytes, %q, %v)", len(data), ct, err)
+	}
+	if _, _, err := f.FetchImage(context.Background(), srv.URL+"/evil.svg"); !errors.Is(err, ErrInvalidImage) {
+		t.Fatalf("SVG must be rejected, got %v", err)
+	}
+	if _, _, err := f.FetchImage(context.Background(), srv.URL+"/fake.png"); !errors.Is(err, ErrInvalidImage) {
+		t.Fatalf("HTML disguised as PNG must be rejected, got %v", err)
+	}
+
+	// SSRF: реальный Fetcher без тестового транспорта блокирует loopback
+	strict := NewFetcher(nil, zap.NewNop()).WithSigningSecret("test-secret")
+	if _, _, err := strict.FetchImage(context.Background(), srv.URL+"/ok.png"); !errors.Is(err, ErrBlockedTarget) {
+		t.Fatalf("SSRF image fetch must be blocked, got %v", err)
+	}
+}

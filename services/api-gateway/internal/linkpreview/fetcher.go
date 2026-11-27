@@ -3,6 +3,7 @@ package linkpreview
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/redis/go-redis/v9"
@@ -30,12 +32,14 @@ const (
 	positiveCacheTTL = 24 * time.Hour
 	negativeCacheTTL = 10 * time.Minute
 	fetchTimeout     = 4 * time.Second
-	maxBodyBytes     = 1 << 20 // 1 МБ
+	maxBodyBytes     = 1 << 20 // 1 МБ для HTML
+	maxImageBytes    = 2 << 20 // 2 МБ для картинки превью
 	maxRedirects     = 3
 	maxURLLength     = 2048
 	maxTitleRunes    = 300
 	maxDescRunes     = 500
 	maxSiteRunes     = 120
+	imageProxyPrefix = "/api/link-preview/image"
 )
 
 var (
@@ -43,7 +47,18 @@ var (
 	ErrInvalidURL = errors.New("invalid preview url")
 	// ErrBlockedTarget - целевой хост резолвится в локальный/приватный/зарезервированный IP
 	ErrBlockedTarget = errors.New("blocked preview target")
+	// ErrInvalidImage - удалённый ресурс не является допустимым растровым изображением
+	ErrInvalidImage = errors.New("invalid preview image")
+	// ErrImageTooLarge - изображение превышает допустимый размер
+	ErrImageTooLarge = errors.New("preview image too large")
 )
+
+var allowedImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+	"image/gif":  true,
+}
 
 // Preview - карточка превью ссылки
 type Preview struct {
@@ -89,11 +104,112 @@ func (c *redisCache) Set(ctx context.Context, key string, value []byte, ttl time
 	return c.rdb.Set(ctx, key, value, ttl).Err()
 }
 
-// Fetcher загружает и кеширует OpenGraph-метаданные
+// Fetcher загружает и кеширует OpenGraph-метаданные и безопасно проксирует картинки превью
 type Fetcher struct {
-	client *http.Client
-	cache  Cache
-	log    *zap.Logger
+	client     *http.Client
+	cache      Cache
+	signingKey []byte
+	log        *zap.Logger
+}
+
+// WithSigningSecret задаёт секрет для HMAC-подписи URL прокси-картинок превью
+func (f *Fetcher) WithSigningSecret(secret string) *Fetcher {
+	if secret == "" {
+		f.signingKey = nil
+		return f
+	}
+	sum := sha256.Sum256([]byte("chavo-link-preview-img-v1:" + secret))
+	f.signingKey = sum[:]
+	return f
+}
+
+func (f *Fetcher) signImageURL(canonicalURL string) string {
+	mac := hmac.New(sha256.New, f.signingKey)
+	_, _ = mac.Write([]byte(canonicalURL))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// ProxyImageURL возвращает подписанный относительный путь прокси для внешней картинки превью
+func (f *Fetcher) ProxyImageURL(rawURL string) string {
+	if len(f.signingKey) == 0 {
+		return ""
+	}
+	u, err := parsePublicURL(rawURL)
+	if err != nil {
+		return ""
+	}
+	canonical := u.String()
+	q := url.Values{}
+	q.Set("url", canonical)
+	q.Set("sig", f.signImageURL(canonical))
+	return imageProxyPrefix + "?" + q.Encode()
+}
+
+// VerifyImageSignature проверяет HMAC-подпись прокси-запроса и возвращает канонический URL
+func (f *Fetcher) VerifyImageSignature(rawURL, sig string) (string, bool) {
+	if len(f.signingKey) == 0 || sig == "" {
+		return "", false
+	}
+	u, err := parsePublicURL(rawURL)
+	if err != nil {
+		return "", false
+	}
+	got, err := hex.DecodeString(sig)
+	if err != nil {
+		return "", false
+	}
+	canonical := u.String()
+	mac := hmac.New(sha256.New, f.signingKey)
+	_, _ = mac.Write([]byte(canonical))
+	if !hmac.Equal(got, mac.Sum(nil)) {
+		return "", false
+	}
+	return canonical, true
+}
+
+// FetchImage загружает внешнюю картинку превью через SSRF-защищённый клиент с проверкой MIME и размера
+func (f *Fetcher) FetchImage(ctx context.Context, rawURL string) ([]byte, string, error) {
+	u, err := parsePublicURL(rawURL)
+	if err != nil {
+		return nil, "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("User-Agent", "ChavoLinkPreview/1.0")
+	req.Header.Set("Accept", "image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", ErrInvalidImage
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		mediaType, _, err := mime.ParseMediaType(ct)
+		if err != nil || !allowedImageTypes[strings.ToLower(mediaType)] {
+			return nil, "", ErrInvalidImage
+		}
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(data) == 0 {
+		return nil, "", ErrInvalidImage
+	}
+	if len(data) > maxImageBytes {
+		return nil, "", ErrImageTooLarge
+	}
+	detected := strings.ToLower(http.DetectContentType(data))
+	if !allowedImageTypes[detected] {
+		return nil, "", ErrInvalidImage
+	}
+	return data, detected, nil
 }
 
 // NewFetcher создаёт Fetcher с жёсткой SSRF-защитой на уровне DialContext и редиректов
@@ -482,18 +598,82 @@ func buildPreview(pageURL *url.URL, ogTitle, twTitle, docTitle, ogDesc, twDesc, 
 
 var plainURLRe = regexp.MustCompile(`https?://[^\s<>"]+`)
 
-// ExtractFirstURL находит первую подходящую http/https-ссылку из text_link-сущностей или текста сообщения
-func ExtractFirstURL(content string, textLinkURLs []string) string {
-	for _, raw := range textLinkURLs {
-		if u, err := parsePublicURL(raw); err == nil {
+// EntitySpan - минимальное описание сущности форматирования (UTF-16 смещения) для выбора превью
+type EntitySpan struct {
+	Type   string
+	Offset int
+	Length int
+	URL    string
+}
+
+func overlapsAny(start, end int, ranges [][2]int) bool {
+	for _, r := range ranges {
+		if r[0] < end && r[1] > start {
+			return true
+		}
+	}
+	return false
+}
+
+// utf16Offset переводит байтовый индекс в UTF-8 строке в смещение UTF-16 (как в entities)
+func utf16Offset(s string, byteIdx int) int {
+	if byteIdx > len(s) {
+		byteIdx = len(s)
+	}
+	units := 0
+	for _, r := range s[:byteIdx] {
+		units += utf16.RuneLen(r)
+	}
+	return units
+}
+
+// ExtractFirstVisibleURL находит первую публичную http/https-ссылку, не скрытую спойлером и не внутри code/pre
+func ExtractFirstVisibleURL(content string, entities []EntitySpan) string {
+	var blocked [][2]int
+	for _, e := range entities {
+		if e.Length <= 0 || e.Offset < 0 {
+			continue
+		}
+		if e.Type == "spoiler" || e.Type == "code" || e.Type == "pre" {
+			blocked = append(blocked, [2]int{e.Offset, e.Offset + e.Length})
+		}
+	}
+
+	for _, e := range entities {
+		if e.Type != "text_link" || e.URL == "" || e.Length <= 0 || e.Offset < 0 {
+			continue
+		}
+		if overlapsAny(e.Offset, e.Offset+e.Length, blocked) {
+			continue
+		}
+		if u, err := parsePublicURL(e.URL); err == nil {
 			return u.String()
 		}
 	}
-	for _, match := range plainURLRe.FindAllString(content, 5) {
-		cleaned := strings.TrimRight(match, ".,!?:;)'\"]>")
+
+	for _, loc := range plainURLRe.FindAllStringIndex(content, -1) {
+		raw := content[loc[0]:loc[1]]
+		cleaned := strings.TrimRight(raw, ".,!?:;)'\"]>")
+		if cleaned == "" {
+			continue
+		}
+		u16Start := utf16Offset(content, loc[0])
+		u16End := u16Start + utf16Offset(cleaned, len(cleaned))
+		if overlapsAny(u16Start, u16End, blocked) {
+			continue
+		}
 		if u, err := parsePublicURL(cleaned); err == nil {
 			return u.String()
 		}
 	}
 	return ""
+}
+
+// ExtractFirstURL находит первую подходящую http/https-ссылку из text_link-сущностей или текста сообщения
+func ExtractFirstURL(content string, textLinkURLs []string) string {
+	spans := make([]EntitySpan, 0, len(textLinkURLs))
+	for _, u := range textLinkURLs {
+		spans = append(spans, EntitySpan{Type: "text_link", Offset: 0, Length: 1, URL: u})
+	}
+	return ExtractFirstVisibleURL(content, spans)
 }

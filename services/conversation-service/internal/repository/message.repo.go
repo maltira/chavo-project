@@ -24,12 +24,14 @@ type MessageRecord struct {
 	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор (nil - скрыл имя)
 	IsForwarded         bool
 	ForwardedFromUserID *uuid.UUID
-	// Entities - форматирование текста (nil - обычный текст)
+	// Entities - legacy-разметка из колонки entities (для сообщений до миграции 000003)
 	Entities []models.Entity
+	// EntitiesEnc - зашифрованный JSON списка Entity (AES-256-GCM)
+	EntitiesEnc []byte
 	// IsSilent - отправлено без звука
 	IsSilent bool
-	// LinkPreview - превью ссылки (OpenGraph)
-	LinkPreview *models.LinkPreview
+	// LinkPreviewEnc - зашифрованный JSON превью ссылки OpenGraph (AES-256-GCM)
+	LinkPreviewEnc []byte
 	// Kind - user или system; у системного нет текста, есть SystemEvent и TargetID
 	Kind        string
 	SystemEvent *string
@@ -53,7 +55,7 @@ type MessageRepository interface {
 	FindVisible(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
 	// FindForViewer — как FindVisible, но также отдаёт сообщение, на которое отвечает видимое участнику сообщение.
 	FindForViewer(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
-	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte, entities []models.Entity, linkPreview *models.LinkPreview) (*time.Time, error)
+	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc, entitiesEnc, linkPreviewEnc []byte) (*time.Time, error)
 	SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error)
 	SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (moved bool, prev *uuid.UUID, err error)
 	// AuthorsBetween возвращает авторов неудалённых сообщений в (after, upTo], кроме exclude; after == nil — с начала чата.
@@ -80,17 +82,17 @@ const visibleToMember = `((cm.member_role = 'admin' OR m.created_at >= cm.joined
 
 const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
 	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at,
-	m.is_forwarded, m.forwarded_from_user_id, m.entities, m.is_silent, m.link_preview`
+	m.is_forwarded, m.forwarded_from_user_id, m.entities, m.entities_enc, m.is_silent, m.link_preview_enc`
 
 const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited,
 	kind, system_event, target_id, created_at, updated_at, deleted_at,
-	is_forwarded, forwarded_from_user_id, entities, is_silent, link_preview`
+	is_forwarded, forwarded_from_user_id, entities, entities_enc, is_silent, link_preview_enc`
 
 // messageDest - поля для Scan в порядке messageColumns
 func messageDest(m *MessageRecord) []any {
 	return []any{&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
 		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
-		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities, &m.IsSilent, &m.LinkPreview}
+		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities, &m.EntitiesEnc, &m.IsSilent, &m.LinkPreviewEnc}
 }
 
 func scanMessage(row pgx.Row) (*MessageRecord, error) {
@@ -101,30 +103,22 @@ func scanMessage(row pgx.Row) (*MessageRecord, error) {
 	return &m, nil
 }
 
-// entitiesArg: без форматирования в колонку пишется NULL, а не пустой массив
-func entitiesArg(entities []models.Entity) any {
-	if len(entities) == 0 {
+func bytesArg(b []byte) any {
+	if len(b) == 0 {
 		return nil
 	}
-	return entities
-}
-
-func linkPreviewArg(lp *models.LinkPreview) any {
-	if lp == nil {
-		return nil
-	}
-	return lp
+	return b
 }
 
 func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageRecord) error {
 	// clock_timestamp(), а не NOW(): порядок сообщений должен отражать момент вставки, а не начало транзакции.
 	err := q.QueryRow(ctx,
 		`INSERT INTO messages (conversation_id, sender_id, content_enc, reply_to_message_id,
-		                       is_forwarded, forwarded_from_user_id, entities, is_silent, link_preview, created_at)
+		                       is_forwarded, forwarded_from_user_id, entities_enc, is_silent, link_preview_enc, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp())
 		 RETURNING id, created_at`,
 		rec.ConversationID, rec.SenderID, rec.ContentEnc, rec.ReplyToMessageID,
-		rec.IsForwarded, rec.ForwardedFromUserID, entitiesArg(rec.Entities), rec.IsSilent, linkPreviewArg(rec.LinkPreview),
+		rec.IsForwarded, rec.ForwardedFromUserID, bytesArg(rec.EntitiesEnc), rec.IsSilent, bytesArg(rec.LinkPreviewEnc),
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create message: %w", err)
@@ -267,13 +261,13 @@ func (r *messageRepository) FindForViewer(ctx context.Context, q DBTX, id, userI
 }
 
 // Update меняет содержимое неудалённого сообщения; ErrMessageDeleted, если оно удалено.
-func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte, entities []models.Entity, linkPreview *models.LinkPreview) (*time.Time, error) {
+func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc, entitiesEnc, linkPreviewEnc []byte) (*time.Time, error) {
 	var updatedAt time.Time
 	err := q.QueryRow(ctx,
-		`UPDATE messages SET content_enc = $2, entities = $3, link_preview = $4, is_edited = TRUE, updated_at = clock_timestamp()
+		`UPDATE messages SET content_enc = $2, entities = NULL, entities_enc = $3, link_preview_enc = $4, is_edited = TRUE, updated_at = clock_timestamp()
 		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'
 		 RETURNING updated_at`,
-		id, contentEnc, entitiesArg(entities), linkPreviewArg(linkPreview),
+		id, contentEnc, bytesArg(entitiesEnc), bytesArg(linkPreviewEnc),
 	).Scan(&updatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -287,7 +281,7 @@ func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, co
 // SoftDelete возвращает true, если сообщение было удалено именно этим вызовом.
 func (r *messageRepository) SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error) {
 	ct, err := q.Exec(ctx,
-		`UPDATE messages SET content_enc = NULL, entities = NULL, link_preview = NULL, deleted_at = clock_timestamp()
+		`UPDATE messages SET content_enc = NULL, entities = NULL, entities_enc = NULL, link_preview_enc = NULL, deleted_at = clock_timestamp()
 		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'`, id,
 	)
 	if err != nil {

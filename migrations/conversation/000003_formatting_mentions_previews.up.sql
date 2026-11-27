@@ -1,5 +1,6 @@
 ALTER TABLE messages
-    ADD COLUMN IF NOT EXISTS link_preview JSONB;
+    ADD COLUMN IF NOT EXISTS entities_enc BYTEA,
+    ADD COLUMN IF NOT EXISTS link_preview_enc BYTEA;
 
 CREATE TABLE IF NOT EXISTS message_mentions (
     message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,

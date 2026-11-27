@@ -49,7 +49,7 @@ const (
 var Topics = []string{TopicAuthEvents, TopicUserEvents, TopicConversationEvents, TopicMessageEvents}
 
 // Поля маршрутизации и шифртекст клиенту не отправляются.
-var hiddenFields = []string{"member_ids", "admin_ids", "author_ids", "session_ids", "content_enc"}
+var hiddenFields = []string{"member_ids", "admin_ids", "author_ids", "session_ids", "content_enc", "entities_enc", "link_preview_enc"}
 
 // ErrMalformed — событие нельзя разобрать; повтор его не исправит.
 var ErrMalformed = errors.New("malformed event")
@@ -80,6 +80,11 @@ type MembershipCache interface {
 // SessionRevoker — удаление отозванных сессий из Redis-whitelist при обработке событий безопасности.
 type SessionRevoker interface {
 	Revoke(ctx context.Context, sessionIDs ...string) error
+}
+
+// ImageProxySigner подменяет внешний URL картинки превью на подписанный прокси-путь Gateway
+type ImageProxySigner interface {
+	ProxyImageURL(rawURL string) string
 }
 
 type envelope struct {
@@ -131,6 +136,7 @@ type Router struct {
 	profiles   ProfileCache
 	sessions   SessionRevoker
 	membership MembershipCache
+	imgProxy   ImageProxySigner
 	log        *zap.Logger
 	maxAge     time.Duration
 	seen       *dedup
@@ -153,6 +159,12 @@ func (r *Router) SetMembershipCache(c MembershipCache) {
 // WithSessions подключает удаление ключей отозванных сессий из Redis при обработке auth-событий.
 func (r *Router) WithSessions(sessions SessionRevoker) *Router {
 	r.sessions = sessions
+	return r
+}
+
+// WithImageProxy подключает подпись и проксирование og:image в WS-событиях сообщений.
+func (r *Router) WithImageProxy(signer ImageProxySigner) *Router {
+	r.imgProxy = signer
 	return r
 }
 
@@ -273,7 +285,7 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 	return nil
 }
 
-// frame собирает кадр для клиента, вырезая поля маршрутизации из payload.
+// frame собирает кадр для клиента, вырезая поля маршрутизации из payload и проксируя image_url превью.
 func (r *Router) frame(ev envelope) ([]byte, error) {
 	var data map[string]json.RawMessage
 	if err := json.Unmarshal(ev.Payload, &data); err != nil {
@@ -281,6 +293,27 @@ func (r *Router) frame(ev envelope) ([]byte, error) {
 	}
 	for _, f := range hiddenFields {
 		delete(data, f)
+	}
+	if ev.EventType == TypeMessageCreated || ev.EventType == TypeMessageUpdated {
+		if rawLP, ok := data["link_preview"]; ok && len(rawLP) > 0 && string(rawLP) != "null" {
+			var lp map[string]any
+			if err := json.Unmarshal(rawLP, &lp); err == nil && lp != nil {
+				if rawImg, hasImg := lp["image_url"].(string); hasImg && rawImg != "" {
+					proxied := ""
+					if r.imgProxy != nil {
+						proxied = r.imgProxy.ProxyImageURL(rawImg)
+					}
+					if proxied != "" {
+						lp["image_url"] = proxied
+					} else {
+						delete(lp, "image_url")
+					}
+					if rewritten, err := json.Marshal(lp); err == nil {
+						data["link_preview"] = rewritten
+					}
+				}
+			}
+		}
 	}
 	payload, err := json.Marshal(data)
 	if err != nil {

@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"slices"
@@ -230,5 +231,90 @@ func TestStage3LinkPreviewPersistenceAndValidation(t *testing.T) {
 		LinkPreview: &models.LinkPreview{URL: "javascript:alert(1)", Title: strPtr("x")},
 	}); !errors.Is(err, apperror.ErrIncorrectData) {
 		t.Fatalf("javascript preview url: got %v, want ErrIncorrectData", err)
+	}
+}
+
+func TestStage3EntitiesAndLinkPreviewEncryptedAtRest(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	a, b := uuid.New(), uuid.New()
+
+	secretURL := "https://secret.example/docs?token=super-secret-42"
+	secretTitle := "Секретный документ"
+	m, err := e.msgs.Send(ctx, a, service.SendMessageInput{
+		RecipientID: &b,
+		Content:     "ссылка тут",
+		Entities: []models.Entity{
+			{Type: models.EntityTextLink, Offset: 0, Length: 6, URL: strPtr(secretURL)},
+		},
+		LinkPreview: &models.LinkPreview{
+			URL:      secretURL,
+			Title:    strPtr(secretTitle),
+			ImageURL: strPtr("https://secret.example/img.png?sig=abc"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	// в таблице messages не должно быть открытого текста ни в entities, ни в *_enc
+	var (
+		rawEntities       []byte
+		entitiesEnc       []byte
+		linkPreviewEnc    []byte
+		rawOutboxPayloads []byte
+	)
+	if err := e.pool.QueryRow(ctx,
+		`SELECT entities::text::bytea, entities_enc, link_preview_enc FROM messages WHERE id = $1`, m.ID,
+	).Scan(&rawEntities, &entitiesEnc, &linkPreviewEnc); err != nil {
+		t.Fatalf("query raw message: %v", err)
+	}
+	if len(rawEntities) != 0 {
+		t.Fatalf("legacy plaintext entities column must be NULL, got %s", rawEntities)
+	}
+	if len(entitiesEnc) == 0 || len(linkPreviewEnc) == 0 {
+		t.Fatalf("encrypted columns must be populated: entities_enc=%d link_preview_enc=%d", len(entitiesEnc), len(linkPreviewEnc))
+	}
+	for _, needle := range [][]byte{[]byte("secret.example"), []byte("super-secret-42"), []byte(secretTitle)} {
+		if bytes.Contains(entitiesEnc, needle) || bytes.Contains(linkPreviewEnc, needle) {
+			t.Fatalf("plaintext %q leaked into encrypted message columns", needle)
+		}
+	}
+
+	// в outbox_events URL и заголовок также зашифрованы до публикации
+	if err := e.pool.QueryRow(ctx,
+		`SELECT payload::text::bytea FROM outbox_events WHERE topic = 'message-events' ORDER BY id DESC LIMIT 1`,
+	).Scan(&rawOutboxPayloads); err != nil {
+		t.Fatalf("query outbox: %v", err)
+	}
+	for _, needle := range [][]byte{[]byte("secret.example"), []byte("super-secret-42"), []byte(secretTitle)} {
+		if bytes.Contains(rawOutboxPayloads, needle) {
+			t.Fatalf("plaintext %q leaked into outbox_events: %s", needle, rawOutboxPayloads)
+		}
+	}
+
+	// чтение возвращает расшифрованные entities и link_preview
+	got, err := e.msgs.Get(ctx, b, m.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got.Entities) != 1 || got.Entities[0].URL == nil || *got.Entities[0].URL != secretURL {
+		t.Fatalf("decrypted entities mismatch: %+v", got.Entities)
+	}
+	if got.LinkPreview == nil || got.LinkPreview.URL != secretURL || *got.LinkPreview.Title != secretTitle {
+		t.Fatalf("decrypted link_preview mismatch: %+v", got.LinkPreview)
+	}
+
+	// при мягком удалении зашифрованные колонки очищаются
+	if err := e.msgs.Delete(ctx, a, m.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if err := e.pool.QueryRow(ctx,
+		`SELECT entities_enc, link_preview_enc FROM messages WHERE id = $1`, m.ID,
+	).Scan(&entitiesEnc, &linkPreviewEnc); err != nil {
+		t.Fatalf("query deleted message: %v", err)
+	}
+	if len(entitiesEnc) != 0 || len(linkPreviewEnc) != 0 {
+		t.Fatalf("deleted message must clear encrypted columns: entities_enc=%d link_preview_enc=%d", len(entitiesEnc), len(linkPreviewEnc))
 	}
 }

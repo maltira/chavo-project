@@ -54,6 +54,8 @@ service UserInternalService {
   rpc BlockedIDs(BlockedIDsRequest) returns (BlockedIDsResponse);
   // ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
   rpc ForwardAuthorsHidden(ForwardAuthorsHiddenRequest) returns (ForwardAuthorsHiddenResponse);
+  // SearchProfilesByIDs - поиск профилей среди заданного набора пользователей (упоминания в больших группах).
+  rpc SearchProfilesByIDs(SearchProfilesByIDsRequest) returns (SearchProfilesByIDsResponse);
 }
 
 message Profile {
@@ -213,6 +215,16 @@ message ForwardAuthorsHiddenRequest {
 }
 message ForwardAuthorsHiddenResponse {
   repeated string hidden_user_ids = 1;
+}
+
+message SearchProfilesByIDsRequest {
+  repeated string user_ids = 1;
+  string query = 2;
+  int32 limit = 3;
+  optional string viewer_id = 4;
+}
+message SearchProfilesByIDsResponse {
+  repeated Profile profiles = 1;
 }
 
 message MessagingAllowedRequest {

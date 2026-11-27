@@ -29,6 +29,7 @@ type ProfileService interface {
 	Create(ctx context.Context, userID uuid.UUID, input CreateProfileInput) error
 	Update(ctx context.Context, userID uuid.UUID, data map[string]string) error
 	GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error)
+	SearchByIDs(ctx context.Context, userIDs []uuid.UUID, query string, limit int) ([]models.Profile, error)
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
 	FindByIDIncludeDeleted(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
 	DeleteAccount(ctx context.Context, userID uuid.UUID) error
@@ -142,6 +143,27 @@ func (s *profileService) GetAllBySearch(ctx context.Context, query string, limit
 		return []models.Profile{}, nil
 	}
 	return s.repo.GetAllBySearch(ctx, cleanQuery, limit, offset)
+}
+
+func (s *profileService) SearchByIDs(ctx context.Context, userIDs []uuid.UUID, query string, limit int) ([]models.Profile, error) {
+	if len(userIDs) == 0 {
+		return []models.Profile{}, nil
+	}
+	if len(userIDs) > 5000 {
+		userIDs = userIDs[:5000]
+	}
+	if limit <= 0 {
+		limit = 6
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	cleanQuery := strings.TrimSpace(strings.TrimPrefix(query, "@"))
+	if utf8.RuneCountInString(cleanQuery) > 64 {
+		runes := []rune(cleanQuery)
+		cleanQuery = string(runes[:64])
+	}
+	return s.repo.SearchByIDs(ctx, userIDs, cleanQuery, limit)
 }
 
 func (s *profileService) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {

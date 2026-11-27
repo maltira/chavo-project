@@ -70,6 +70,50 @@ func TestPublisherDecryptsMessageContent(t *testing.T) {
 	}
 }
 
+func TestPublisherDecryptsEntitiesAndLinkPreview(t *testing.T) {
+	f := setup(t)
+	c := testCipher()
+	contentEnc, _ := c.Encrypt([]byte("ссылка"))
+	entitiesEnc, _ := c.Encrypt([]byte(`[{"type":"text_link","offset":0,"length":6,"url":"https://secret.example/p?k=1"}]`))
+	previewEnc, _ := c.Encrypt([]byte(`{"url":"https://secret.example/p?k=1","title":"Тайна"}`))
+
+	f.insertMessageEvent(t, "message-events", map[string]any{
+		"message_id":       "m2",
+		"content_enc":      contentEnc,
+		"entities_enc":     entitiesEnc,
+		"link_preview_enc": previewEnc,
+	})
+
+	pub := &rawPub{}
+	if n, err := f.publisher(pub, 10).RunOnce(context.Background()); err != nil || n != 1 {
+		t.Fatalf("RunOnce = %d, %v", n, err)
+	}
+
+	var got struct {
+		Payload map[string]any `json:"payload"`
+	}
+	if err := json.Unmarshal(pub.msgs[0], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Payload["content"] != "ссылка" {
+		t.Fatalf("content = %v", got.Payload["content"])
+	}
+	if _, ok := got.Payload["entities_enc"]; ok {
+		t.Fatal("entities_enc must not reach Kafka")
+	}
+	if _, ok := got.Payload["link_preview_enc"]; ok {
+		t.Fatal("link_preview_enc must not reach Kafka")
+	}
+	entities, ok := got.Payload["entities"].([]any)
+	if !ok || len(entities) != 1 {
+		t.Fatalf("entities = %#v", got.Payload["entities"])
+	}
+	lp, ok := got.Payload["link_preview"].(map[string]any)
+	if !ok || lp["url"] != "https://secret.example/p?k=1" || lp["title"] != "Тайна" {
+		t.Fatalf("link_preview = %#v", got.Payload["link_preview"])
+	}
+}
+
 func TestPublisherPassesThroughWithoutContent(t *testing.T) {
 	f := setup(t)
 	f.insertMessageEvent(t, "message-events", map[string]any{"message_id": "m1"})

@@ -32,11 +32,13 @@ type ForwardResult struct {
 	Messages       []models.Message
 }
 
-// forwardSource - пересылаемое сообщение: расшифрованный текст и кого показать автором
+// forwardSource - пересылаемое сообщение: расшифрованное содержимое и кого показать автором
 type forwardSource struct {
-	rec    *repository.MessageRecord
-	plain  []byte
-	origin *uuid.UUID // первый автор; nil - его имя скрыто
+	rec         *repository.MessageRecord
+	plain       []byte
+	entities    []models.Entity
+	linkPreview *models.LinkPreview
+	origin      *uuid.UUID // первый автор; nil - его имя скрыто
 }
 
 func uniqueIDs(ids []uuid.UUID) []uuid.UUID {
@@ -79,7 +81,15 @@ func (s *messageService) Forward(ctx context.Context, userID uuid.UUID, in Forwa
 		if err != nil {
 			return nil, err
 		}
-		src := forwardSource{rec: rec, plain: plain}
+		entities, err := decryptEntities(s.cipher, rec.EntitiesEnc, rec.Entities)
+		if err != nil {
+			return nil, err
+		}
+		linkPreview, err := decryptLinkPreview(s.cipher, rec.LinkPreviewEnc)
+		if err != nil {
+			return nil, err
+		}
+		src := forwardSource{rec: rec, plain: plain, entities: entities, linkPreview: linkPreview}
 		switch {
 		case !rec.IsForwarded:
 			src.origin = &rec.SenderID
@@ -168,9 +178,17 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		if err != nil {
 			return nil, err
 		}
+		entitiesEnc, err := encryptEntities(s.cipher, src.entities)
+		if err != nil {
+			return nil, err
+		}
+		linkPreviewEnc, err := encryptLinkPreview(s.cipher, src.linkPreview)
+		if err != nil {
+			return nil, err
+		}
 		rec := &repository.MessageRecord{
 			ConversationID: convID, SenderID: userID, ContentEnc: enc,
-			IsForwarded: !hideAuthor, Entities: src.rec.Entities, LinkPreview: src.rec.LinkPreview,
+			IsForwarded: !hideAuthor, EntitiesEnc: entitiesEnc, LinkPreviewEnc: linkPreviewEnc,
 		}
 		if !hideAuthor {
 			rec.ForwardedFromUserID = src.origin
@@ -178,7 +196,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		if err = s.msgs.Create(ctx, tx, rec); err != nil {
 			return nil, err
 		}
-		if mentioned := extractMentionUserIDs(rec.Entities); len(mentioned) > 0 {
+		if mentioned := extractMentionUserIDs(src.entities); len(mentioned) > 0 {
 			if err = s.msgs.ReplaceMentions(ctx, tx, rec.ID, convID, rec.CreatedAt, mentioned); err != nil {
 				return nil, err
 			}
@@ -196,8 +214,8 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 			Kind:                models.MessageUser,
 			IsForwarded:         rec.IsForwarded,
 			ForwardedFromUserID: rec.ForwardedFromUserID,
-			Entities:            rec.Entities,
-			LinkPreview:         rec.LinkPreview,
+			EntitiesEnc:         entitiesEnc,
+			LinkPreviewEnc:      linkPreviewEnc,
 		}); err != nil {
 			return nil, err
 		}
@@ -205,7 +223,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		res.Messages = append(res.Messages, models.Message{
 			ID: rec.ID, ConversationID: convID, SenderID: userID, Content: &content, Kind: models.MessageUser,
 			CreatedAt: rec.CreatedAt, IsForwarded: rec.IsForwarded, ForwardedFromUserID: rec.ForwardedFromUserID,
-			Entities: rec.Entities, LinkPreview: rec.LinkPreview,
+			Entities: src.entities, LinkPreview: src.linkPreview,
 		})
 	}
 	return res, nil

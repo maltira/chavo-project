@@ -32,10 +32,12 @@ type HealthCheck struct {
 }
 
 type Deps struct {
-	Auth          authv1.AuthServiceClient
-	Users         userv1.UserServiceClient
-	Conversations conversationv1.ConversationServiceClient
-	Verifier      *auth.Verifier
+	Auth                  authv1.AuthServiceClient
+	Users                 userv1.UserServiceClient
+	UsersInternal         userv1.UserInternalServiceClient
+	Conversations         conversationv1.ConversationServiceClient
+	ConversationsInternal conversationv1.ConversationInternalServiceClient
+	Verifier              *auth.Verifier
 	Profiles      *profile.Gate
 	Health        []HealthCheck
 	// WS — обработчик GET /ws (nil — без WebSocket).
@@ -61,10 +63,12 @@ type Limits struct {
 }
 
 type Handler struct {
-	auth          authv1.AuthServiceClient
-	users         userv1.UserServiceClient
-	conversations conversationv1.ConversationServiceClient
-	profiles      *profile.Gate
+	auth                  authv1.AuthServiceClient
+	users                 userv1.UserServiceClient
+	usersInternal         userv1.UserInternalServiceClient
+	conversations         conversationv1.ConversationServiceClient
+	conversationsInternal conversationv1.ConversationInternalServiceClient
+	profiles              *profile.Gate
 	health        []HealthCheck
 	proxies       proxies
 	media         media.Store
@@ -99,7 +103,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 		return nil, err
 	}
 	h := &Handler{
-		auth: d.Auth, users: d.Users, conversations: d.Conversations,
+		auth: d.Auth, users: d.Users, usersInternal: d.UsersInternal,
+		conversations: d.Conversations, conversationsInternal: d.ConversationsInternal,
 		profiles: d.Profiles, health: d.Health, proxies: px, media: d.Media, previews: d.Previews, log: d.Log,
 	}
 
@@ -141,6 +146,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 
 	// каталог кастомизации публичный: иконки и сроки статусов, фигуры за аватаром
 	api.GET("/customization", h.customization)
+	// прокси картинок OpenGraph: защищён HMAC-подписью (браузер грузит через <img> без Authorization)
+	api.GET("/link-preview/image", h.serveLinkPreviewImage)
 
 	// Авторизованные, профиль не нужен: управление аккаунтом и создание профиля.
 	authed := api.Group("", middleware.Authenticate(d.Verifier, d.Log))
@@ -222,6 +229,7 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.POST("/:id/join-requests/:request_id/approve", h.approveJoinRequest)
 	conv.POST("/:id/join-requests/:request_id/reject", h.rejectJoinRequest)
 	conv.GET("/:id/members", h.listMembers)
+	conv.GET("/:id/members/search", h.searchMembers)
 	conv.POST("/:id/members", h.addMembers)
 	conv.POST("/:id/members/:user_id", h.setMemberRole)
 	conv.DELETE("/:id/members/:user_id", h.removeMember)

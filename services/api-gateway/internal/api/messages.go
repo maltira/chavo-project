@@ -19,13 +19,19 @@ func (h *Handler) resolveLinkPreview(ctx context.Context, content string, entiti
 	if disabled || h.previews == nil {
 		return nil
 	}
-	var textLinks []string
+	spans := make([]linkpreview.EntitySpan, 0, len(entities))
 	for _, e := range entities {
-		if e.Type == "text_link" && e.URL != nil && *e.URL != "" {
-			textLinks = append(textLinks, *e.URL)
+		span := linkpreview.EntitySpan{
+			Type:   e.Type,
+			Offset: int(e.Offset),
+			Length: int(e.Length),
 		}
+		if e.URL != nil {
+			span.URL = *e.URL
+		}
+		spans = append(spans, span)
 	}
-	target := linkpreview.ExtractFirstURL(content, textLinks)
+	target := linkpreview.ExtractFirstVisibleURL(content, spans)
 	if target == "" {
 		return nil
 	}
@@ -64,7 +70,35 @@ func (h *Handler) getLinkPreview(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"preview": nil})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"preview": p})
+	if p == nil {
+		c.JSON(http.StatusOK, gin.H{"preview": nil})
+		return
+	}
+	// отдаём копию с подписанным прокси-путём картинки, не раскрывая внешний URL браузеру
+	out := *p
+	out.ImageURL = h.signPreviewImage(p.ImageURL)
+	c.JSON(http.StatusOK, gin.H{"preview": &out})
+}
+
+func (h *Handler) serveLinkPreviewImage(c *gin.Context) {
+	if h.previews == nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	canonicalURL, ok := h.previews.VerifyImageSignature(c.Query("url"), c.Query("sig"))
+	if !ok {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	data, contentType, err := h.previews.FetchImage(c.Request.Context(), canonicalURL)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "default-src 'none'")
+	c.Header("Cache-Control", "private, max-age=3600")
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func (h *Handler) listMessages(c *gin.Context) {
@@ -81,7 +115,7 @@ func (h *Handler) listMessages(c *gin.Context) {
 	}
 	items := make([]*messageJSON, 0, len(resp.GetItems()))
 	for _, m := range resp.GetItems() {
-		items = append(items, toMessage(m))
+		items = append(items, h.toMessage(m))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"items":       items,
@@ -116,7 +150,7 @@ func (h *Handler) sendMessage(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, toMessage(resp.GetMessage()))
+	c.JSON(http.StatusCreated, h.toMessage(resp.GetMessage()))
 }
 
 // forwardMessages: копии сообщений одного чата в мои чаты и/или «Избранное»;
@@ -145,7 +179,7 @@ func (h *Handler) forwardMessages(c *gin.Context) {
 	}
 	items := make([]forwardedJSON, len(resp.GetItems()))
 	for i, chat := range resp.GetItems() {
-		items[i] = forwardedJSON{ConversationID: chat.GetConversationId(), Messages: mapSlice(chat.GetMessages(), toMessage)}
+		items[i] = forwardedJSON{ConversationID: chat.GetConversationId(), Messages: mapSlice(chat.GetMessages(), h.toMessage)}
 	}
 	c.JSON(http.StatusCreated, gin.H{"items": items})
 }
@@ -156,7 +190,7 @@ func (h *Handler) getMessage(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toMessage(resp.GetMessage()))
+	c.JSON(http.StatusOK, h.toMessage(resp.GetMessage()))
 }
 
 func (h *Handler) editMessage(c *gin.Context) {
@@ -177,7 +211,7 @@ func (h *Handler) editMessage(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toMessage(resp.GetMessage()))
+	c.JSON(http.StatusOK, h.toMessage(resp.GetMessage()))
 }
 
 func (h *Handler) deleteMessage(c *gin.Context) {

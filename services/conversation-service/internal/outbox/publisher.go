@@ -59,8 +59,8 @@ func NewPublisher(db *repository.DB, repo repository.OutboxRepository, pub Event
 	return &Publisher{db: db, repo: repo, pub: pub, dec: dec, log: log, opts: opts}
 }
 
-// preparePayload для message-events подменяет content_enc на расшифрованный content.
-// Без content_enc (текст вычищен при удалении) и для остальных топиков payload уходит как есть.
+// preparePayload для message-events расшифровывает content_enc, entities_enc и link_preview_enc.
+// Без зашифрованных полей (например при удалении) и для остальных топиков payload уходит как есть.
 func (p *Publisher) preparePayload(rec repository.OutboxRecord) ([]byte, error) {
 	if rec.Topic != events.TopicMessageEvents {
 		return rec.Payload, nil
@@ -77,26 +77,53 @@ func (p *Publisher) preparePayload(rec repository.OutboxRecord) ([]byte, error) 
 	if err := json.Unmarshal(rawPayload, &payload); err != nil {
 		return nil, fmt.Errorf("parse payload: %w", err)
 	}
-	rawEnc, ok := payload["content_enc"]
-	if !ok {
+
+	changed := false
+	if rawEnc, exists := payload["content_enc"]; exists {
+		var enc []byte
+		if err := json.Unmarshal(rawEnc, &enc); err != nil {
+			return nil, fmt.Errorf("parse content_enc: %w", err)
+		}
+		plain, err := p.dec.Decrypt(enc)
+		if err != nil {
+			return nil, err
+		}
+		content, err := json.Marshal(string(plain))
+		if err != nil {
+			return nil, fmt.Errorf("marshal content: %w", err)
+		}
+		delete(payload, "content_enc")
+		payload["content"] = content
+		changed = true
+	}
+
+	for _, pair := range [][2]string{{"entities_enc", "entities"}, {"link_preview_enc", "link_preview"}} {
+		encKey, plainKey := pair[0], pair[1]
+		rawEnc, exists := payload[encKey]
+		if !exists {
+			continue
+		}
+		var enc []byte
+		if err := json.Unmarshal(rawEnc, &enc); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", encKey, err)
+		}
+		plain, err := p.dec.Decrypt(enc)
+		if err != nil {
+			return nil, err
+		}
+		if !json.Valid(plain) {
+			return nil, fmt.Errorf("invalid decrypted json for %s", plainKey)
+		}
+		delete(payload, encKey)
+		payload[plainKey] = json.RawMessage(plain)
+		changed = true
+	}
+
+	if !changed {
 		return rec.Payload, nil
 	}
 
-	var enc []byte
-	if err := json.Unmarshal(rawEnc, &enc); err != nil {
-		return nil, fmt.Errorf("parse content_enc: %w", err)
-	}
-	plain, err := p.dec.Decrypt(enc)
-	if err != nil {
-		return nil, err
-	}
-	content, err := json.Marshal(string(plain))
-	if err != nil {
-		return nil, fmt.Errorf("marshal content: %w", err)
-	}
-	delete(payload, "content_enc")
-	payload["content"] = content
-
+	var err error
 	if envelope["payload"], err = json.Marshal(payload); err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}

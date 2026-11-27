@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -117,6 +119,58 @@ func (s *messageService) toModel(rec *repository.MessageRecord) (*models.Message
 	return recordToModel(s.cipher, rec)
 }
 
+func encryptEntities(c *crypto.Cipher, entities []models.Entity) ([]byte, error) {
+	if len(entities) == 0 {
+		return nil, nil
+	}
+	raw, err := json.Marshal(entities)
+	if err != nil {
+		return nil, fmt.Errorf("marshal entities: %w", err)
+	}
+	return c.Encrypt(raw)
+}
+
+func decryptEntities(c *crypto.Cipher, enc []byte, legacy []models.Entity) ([]models.Entity, error) {
+	if len(enc) == 0 {
+		return legacy, nil
+	}
+	plain, err := c.Decrypt(enc)
+	if err != nil {
+		return nil, err
+	}
+	var out []models.Entity
+	if err := json.Unmarshal(plain, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal entities: %w", err)
+	}
+	return out, nil
+}
+
+func encryptLinkPreview(c *crypto.Cipher, lp *models.LinkPreview) ([]byte, error) {
+	if lp == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(lp)
+	if err != nil {
+		return nil, fmt.Errorf("marshal link preview: %w", err)
+	}
+	return c.Encrypt(raw)
+}
+
+func decryptLinkPreview(c *crypto.Cipher, enc []byte) (*models.LinkPreview, error) {
+	if len(enc) == 0 {
+		return nil, nil
+	}
+	plain, err := c.Decrypt(enc)
+	if err != nil {
+		return nil, err
+	}
+	var out models.LinkPreview
+	if err := json.Unmarshal(plain, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal link preview: %w", err)
+	}
+	return &out, nil
+}
+
 func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Message, error) {
 	m := &models.Message{
 		ID:               rec.ID,
@@ -133,14 +187,12 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 
 		IsForwarded:         rec.IsForwarded,
 		ForwardedFromUserID: rec.ForwardedFromUserID,
-		Entities:            rec.Entities,
 		IsSilent:            rec.IsSilent,
-		LinkPreview:         rec.LinkPreview,
 	}
 	if m.Kind == "" {
 		m.Kind = models.MessageUser
 	}
-	// у системного сообщения текста нет: его собирает клиент
+	// у системного и удалённого сообщения текста, разметки и превью нет
 	if rec.DeletedAt == nil && rec.Kind != models.MessageSystem {
 		plain, err := c.Decrypt(rec.ContentEnc)
 		if err != nil {
@@ -148,6 +200,13 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 		}
 		text := string(plain)
 		m.Content = &text
+
+		if m.Entities, err = decryptEntities(c, rec.EntitiesEnc, rec.Entities); err != nil {
+			return nil, err
+		}
+		if m.LinkPreview, err = decryptLinkPreview(c, rec.LinkPreviewEnc); err != nil {
+			return nil, err
+		}
 	}
 	return m, nil
 }
@@ -200,6 +259,14 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 	if err != nil {
 		return nil, err
 	}
+	entitiesEnc, err := encryptEntities(s.cipher, entities)
+	if err != nil {
+		return nil, err
+	}
+	linkPreviewEnc, err := encryptLinkPreview(s.cipher, linkPreview)
+	if err != nil {
+		return nil, err
+	}
 
 	var result *models.Message
 	err = s.db.WithTx(ctx, func(tx repository.DBTX) error {
@@ -225,9 +292,9 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			SenderID:         senderID,
 			ContentEnc:       enc,
 			ReplyToMessageID: in.ReplyToMessageID,
-			Entities:         entities,
+			EntitiesEnc:      entitiesEnc,
 			IsSilent:         in.IsSilent,
-			LinkPreview:      linkPreview,
+			LinkPreviewEnc:   linkPreviewEnc,
 		}
 		if err = s.msgs.Create(ctx, tx, rec); err != nil {
 			return err
@@ -254,9 +321,9 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			MemberIDs:        memberIDs,
 			ContentEnc:       enc,
 			Kind:             models.MessageUser,
-			Entities:         entities,
+			EntitiesEnc:      entitiesEnc,
 			IsSilent:         in.IsSilent,
-			LinkPreview:      linkPreview,
+			LinkPreviewEnc:   linkPreviewEnc,
 		}); err != nil {
 			return err
 		}
@@ -452,6 +519,14 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
+	entitiesEnc, err := encryptEntities(s.cipher, entities)
+	if err != nil {
+		return nil, err
+	}
+	linkPreviewEnc, err := encryptLinkPreview(s.cipher, linkPreview)
+	if err != nil {
+		return nil, err
+	}
 
 	var result *models.Message
 	err = s.db.WithTx(ctx, func(tx repository.DBTX) error {
@@ -473,7 +548,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			return apperror.ErrMessageDeleted
 		}
 
-		updatedAt, err := s.msgs.Update(ctx, tx, messageID, enc, entities, linkPreview)
+		updatedAt, err := s.msgs.Update(ctx, tx, messageID, enc, entitiesEnc, linkPreviewEnc)
 		if err != nil {
 			return err
 		}
@@ -484,6 +559,11 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 		if err != nil {
 			return err
 		}
+		// когда entities/link_preview очищены, в outbox уходит пустой срез / nil; иначе - шифртекст
+		var plainEntities []models.Entity
+		if len(entitiesEnc) == 0 {
+			plainEntities = []models.Entity{}
+		}
 		if err = s.publish(ctx, tx, events.TopicMessageEvents, rec.ConversationID, events.TypeMessageUpdated, events.MessageUpdatedPayload{
 			ConversationID: rec.ConversationID,
 			MessageID:      messageID,
@@ -491,8 +571,9 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			UpdatedAt:      *updatedAt,
 			MemberIDs:      memberIDs,
 			ContentEnc:     enc,
-			Entities:       entities,
-			LinkPreview:    linkPreview,
+			EntitiesEnc:    entitiesEnc,
+			Entities:       plainEntities,
+			LinkPreviewEnc: linkPreviewEnc,
 		}); err != nil {
 			return err
 		}

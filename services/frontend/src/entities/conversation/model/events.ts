@@ -138,6 +138,24 @@ export function applyToConversations(
             return { kind: 'invalidate' }
         }
 
+        case 'conversation.history.cleared': {
+            if (!list || !data.conversation_id) {
+                return { kind: 'ignore' }
+            }
+            const exists = list.some((c) => c.id === data.conversation_id)
+            if (!exists) {
+                return { kind: 'ignore' }
+            }
+            return {
+                kind: 'list',
+                list: list.map((c) =>
+                    c.id === data.conversation_id
+                        ? { ...c, last_message: null, last_message_read: false, unread_count: 0 }
+                        : c,
+                ),
+            }
+        }
+
         default:
             return { kind: 'ignore' }
     }

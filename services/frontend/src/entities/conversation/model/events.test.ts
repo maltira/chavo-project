@@ -210,6 +210,41 @@ describe('applyToConversations', () => {
             updated_at: '2026-10-14T10:05:00Z',
         })
     })
+
+    it('clears last_message and unread_count on conversation.history.cleared keeping chat in list', () => {
+        const populated = [
+            chat('a', '2026-10-14T10:00:00Z', {
+                unread_count: 3,
+                last_message_read: true,
+                pinned_at: '2026-10-14T10:00:00Z',
+                last_message: {
+                    id: 'm1',
+                    conversation_id: 'a',
+                    sender_id: 'peer',
+                    content: 'привет',
+                    reply_to_message_id: null,
+                    is_edited: false,
+                    is_deleted: false,
+                    created_at: '2026-10-14T10:00:00Z',
+                    updated_at: null,
+                },
+            }),
+        ]
+        const update = applyToConversations(
+            populated,
+            { type: 'conversation.history.cleared', data: { conversation_id: 'a' } },
+            ME,
+        )
+        if (update.kind !== 'list') throw new Error(update.kind)
+        expect(update.list).toHaveLength(1)
+        expect(update.list[0]).toMatchObject({
+            id: 'a',
+            last_message: null,
+            unread_count: 0,
+            last_message_read: false,
+            pinned_at: '2026-10-14T10:00:00Z',
+        })
+    })
 })
 
 describe('applyChatSettings', () => {

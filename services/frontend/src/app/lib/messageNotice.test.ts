@@ -79,6 +79,23 @@ describe('notifyNewMessage', () => {
         expect(notices()).toEqual([])
     })
 
+    it('stays silent when message has is_silent=true', async () => {
+        await notifyNewMessage(
+            {
+                type: 'message.created',
+                data: {
+                    conversation_id: 'c1',
+                    sender_id: 'u1',
+                    content: 'Тихо!',
+                    is_silent: true,
+                },
+            },
+            setup('direct'),
+            'me',
+        )
+        expect(notices()).toEqual([])
+    })
+
     it('notifies again once the mute has expired', async () => {
         const client = setup('direct')
         client.setQueryData(['conversations'], {

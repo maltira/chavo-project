@@ -282,4 +282,21 @@ describe('MessageComposer', () => {
         await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
         expect(useDrafts.getState().items.c1).toBeUndefined()
     })
+
+    it('sends silently via context menu on the send button', async () => {
+        renderWithProviders(<MessageComposer conversationId="c1" myId="me" onCancel={vi.fn()} />)
+        const field = screen.getByLabelText('Сообщение')
+        typeMessage(field, 'тихое сообщение')
+        const sendBtn = screen.getByRole('button', { name: 'Отправить' })
+
+        fireEvent.contextMenu(sendBtn)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Отправить без звука' }))
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+        expect(body()).toEqual({
+            conversation_id: 'c1',
+            content: 'тихое сообщение',
+            is_silent: true,
+            reply_to_message_id: null,
+        })
+    })
 })

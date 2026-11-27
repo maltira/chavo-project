@@ -1,5 +1,12 @@
 import type { MessageEntity } from '@/shared/lib'
 
+export interface MessageReaction {
+    emoji: string
+    count: number
+    me: boolean
+    user_ids: string[]
+}
+
 export interface Message {
     id: string
     conversation_id: string
@@ -21,6 +28,10 @@ export interface Message {
     forwarded_from_user_id?: string | null
     // форматирование текста (жирный, курсив, подчёркивание); без него - обычный текст
     entities?: MessageEntity[]
+    // отправлено без звука (не показывает уведомление и не воспроизводит звук)
+    is_silent?: boolean
+    // агрегированные реакции сообщения
+    reactions?: MessageReaction[]
     // только на клиенте: отправлено, но сервер ещё не ответил
     pending?: boolean
     // только на клиенте: id временного сообщения, которое заменил ответ сервера - ключ строки
@@ -36,4 +47,7 @@ export interface MessagesPage {
     items: Message[]
     limit: number
     next_before: string | null
+    next_after?: string | null
+    has_older?: boolean
+    has_newer?: boolean
 }

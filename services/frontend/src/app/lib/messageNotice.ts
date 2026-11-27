@@ -12,6 +12,7 @@ interface CreatedData {
     sender_id?: string
     content?: string | null
     kind?: string
+    is_silent?: boolean
 }
 
 // чат из кеша (списки или карточка), иначе с сервера
@@ -48,8 +49,8 @@ export async function notifyNewMessage(
     }
     const data = (event.data ?? {}) as CreatedData
     const { conversation_id: chatId, sender_id: senderId } = data
-    // о вступлениях и выходах не уведомляем: они видны в истории
-    if (!chatId || !senderId || senderId === myId || data.kind === 'system') {
+    // о вступлениях/выходах и тихих сообщениях не уведомляем
+    if (!chatId || !senderId || senderId === myId || data.kind === 'system' || data.is_silent) {
         return
     }
     const watching =

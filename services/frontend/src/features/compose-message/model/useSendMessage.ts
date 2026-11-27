@@ -1,6 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { addMessage, removeMessage, replaceMessage, sendMessage } from '@/entities/message'
+import {
+    addMessage,
+    hasUnloadedNewerMessages,
+    messagesKey,
+    removeMessage,
+    replaceMessage,
+    sendMessage,
+} from '@/entities/message'
 import type { Message, SendMessageInput } from '@/entities/message'
 import { errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
@@ -16,7 +23,10 @@ export function useSendMessage(myId: string | undefined, onSent?: (message: Mess
         mutationFn: (input: SendMessageInput) => sendMessage(input),
         onMutate: (input) => {
             if (!input.conversation_id) {
-                return { tempId: null }
+                return { tempId: null, resetTail: false }
+            }
+            if (hasUnloadedNewerMessages(queryClient, input.conversation_id)) {
+                return { tempId: null, resetTail: true }
             }
             const temp: Message = {
                 id: `temp-${++tempCounter}`,
@@ -24,6 +34,8 @@ export function useSendMessage(myId: string | undefined, onSent?: (message: Mess
                 sender_id: myId ?? '',
                 content: input.content,
                 entities: input.entities ?? [],
+                is_silent: input.is_silent ?? false,
+                reactions: [],
                 reply_to_message_id: input.reply_to_message_id ?? null,
                 is_edited: false,
                 is_deleted: false,
@@ -32,11 +44,15 @@ export function useSendMessage(myId: string | undefined, onSent?: (message: Mess
                 pending: true,
             }
             addMessage(queryClient, temp)
-            return { tempId: temp.id }
+            return { tempId: temp.id, resetTail: false }
         },
-        onSuccess: (message, _input, context) => {
+        onSuccess: (message, input, context) => {
             if (context.tempId) {
                 replaceMessage(queryClient, context.tempId, message)
+            } else if (context.resetTail && input.conversation_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: messagesKey(input.conversation_id),
+                })
             }
             onSent?.(message)
         },

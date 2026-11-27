@@ -161,4 +161,17 @@ describe('ChatActionsMenu', () => {
             ),
         )
     })
+
+    it('clears chat history after confirmation', async () => {
+        renderMenu(direct)
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Очистить историю' }))
+        const dialog = screen.getByRole('dialog', { name: 'Очистить историю?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Очистить' }))
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/conversations/d1/clear',
+                expect.objectContaining({ method: 'POST' }),
+            ),
+        )
+    })
 })

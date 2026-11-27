@@ -1,0 +1,57 @@
+.root {
+    display: inline-flex;
+    align-items: baseline;
+    max-width: 100%;
+    min-width: 0;
+    color: var(--color-accent);
+}
+
+.label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dots {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.dot2 {
+    animation: typing-dot-2 1.2s steps(1, end) infinite;
+}
+
+.dot3 {
+    animation: typing-dot-3 1.2s steps(1, end) infinite;
+}
+
+@keyframes typing-dot-2 {
+    0% {
+        opacity: 0;
+    }
+
+    33.33%,
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes typing-dot-3 {
+    0% {
+        opacity: 0;
+    }
+
+    66.66%,
+    100% {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dot2,
+    .dot3 {
+        animation: none;
+        opacity: 1;
+    }
+}

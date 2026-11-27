@@ -1,0 +1,68 @@
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tab {
+    @include type(tag-regular);
+
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+
+    border: 1px solid transparent;
+    border-radius: $radius-full;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text);
+    cursor: pointer;
+    transition:
+        background-color $transition-fast,
+        border-color $transition-fast;
+
+    &:hover {
+        background-color: var(--color-bg-muted);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
+.tabActive {
+    border-color: var(--color-accent);
+    background-color: alpha(var(--color-accent), 0.14);
+}
+
+.tabCount {
+    @include type(xs-regular);
+
+    color: alpha(var(--color-text), 0.7);
+}
+
+// отрицательный margin + padding расширяют область прокрутки на 12px, чтобы фигура за аватаром (выступ 10px) не обрезалась
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 360px;
+    margin: -12px;
+    padding: 12px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.rowEmoji {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.empty {
+    @include type(tag-regular);
+
+    padding: 20px 0;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { useConversation, useMembers } from '@/entities/conversation'
-import { getDraft, MAX_FORWARD_MESSAGES, useMessages, usePins } from '@/entities/message'
+import {
+    getDraft,
+    MAX_FORWARD_MESSAGES,
+    useMessages,
+    usePins,
+    useToggleReaction,
+} from '@/entities/message'
 import type { Message, PinnedMessage } from '@/entities/message'
 import { useMe, useUser } from '@/entities/user'
 import { MessageComposer } from '@/features/compose-message'
@@ -23,15 +29,13 @@ import { HeaderSkeleton, MessagesSkeleton } from './ChatSkeleton'
 import styles from './ChatWindow.module.scss'
 import { MessageList } from './MessageList'
 import { PinnedBar } from './PinnedBar'
+import { ReactorsModal } from './ReactorsModal'
 import { ReadersModal } from './ReadersModal'
 import { SelectionBar } from './SelectionBar'
 
 interface Props {
     conversationId: string
 }
-
-// предел догрузки при переходе по цитате: дальше сообщение считается недоступным
-const MAX_PAGES_TO_FIND = 20
 
 // окно открытого чата
 export function ChatWindow({ conversationId }: Props) {
@@ -48,6 +52,7 @@ export function ChatWindow({ conversationId }: Props) {
     const openInfo = useOpenChatInfo()
     const pins = usePins(conversationId)
     const pin = usePinMessage(conversationId)
+    const toggleReaction = useToggleReaction(conversationId, myId)
     // подтверждение закрепа или открепления в личном чате
     const [pinDialog, setPinDialog] = useState<{ mode: 'pin' | 'unpin'; messageId: string } | null>(
         null,
@@ -59,6 +64,11 @@ export function ChatWindow({ conversationId }: Props) {
     const [confirmingDelete, setConfirmingDelete] = useState(false)
     // просмотр списка прочитавших сообщение в группе
     const [readersOf, setReadersOf] = useState<string | null>(null)
+    // просмотр списка отреагировавших на сообщение
+    const [reactorsOf, setReactorsOf] = useState<{
+        messageId: string
+        initialEmoji?: string
+    } | null>(null)
 
     // Esc выходит из режима выбора (открытые окна пересылки/удаления Esc закрывают сами)
     useEffect(() => {
@@ -115,29 +125,19 @@ export function ChatWindow({ conversationId }: Props) {
     const [seenId, setSeenId] = useState<string>()
     useMarkRead(conversationId, seenId)
 
-    const { fetchNextPage } = history
+    const { fetchNextPage, fetchPreviousPage, loadAround, resetToLatest } = history
     const loadOlder = useCallback(
         () => void fetchNextPage({ cancelRefetch: false }),
         [fetchNextPage],
     )
-
-    // переход по цитате к старому сообщению: догружаем историю страницами, пока не найдём
-    const findMessage = useCallback(
-        async (id: string) => {
-            for (let page = 0; page < MAX_PAGES_TO_FIND; page++) {
-                const result = await fetchNextPage({ cancelRefetch: false })
-                const pages = result.data?.pages ?? []
-                if (pages.some((p) => p.items.some((m) => m.id === id))) {
-                    return true
-                }
-                if (!result.hasNextPage) {
-                    return false
-                }
-            }
-            return false
-        },
-        [fetchNextPage],
+    const loadNewer = useCallback(
+        () => void fetchPreviousPage({ cancelRefetch: false }),
+        [fetchPreviousPage],
     )
+    const returnToLatest = useCallback(() => void resetToLatest(), [resetToLatest])
+
+    // переход по цитате или закрепу к далёкому сообщению: загружаем окно around одним запросом
+    const findMessage = useCallback((id: string) => loadAround(id), [loadAround])
 
     if (chat.isError) {
         return (
@@ -317,6 +317,10 @@ export function ChatWindow({ conversationId }: Props) {
                     hasOlder={history.hasNextPage}
                     loadingOlder={history.isFetchingNextPage}
                     loadOlder={loadOlder}
+                    hasNewer={history.hasNewer}
+                    loadingNewer={history.isFetchingPreviousPage}
+                    loadNewer={loadNewer}
+                    onReturnToLatest={returnToLatest}
                     firstUnreadId={divider?.id ?? null}
                     onSeen={setSeenId}
                     findMessage={findMessage}
@@ -334,6 +338,12 @@ export function ChatWindow({ conversationId }: Props) {
                     pins={pinList}
                     onPin={(message) => togglePin(message.id)}
                     onShowReaders={(message) => setReadersOf(message.id)}
+                    onToggleReaction={(message, emoji, active) =>
+                        toggleReaction.mutate({ messageId: message.id, emoji, active })
+                    }
+                    onShowReactions={(message, initialEmoji) =>
+                        setReactorsOf({ messageId: message.id, initialEmoji })
+                    }
                     jumpRequest={jumpRequest}
                     onForward={(message) => {
                         setReply(null)
@@ -373,6 +383,16 @@ export function ChatWindow({ conversationId }: Props) {
                 conversationId={conversationId}
                 messageId={readersOf}
                 onClose={() => setReadersOf(null)}
+            />
+
+            <ReactorsModal
+                reactions={
+                    reactorsOf
+                        ? (messages.find((m) => m.id === reactorsOf.messageId)?.reactions ?? [])
+                        : null
+                }
+                initialEmoji={reactorsOf?.initialEmoji}
+                onClose={() => setReactorsOf(null)}
             />
 
             <div className={styles.composer}>

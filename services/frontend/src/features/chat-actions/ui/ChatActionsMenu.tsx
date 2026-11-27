@@ -7,6 +7,7 @@ import { ConfirmModal, ContextMenu, MenuItem } from '@/shared/ui'
 import type { MenuPosition } from '@/shared/ui'
 
 import { useChatSettings } from '../model/useChatSettings'
+import { useClearHistory } from '../model/useClearHistory'
 import { useLeaveChat } from '../model/useLeaveChat'
 import { useOpenChatInfo } from '../model/useOpenChatInfo'
 import { DeleteDirectModal } from './DeleteDirectModal'
@@ -19,12 +20,14 @@ interface Props {
 }
 
 // меню чата (правая кнопка в списке и «⋮» в шапке): сведения, прочитать, закреп, «без звука», архив,
-// покинуть/удалить группу
+// очистить историю, покинуть/удалить группу
 export function ChatActionsMenu({ chat, position, onClose }: Props) {
     const openInfo = useOpenChatInfo()
     const leave = useLeaveChat()
+    const clear = useClearHistory()
     const settings = useChatSettings(chat.id)
     const [confirm, setConfirm] = useState(false)
+    const [confirmClear, setConfirmClear] = useState(false)
     const [mutePicker, setMutePicker] = useState(false)
     const muted = isMuted(chat)
 
@@ -71,6 +74,9 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                     }
                 >
                     {chat.archived_at ? 'Вернуть из архива' : 'В архив'}
+                </MenuItem>
+                <MenuItem icon="trash" onClick={() => setConfirmClear(true)}>
+                    Очистить историю
                 </MenuItem>
                 {isGroup ? (
                     <MenuItem
@@ -132,6 +138,22 @@ export function ChatActionsMenu({ chat, position, onClose }: Props) {
                     : isAdmin
                       ? 'Группа и вся её история будут удалены у всех участников'
                       : 'Чат и его история пропадут из вашего списка'}
+            </ConfirmModal>
+
+            <ConfirmModal
+                open={confirmClear}
+                onClose={() => setConfirmClear(false)}
+                onConfirm={() => {
+                    setConfirmClear(false)
+                    clear.mutate(chat.id)
+                }}
+                title="Очистить историю?"
+                confirmLabel="Очистить"
+                danger
+                pending={clear.isPending}
+            >
+                История сообщений в этом чате будет очищена только у вас. Сам чат останется в
+                списке.
             </ConfirmModal>
         </>
     )

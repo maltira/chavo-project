@@ -285,3 +285,75 @@ describe('MessageList appearing messages', () => {
         expect(row('m1')).toBe(before)
     })
 })
+
+describe('MessageList reactions, silent and return to latest', () => {
+    beforeEach(() => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(() => new Promise(() => {})),
+        )
+    })
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('renders reaction pills, toggles them on click, and supports returning to latest', () => {
+        const onToggleReaction = vi.fn()
+        const onReturnToLatest = vi.fn()
+        const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+        const withReactions: Message = {
+            ...msg('m1', 'a', 5),
+            is_silent: true,
+            reactions: [
+                { emoji: '👍', count: 2, me: true, user_ids: ['me', 'a'] },
+                { emoji: '🔥', count: 1, me: false, user_ids: ['a'] },
+            ],
+        }
+        render(
+            <QueryClientProvider client={client}>
+                <MessageList
+                    chat={
+                        {
+                            id: 'g1',
+                            conversation_type: 'direct',
+                            my_role: 'member',
+                        } as ConversationSummary
+                    }
+                    messages={[withReactions]}
+                    myId="me"
+                    readBoundary={undefined}
+                    hasOlder={false}
+                    loadingOlder={false}
+                    loadOlder={vi.fn()}
+                    hasNewer
+                    onReturnToLatest={onReturnToLatest}
+                    firstUnreadId={null}
+                    findMessage={vi.fn()}
+                    onSeen={vi.fn()}
+                    onReply={vi.fn()}
+                    onEdit={vi.fn()}
+                    onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    onToggleReaction={onToggleReaction}
+                    jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
+                />
+            </QueryClientProvider>,
+        )
+
+        expect(screen.getByRole('img', { name: 'Отправлено без звука' })).toBeInTheDocument()
+
+        // нажатие по своей реакции снимает её, по чужой - добавляет
+        fireEvent.click(screen.getByRole('button', { name: 'Реакция 👍: 2' }))
+        expect(onToggleReaction).toHaveBeenCalledWith(withReactions, '👍', false)
+        fireEvent.click(screen.getByRole('button', { name: 'Реакция 🔥: 1' }))
+        expect(onToggleReaction).toHaveBeenCalledWith(withReactions, '🔥', true)
+
+        // кнопка возврата к свежим сообщениям видна при hasNewer
+        fireEvent.click(screen.getByRole('button', { name: 'К последним сообщениям' }))
+        expect(onReturnToLatest).toHaveBeenCalledTimes(1)
+    })
+})

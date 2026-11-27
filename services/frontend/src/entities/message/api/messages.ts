@@ -1,7 +1,7 @@
 import { request } from '@/shared/api'
 import type { MessageEntity } from '@/shared/lib'
 
-import type { Message, MessagesPage } from '../model/types'
+import type { Message, MessageReaction, MessagesPage } from '../model/types'
 
 // размер страницы истории; сервер отдаёт не больше 100
 export const MESSAGES_PAGE = 50
@@ -9,13 +9,23 @@ export const MESSAGES_PAGE = 50
 // предел длины текста на сервере
 export const MAX_MESSAGE_LENGTH = 4096
 
-export function getMessages(conversationId: string, before?: string): Promise<MessagesPage> {
+export type MessagesCursor =
+    | { kind: 'before'; id: string }
+    | { kind: 'after'; id: string }
+    | { kind: 'around'; id: string }
+
+export function getMessages(
+    conversationId: string,
+    cursor?: string | MessagesCursor,
+): Promise<MessagesPage> {
     const params = new URLSearchParams({
         conversation_id: conversationId,
         limit: String(MESSAGES_PAGE),
     })
-    if (before) {
-        params.set('before', before)
+    if (typeof cursor === 'string') {
+        params.set('before', cursor)
+    } else if (cursor) {
+        params.set(cursor.kind, cursor.id)
     }
     return request<MessagesPage>(`/messages?${params}`)
 }
@@ -28,6 +38,8 @@ export interface SendMessageInput {
     reply_to_message_id?: string | null
     // форматирование текста; диапазоны в единицах UTF-16
     entities?: MessageEntity[]
+    // отправить без уведомления и звука
+    is_silent?: boolean
 }
 
 export function sendMessage(input: SendMessageInput): Promise<Message> {
@@ -105,4 +117,21 @@ export async function getMessageReaders(
         `/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/readers`,
     )
     return res.user_ids
+}
+
+export async function addReaction(messageId: string, emoji: string): Promise<MessageReaction[]> {
+    const res = await request<{ reactions: MessageReaction[] }>(
+        `/messages/${encodeURIComponent(messageId)}/reactions`,
+        { method: 'POST', body: { emoji } },
+    )
+    return res.reactions
+}
+
+export async function removeReaction(messageId: string, emoji: string): Promise<MessageReaction[]> {
+    const params = new URLSearchParams({ emoji })
+    const res = await request<{ reactions: MessageReaction[] }>(
+        `/messages/${encodeURIComponent(messageId)}/reactions?${params}`,
+        { method: 'DELETE' },
+    )
+    return res.reactions
 }

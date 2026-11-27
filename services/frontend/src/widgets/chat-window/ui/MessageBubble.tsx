@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { Message } from '@/entities/message'
-import { useProfileCard, UserAvatar, useUser } from '@/entities/user'
+import { useFavoriteEmojis, useProfileCard, UserAvatar, useUser } from '@/entities/user'
 import { cn, copyRich, formatTime, notify, useDismiss } from '@/shared/lib'
-import { Icon, IconButton, RichText } from '@/shared/ui'
+import { EmojiPicker, Icon, IconButton, RichText } from '@/shared/ui'
 
 import styles from './MessageBubble.module.scss'
 
@@ -37,6 +37,8 @@ interface Props {
     onForward: (message: Message) => void
     // кто прочитал сообщение (свои прочитанные сообщения в группе)
     onShowReaders?: (message: Message) => void
+    onToggleReaction?: (message: Message, emoji: string, active: boolean) => void
+    onShowReactions?: (message: Message, initialEmoji?: string) => void
     onJump: (messageId: string) => void
     // режим выбора для пересылки: нажатие отмечает сообщение, меню действий не открывается
     selecting: boolean
@@ -64,8 +66,9 @@ function AuthorAvatar({ userId }: { userId: string | null }) {
     )
 }
 
-// высота панели действий с отступом от сообщения
-const ACTIONS_SPACE = 68
+// высота панели действий с полосой быстрых реакций и отступом от сообщения
+const ACTIONS_SPACE = 124
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 // задержка долгого нажатия на тач-экране, мс
 const LONG_PRESS_MS = 450
 const LONG_PRESS_MOVE = 10
@@ -119,12 +122,16 @@ export function MessageBubble({
     onPin,
     onForward,
     onShowReaders,
+    onToggleReaction,
+    onShowReactions,
     onJump,
     selecting,
     selected,
     onToggleSelect,
 }: Props) {
     const [open, setOpen] = useState(false)
+    const [pickerOpen, setPickerOpen] = useState(false)
+    const favorites = useFavoriteEmojis(pickerOpen)
 
     const [above, setAbove] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
@@ -145,6 +152,7 @@ export function MessageBubble({
     useDismiss(open, rootRef, () => {
         const inside = rootRef.current?.contains(document.activeElement)
         setOpen(false)
+        setPickerOpen(false)
         if (inside) {
             bodyRef.current?.focus()
         }
@@ -152,6 +160,7 @@ export function MessageBubble({
 
     const deleted = message.is_deleted
     const interactive = !deleted && !message.pending
+    const reactions = message.reactions ?? []
 
     function computeAbove() {
         const row = rootRef.current
@@ -166,19 +175,32 @@ export function MessageBubble({
         if (!open) {
             computeAbove()
         }
+        setPickerOpen(false)
         setOpen(true)
     }
 
     function toggle() {
         if (!open) {
             computeAbove()
+            setPickerOpen(false)
+        } else {
+            setPickerOpen(false)
         }
         setOpen((value) => !value)
     }
 
     function act(action: () => void) {
         setOpen(false)
+        setPickerOpen(false)
         action()
+    }
+
+    function pickReaction(emoji: string) {
+        if (!onToggleReaction) {
+            return
+        }
+        const existing = reactions.find((r) => r.emoji === emoji)
+        act(() => onToggleReaction(message, emoji, !existing?.me))
     }
 
     function copy() {
@@ -188,9 +210,19 @@ export function MessageBubble({
         }).then(() => notify({ id: 'copied', icon: 'check', title: 'Текст скопирован' }))
     }
 
-    // время, «изменено» и галочки - в правом нижнем углу пузыря, как в Telegram
+    // время, «изменено», «без звука» и галочки - в правом нижнем углу пузыря, как в Telegram
     const metaContent = (
         <>
+            {message.is_silent && !deleted && (
+                <span
+                    role="img"
+                    className={styles.silentIcon}
+                    title="Отправлено без звука"
+                    aria-label="Отправлено без звука"
+                >
+                    <Icon name="notif-off" size={12} color="currentColor" />
+                </span>
+            )}
             {message.is_edited && !deleted && <span>изменено</span>}
             <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
             {mine && receipts && !deleted && !message.pending && (
@@ -384,67 +416,143 @@ export function MessageBubble({
                     </div>
                 </div>
 
+                {!deleted && reactions.length > 0 && (
+                    <div className={styles.reactions} aria-label="Реакции">
+                        {reactions.map((r) => (
+                            <button
+                                key={r.emoji}
+                                type="button"
+                                disabled={!interactive || selecting || !onToggleReaction}
+                                aria-pressed={r.me}
+                                aria-label={`Реакция ${r.emoji}: ${r.count}`}
+                                title="Нажмите, чтобы поставить или снять; ПКМ — кто отреагировал"
+                                className={cn(styles.reactionPill, r.me && styles.reactionMine)}
+                                onClick={() => onToggleReaction?.(message, r.emoji, !r.me)}
+                                onContextMenu={(event) => {
+                                    if (!onShowReactions) {
+                                        return
+                                    }
+                                    event.preventDefault()
+                                    onShowReactions(message, r.emoji)
+                                }}
+                            >
+                                <span className={styles.reactionEmoji}>{r.emoji}</span>
+                                <span className={styles.reactionCount}>{r.count}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 {open && (
                     <div
                         role="menu"
                         aria-label="Действия с сообщением"
                         className={cn(
-                            styles.actions,
+                            styles.actionsWrap,
                             mine && styles.actionsMine,
                             above && styles.actionsAbove,
                         )}
                     >
-                        <IconButton
-                            role="menuitem"
-                            icon="reply"
-                            aria-label="Ответить"
-                            onClick={() => act(() => onReply(message))}
-                        />
-                        <IconButton
-                            role="menuitem"
-                            icon="forward"
-                            aria-label="Переслать"
-                            onClick={() => act(() => onForward(message))}
-                        />
-                        <IconButton
-                            role="menuitem"
-                            icon="copy"
-                            aria-label="Копировать"
-                            onClick={() => act(copy)}
-                        />
-                        {pinned !== null && (
+                        {onToggleReaction && (
+                            <div className={styles.quickReactions} aria-label="Быстрые реакции">
+                                {QUICK_REACTIONS.map((emoji) => {
+                                    const active = reactions.some((r) => r.emoji === emoji && r.me)
+                                    return (
+                                        <button
+                                            key={emoji}
+                                            type="button"
+                                            className={cn(
+                                                styles.quickEmoji,
+                                                active && styles.quickEmojiActive,
+                                            )}
+                                            aria-label={`Реакция ${emoji}`}
+                                            aria-pressed={active}
+                                            onClick={() => pickReaction(emoji)}
+                                        >
+                                            {emoji}
+                                        </button>
+                                    )
+                                })}
+                                <IconButton
+                                    icon="add"
+                                    size={28}
+                                    aria-label="Выбрать реакцию"
+                                    aria-expanded={pickerOpen}
+                                    isActive={pickerOpen}
+                                    onClick={() => setPickerOpen((v) => !v)}
+                                />
+                            </div>
+                        )}
+                        {pickerOpen && onToggleReaction && (
+                            <div className={styles.reactionPicker}>
+                                <EmojiPicker
+                                    onPick={(emoji) => pickReaction(emoji)}
+                                    favorites={favorites.list}
+                                    onToggleFavorite={favorites.toggle}
+                                />
+                            </div>
+                        )}
+                        <div className={styles.actions}>
                             <IconButton
                                 role="menuitem"
-                                icon="pinned"
-                                aria-label={pinned ? 'Открепить' : 'Закрепить'}
-                                onClick={() => act(() => onPin(message))}
+                                icon="reply"
+                                aria-label="Ответить"
+                                onClick={() => act(() => onReply(message))}
                             />
-                        )}
-                        {onShowReaders && (
                             <IconButton
                                 role="menuitem"
-                                icon="check-double"
-                                aria-label="Кто прочитал"
-                                onClick={() => act(() => onShowReaders(message))}
+                                icon="forward"
+                                aria-label="Переслать"
+                                onClick={() => act(() => onForward(message))}
                             />
-                        )}
-                        {canEdit && (
                             <IconButton
                                 role="menuitem"
-                                icon="edit"
-                                aria-label="Изменить"
-                                onClick={() => act(() => onEdit(message))}
+                                icon="copy"
+                                aria-label="Копировать"
+                                onClick={() => act(copy)}
                             />
-                        )}
-                        {canDelete && (
-                            <IconButton
-                                role="menuitem"
-                                icon="trash"
-                                aria-label="Удалить"
-                                className={styles.danger}
-                                onClick={() => act(() => onDelete(message))}
-                            />
-                        )}
+                            {pinned !== null && (
+                                <IconButton
+                                    role="menuitem"
+                                    icon="pinned"
+                                    aria-label={pinned ? 'Открепить' : 'Закрепить'}
+                                    onClick={() => act(() => onPin(message))}
+                                />
+                            )}
+                            {onShowReactions && reactions.length > 0 && (
+                                <IconButton
+                                    role="menuitem"
+                                    icon="heart"
+                                    aria-label="Кто отреагировал"
+                                    onClick={() => act(() => onShowReactions(message))}
+                                />
+                            )}
+                            {onShowReaders && (
+                                <IconButton
+                                    role="menuitem"
+                                    icon="check-double"
+                                    aria-label="Кто прочитал"
+                                    onClick={() => act(() => onShowReaders(message))}
+                                />
+                            )}
+                            {canEdit && (
+                                <IconButton
+                                    role="menuitem"
+                                    icon="edit"
+                                    aria-label="Изменить"
+                                    onClick={() => act(() => onEdit(message))}
+                                />
+                            )}
+                            {canDelete && (
+                                <IconButton
+                                    role="menuitem"
+                                    icon="trash"
+                                    aria-label="Удалить"
+                                    className={styles.danger}
+                                    onClick={() => act(() => onDelete(message))}
+                                />
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

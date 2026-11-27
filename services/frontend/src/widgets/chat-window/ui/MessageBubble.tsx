@@ -132,6 +132,7 @@ export function MessageBubble({
     const [open, setOpen] = useState(false)
     const [pickerOpen, setPickerOpen] = useState(false)
     const favorites = useFavoriteEmojis(pickerOpen)
+    const openProfile = useProfileCard((state) => state.open)
 
     const [above, setAbove] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
@@ -330,6 +331,7 @@ export function MessageBubble({
                                             <RichText
                                                 text={replyTo.content ?? ''}
                                                 entities={replyTo.entities}
+                                                interactive={false}
                                             />
                                         )}
                                     </span>
@@ -404,6 +406,7 @@ export function MessageBubble({
                                 <RichText
                                     text={message.content ?? ''}
                                     entities={message.entities}
+                                    onMentionClick={openProfile}
                                 />
                             )}
                             {/* невидимая копия занимает место в конце последней строки:
@@ -414,6 +417,41 @@ export function MessageBubble({
                         </span>
                         <span className={styles.meta}>{metaContent}</span>
                     </div>
+                    {!deleted && message.link_preview && (
+                        <a
+                            href={message.link_preview.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.linkPreview}
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <div className={styles.linkPreviewBody}>
+                                {message.link_preview.site_name && (
+                                    <span className={styles.linkPreviewSite}>
+                                        {message.link_preview.site_name}
+                                    </span>
+                                )}
+                                {message.link_preview.title && (
+                                    <span className={styles.linkPreviewTitle}>
+                                        {message.link_preview.title}
+                                    </span>
+                                )}
+                                {message.link_preview.description && (
+                                    <span className={styles.linkPreviewDesc}>
+                                        {message.link_preview.description}
+                                    </span>
+                                )}
+                            </div>
+                            {message.link_preview.image_url && (
+                                <img
+                                    src={message.link_preview.image_url}
+                                    alt=""
+                                    className={styles.linkPreviewImg}
+                                    loading="lazy"
+                                />
+                            )}
+                        </a>
+                    )}
                 </div>
 
                 {!deleted && reactions.length > 0 && (

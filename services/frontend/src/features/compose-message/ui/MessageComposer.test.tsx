@@ -299,4 +299,120 @@ describe('MessageComposer', () => {
             reply_to_message_id: null,
         })
     })
+
+    it('autocompletes @mentions in groups and sends mention entity', async () => {
+        fetchMock.mockImplementation((url: string) => {
+            if (url.startsWith('/api/conversations/g1/members')) {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            items: [
+                                {
+                                    conversation_id: 'g1',
+                                    user_id: 'me',
+                                    role: 'admin',
+                                    last_read_message_id: null,
+                                    joined_at: '2026-01-01T00:00:00Z',
+                                },
+                                {
+                                    conversation_id: 'g1',
+                                    user_id: 'u-bob',
+                                    role: 'member',
+                                    last_read_message_id: null,
+                                    joined_at: '2026-01-01T00:00:00Z',
+                                },
+                            ],
+                            limit: 100,
+                            offset: 0,
+                        }),
+                    ),
+                )
+            }
+            if (url === '/api/users/u-bob') {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            user_id: 'u-bob',
+                            username: 'bob',
+                            display_name: 'Боб',
+                            bio: '',
+                            avatar_url: '',
+                            avatar_shape: 'circle',
+                        }),
+                    ),
+                )
+            }
+            return Promise.resolve(new Response(JSON.stringify({ id: 'm-mention' }), { status: 201 }))
+        })
+
+        renderWithProviders(
+            <MessageComposer conversationId="g1" myId="me" isGroup onCancel={vi.fn()} />,
+        )
+        const field = screen.getByLabelText('Сообщение')
+        typeMessage(field, 'Привет @bo')
+        select(field, 'Привет @bo'.length, 'Привет @bo'.length)
+
+        const option = await screen.findByRole('option', { name: /@bob/ })
+        fireEvent.click(option)
+
+        expect(field.textContent).toBe('Привет @bob ')
+        fireEvent.keyDown(field, { key: 'Enter' })
+
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/messages',
+                expect.objectContaining({ method: 'POST' }),
+            ),
+        )
+        const post = fetchMock.mock.calls.find(([url]) => url === '/api/messages')!
+        expect(JSON.parse(post[1].body as string)).toEqual({
+            conversation_id: 'g1',
+            content: 'Привет @bob',
+            entities: [{ type: 'mention', offset: 7, length: 4, user_id: 'u-bob' }],
+            reply_to_message_id: null,
+        })
+    })
+
+    it('loads live link preview and lets user dismiss it before sending', async () => {
+        fetchMock.mockImplementation((url: string) => {
+            if (url.startsWith('/api/link-preview?')) {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            preview: {
+                                url: 'https://example.com/post',
+                                title: 'Example Post',
+                                description: 'Описание статьи',
+                                site_name: 'Example',
+                            },
+                        }),
+                    ),
+                )
+            }
+            return Promise.resolve(new Response(JSON.stringify({ id: 'm-link' }), { status: 201 }))
+        })
+
+        renderWithProviders(<MessageComposer conversationId="c1" myId="me" onCancel={vi.fn()} />)
+        const field = screen.getByLabelText('Сообщение')
+        typeMessage(field, 'смотри https://example.com/post')
+
+        expect(await screen.findByText('Example Post')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Скрыть превью ссылки' }))
+        expect(screen.queryByText('Example Post')).toBeNull()
+
+        fireEvent.keyDown(field, { key: 'Enter' })
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/messages',
+                expect.objectContaining({ method: 'POST' }),
+            ),
+        )
+        const post = fetchMock.mock.calls.find(([url]) => url === '/api/messages')!
+        expect(JSON.parse(post[1].body as string)).toEqual({
+            conversation_id: 'c1',
+            content: 'смотри https://example.com/post',
+            disable_link_preview: true,
+            reply_to_message_id: null,
+        })
+    })
 })

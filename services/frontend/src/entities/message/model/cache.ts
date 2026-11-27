@@ -5,7 +5,7 @@ import type { MessageEntity } from '@/shared/lib'
 
 import { MESSAGES_PAGE } from '../api/messages'
 import type { MessagesCursor } from '../api/messages'
-import type { Message, MessageReaction, MessagesPage } from './types'
+import type { LinkPreview, Message, MessageReaction, MessagesPage } from './types'
 
 export const messagesKey = (conversationId: string) => ['messages', conversationId] as const
 
@@ -128,6 +128,7 @@ interface MessageEventData {
     forwarded_from_user_id?: string | null
     entities?: MessageEntity[]
     is_silent?: boolean
+    link_preview?: LinkPreview | null
     emoji?: string
     added?: boolean
     reactions?: ReactionEventSummary[]
@@ -167,6 +168,7 @@ export function applyMessageEvent(
                     entities: data.entities ?? [],
                     is_silent: data.is_silent ?? false,
                     reactions: [],
+                    link_preview: data.link_preview ?? null,
                 })
             }
             break
@@ -175,6 +177,7 @@ export function applyMessageEvent(
                 content: data.content ?? null,
                 // новая разметка целиком: у правки без форматирования список пуст
                 entities: data.entities ?? [],
+                link_preview: data.link_preview ?? null,
                 is_edited: true,
                 updated_at: data.updated_at ?? null,
             })
@@ -182,6 +185,8 @@ export function applyMessageEvent(
         case 'message.deleted':
             patchMessage(queryClient, conversationId, id, {
                 content: null,
+                entities: [],
+                link_preview: null,
                 is_deleted: true,
                 reactions: [],
             })

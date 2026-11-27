@@ -256,6 +256,77 @@ $tail-height: 14px;
     vertical-align: bottom;
 }
 
+// карточка превью ссылки внутри пузыря
+.linkPreview {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0 12px 10px;
+    padding: 8px 10px;
+
+    border-left: 3px solid var(--color-accent);
+    border-radius: 0 $radius-md $radius-md 0;
+    background-color: alpha(var(--color-accent), 0.08);
+    color: inherit;
+    text-decoration: none;
+    transition: background-color $transition-fast;
+
+    &:hover {
+        background-color: alpha(var(--color-accent), 0.14);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
+.linkPreviewBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.linkPreviewSite {
+    @include type(xs-regular);
+
+    color: var(--color-accent);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.linkPreviewTitle {
+    @include type(tag-medium);
+
+    color: var(--color-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.linkPreviewDesc {
+    @include type(xs-regular);
+
+    color: alpha(var(--color-text), 0.72);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.linkPreviewImg {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: $radius-md;
+    object-fit: cover;
+}
+
 // плашки реакций под пузырём
 .reactions {
     display: flex;

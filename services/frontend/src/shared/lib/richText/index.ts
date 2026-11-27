@@ -8,12 +8,23 @@ export {
     toHtml,
 } from './dom'
 export {
+    CODE_LANGUAGES,
+    codeLanguageLabel,
     ENTITY_TYPES,
+    extractFirstUrl,
+    extractUrls,
+    findLinkInRange,
+    findPreLanguageInRange,
     hasFormat,
+    isSafeHttpUrl,
     normalizeEntities,
+    replaceRangeWithMention,
     sameValue,
+    setLink,
+    setPre,
     toggleFormat,
     toSegments,
     trimValue,
+    withAutoLinks,
 } from './model'
-export type { EntityType, MessageEntity, RichValue, Segment } from './model'
+export type { EntityType, MessageEntity, RichValue, Segment, ToggleableFormat } from './model'

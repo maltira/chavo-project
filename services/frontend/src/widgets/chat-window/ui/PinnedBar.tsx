@@ -45,6 +45,7 @@ export function PinnedBar({ pins, canUnpin, onJump, onUnpin }: Props) {
                     <RichText
                         text={pin.message.content ?? ''}
                         entities={pin.message.entities}
+                        interactive={false}
                     />
                 </span>
             </button>

@@ -4,6 +4,7 @@ export {
     deleteMessages,
     editMessage,
     forwardMessages,
+    getLinkPreview,
     getMessage,
     getMessageReaders,
     MAX_FORWARD_CHATS,
@@ -39,7 +40,7 @@ export { readersKey, useReaders } from './model/useReaders'
 export { getPins, pinMessage, unpinMessage } from './api/pins'
 export type { PinnedMessage, PinScope } from './api/pins'
 export { applyPinsEvent, pinsKey, usePins } from './model/usePins'
-export type { Message, MessageReaction, MessagesPage, SystemEvent } from './model/types'
+export type { LinkPreview, Message, MessageReaction, MessagesPage, SystemEvent } from './model/types'
 export { isSystem, quotePreview, systemParts, useSystemParts, useSystemText } from './lib/system'
 export { messageKey, useMessage } from './model/useMessage'
 export type { SystemPart } from './lib/system'

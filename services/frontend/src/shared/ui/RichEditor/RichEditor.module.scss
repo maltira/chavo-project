@@ -47,9 +47,67 @@
         text-decoration-thickness: 1px;
         text-underline-offset: 2px;
     }
+
+    & s,
+    & del {
+        text-decoration: line-through;
+        text-decoration-thickness: 1px;
+    }
+
+    & code {
+        padding: 1px 4px;
+        border-radius: 4px;
+        background-color: alpha(var(--color-text), 0.1);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.9em;
+    }
+
+    & [data-pre='true'] {
+        display: inline-block;
+        padding: 2px 6px;
+        border: 1px solid alpha(var(--color-text), 0.14);
+        border-radius: 5px;
+        background-color: alpha(var(--color-bg-primary), 0.65);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.9em;
+    }
+
+    & [data-pre='true'][data-lang]::before {
+        content: attr(data-lang);
+        margin-right: 6px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background-color: alpha(var(--color-accent), 0.18);
+        color: var(--color-accent);
+        font-size: 0.78em;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    & [data-spoiler='true'] {
+        padding: 0 3px;
+        border-radius: 4px;
+        background-color: alpha(var(--color-text), 0.16);
+    }
+
+    & [data-blockquote='true'] {
+        padding: 1px 6px;
+        border-left: 3px solid var(--color-accent);
+        background-color: alpha(var(--color-accent), 0.08);
+    }
+
+    & a {
+        color: var(--color-accent);
+        text-decoration: underline;
+    }
+
+    & [data-mention] {
+        color: var(--color-accent);
+        font-weight: 500;
+    }
 }
 
-// панель B / I / U над выделенным текстом
+// плавающая панель форматирования над выделенным текстом
 .bubble {
     position: fixed;
     z-index: 30;
@@ -70,8 +128,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
     padding: 0;
 
     border: none;
@@ -100,6 +158,48 @@
 .toolActive {
     background-color: var(--color-bg-tertiary);
     color: var(--color-text);
+}
+
+.linkForm {
+    display: flex;
+    align-items: center;
+}
+
+.linkInput {
+    @include type(tag-regular);
+
+    width: 210px;
+    height: 38px;
+    padding: 0 10px;
+
+    border: none;
+    border-right: 1px solid var(--color-bg-muted);
+    background: none;
+    color: var(--color-text);
+    outline: none;
+
+    &::placeholder {
+        color: alpha(var(--color-text), 0.5);
+    }
+}
+
+.linkInputError {
+    color: var(--color-danger);
+}
+
+.langSelect {
+    @include type(tag-regular);
+
+    width: 156px;
+    height: 38px;
+    padding: 0 10px;
+
+    border: none;
+    border-right: 1px solid var(--color-bg-muted);
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text);
+    outline: none;
+    cursor: pointer;
 }
 
 @keyframes bubble-show {

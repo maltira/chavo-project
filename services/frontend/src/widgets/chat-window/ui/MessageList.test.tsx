@@ -356,4 +356,58 @@ describe('MessageList reactions, silent and return to latest', () => {
         fireEvent.click(screen.getByRole('button', { name: 'К последним сообщениям' }))
         expect(onReturnToLatest).toHaveBeenCalledTimes(1)
     })
+
+    it('renders link preview card and unread mentions button', () => {
+        const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+        const onJumpToMention = vi.fn()
+        const withPreview: Message = {
+            ...msg('m-lp', 'other', 1),
+            content: 'Читай https://example.com/post',
+            link_preview: {
+                url: 'https://example.com/post',
+                site_name: 'Example',
+                title: 'Заголовок статьи',
+                description: 'Короткое описание',
+            },
+        }
+        render(
+            <QueryClientProvider client={client}>
+                <MessageList
+                    chat={
+                        {
+                            id: 'g1',
+                            conversation_type: 'group',
+                            my_role: 'member',
+                        } as ConversationSummary
+                    }
+                    messages={[withPreview]}
+                    myId="me"
+                    readBoundary={undefined}
+                    hasOlder={false}
+                    loadingOlder={false}
+                    loadOlder={vi.fn()}
+                    firstUnreadId={null}
+                    findMessage={vi.fn()}
+                    onSeen={vi.fn()}
+                    onReply={vi.fn()}
+                    onEdit={vi.fn()}
+                    onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    unreadMentionsCount={2}
+                    onJumpToMention={onJumpToMention}
+                    jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
+                />
+            </QueryClientProvider>,
+        )
+
+        expect(screen.getByText('Заголовок статьи')).toBeInTheDocument()
+        expect(screen.getByText('Example')).toBeInTheDocument()
+        const mentionBtn = screen.getByRole('button', { name: 'Перейти к непрочитанному упоминанию' })
+        fireEvent.click(mentionBtn)
+        expect(onJumpToMention).toHaveBeenCalledTimes(1)
+    })
 })

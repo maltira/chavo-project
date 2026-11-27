@@ -7,6 +7,14 @@ export interface MessageReaction {
     user_ids: string[]
 }
 
+export interface LinkPreview {
+    url: string
+    title?: string | null
+    description?: string | null
+    image_url?: string | null
+    site_name?: string | null
+}
+
 export interface Message {
     id: string
     conversation_id: string
@@ -32,6 +40,8 @@ export interface Message {
     is_silent?: boolean
     // агрегированные реакции сообщения
     reactions?: MessageReaction[]
+    // превью ссылки (OpenGraph), если есть
+    link_preview?: LinkPreview | null
     // только на клиенте: отправлено, но сервер ещё не ответил
     pending?: boolean
     // только на клиенте: id временного сообщения, которое заменил ответ сервера - ключ строки

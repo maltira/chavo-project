@@ -84,12 +84,22 @@ export function applyToConversations(
             }
             // системные сообщения поднимают чат, но в непрочитанные не идут (так считает и сервер)
             const counts = data.sender_id !== myId && message.kind !== 'system'
+            const mentionsMe =
+                counts &&
+                !!myId &&
+                (data.entities ?? []).some((e) => e.type === 'mention' && e.user_id === myId)
             const updated: ConversationSummary = {
                 ...chat,
                 last_message: message,
                 last_message_at: data.created_at,
                 last_message_read: false,
                 unread_count: chat.unread_count + (counts ? 1 : 0),
+                ...(mentionsMe || chat.unread_mentions_count !== undefined
+                    ? {
+                          unread_mentions_count:
+                              (chat.unread_mentions_count ?? 0) + (mentionsMe ? 1 : 0),
+                      }
+                    : {}),
             }
             const next = list.map((c, i) => (i === index ? updated : c))
             return { kind: 'list', list: next.sort(byListOrder) }
@@ -98,6 +108,14 @@ export function applyToConversations(
         case 'message.updated': {
             if (!list) {
                 return { kind: 'ignore' }
+            }
+            const targetChat = list.find((c) => c.id === data.conversation_id)
+            const mentionsMe =
+                !!myId &&
+                (data.entities ?? []).some((e) => e.type === 'mention' && e.user_id === myId)
+            // правка могла добавить или снять упоминание текущего пользователя - перечитываем счётчик с сервера
+            if (mentionsMe || (targetChat?.unread_mentions_count ?? 0) > 0) {
+                return { kind: 'invalidate' }
             }
             let changed = false
             const next = list.map((c) => {
@@ -150,7 +168,15 @@ export function applyToConversations(
                 kind: 'list',
                 list: list.map((c) =>
                     c.id === data.conversation_id
-                        ? { ...c, last_message: null, last_message_read: false, unread_count: 0 }
+                        ? {
+                              ...c,
+                              last_message: null,
+                              last_message_read: false,
+                              unread_count: 0,
+                              ...(c.unread_mentions_count !== undefined
+                                  ? { unread_mentions_count: 0 }
+                                  : {}),
+                          }
                         : c,
                 ),
             }

@@ -1,7 +1,7 @@
 import { request } from '@/shared/api'
 import type { MessageEntity } from '@/shared/lib'
 
-import type { Message, MessageReaction, MessagesPage } from '../model/types'
+import type { LinkPreview, Message, MessageReaction, MessagesPage } from '../model/types'
 
 // размер страницы истории; сервер отдаёт не больше 100
 export const MESSAGES_PAGE = 50
@@ -40,6 +40,8 @@ export interface SendMessageInput {
     entities?: MessageEntity[]
     // отправить без уведомления и звука
     is_silent?: boolean
+    // не прикреплять превью ссылки к сообщению
+    disable_link_preview?: boolean
 }
 
 export function sendMessage(input: SendMessageInput): Promise<Message> {
@@ -51,11 +53,22 @@ export function editMessage(
     id: string,
     content: string,
     entities: MessageEntity[] = [],
+    disableLinkPreview = false,
 ): Promise<Message> {
     return request<Message>(`/messages/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        body: { content, entities },
+        body: {
+            content,
+            entities,
+            ...(disableLinkPreview ? { disable_link_preview: true } : {}),
+        },
     })
+}
+
+export async function getLinkPreview(url: string): Promise<LinkPreview | null> {
+    const params = new URLSearchParams({ url })
+    const res = await request<{ preview: LinkPreview | null }>(`/link-preview?${params}`)
+    return res.preview
 }
 
 // не больше 20 сообщений одного чата и 5 чатов (вместе с «Избранным») за раз

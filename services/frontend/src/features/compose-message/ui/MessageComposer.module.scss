@@ -1,7 +1,126 @@
 .root {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+// выпадающий список участников при вводе @ в группе
+.mentions {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    left: 0;
+    z-index: 25;
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    padding: 6px;
+    overflow-y: auto;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-secondary);
+    box-shadow: $drop-shadow;
+}
+
+.mentionItem {
+    @include type(tag-regular);
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 10px;
+
+    border: none;
+    border-radius: $radius-md;
+    background: none;
+    color: var(--color-text);
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &.mentionItemActive {
+        background-color: var(--color-bg-tertiary);
+    }
+}
+
+.mentionName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.mentionUsername {
+    color: alpha(var(--color-text), 0.6);
+    white-space: nowrap;
+}
+
+// превью ссылки перед отправкой
+.linkPreview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+
+    border: 1px solid var(--color-bg-muted);
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+}
+
+.linkPreviewBar {
+    width: 3px;
+    align-self: stretch;
+    flex-shrink: 0;
+    border-radius: $radius-full;
+    background-color: var(--color-accent);
+}
+
+.linkPreviewTexts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.linkPreviewSite {
+    @include type(xs-regular);
+
+    color: var(--color-accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.linkPreviewTitle {
+    @include type(tag-medium);
+
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.linkPreviewDesc {
+    @include type(xs-regular);
+
+    color: alpha(var(--color-text), 0.65);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.linkPreviewThumb {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: $radius-md;
+    object-fit: cover;
 }
 
 // плашка над полем: ответ или редактирование

@@ -81,6 +81,7 @@ export function ChatListItem({ chat, myId, compact }: Props) {
         chat.last_message.sender_id === myId &&
         !isSystem(chat.last_message)
     const unread = chat.unread_count > 0
+    const unreadMentions = (chat.unread_mentions_count ?? 0) > 0
     const muted = isMuted(chat)
     const time = formatChatTime(chat.last_message?.created_at ?? chat.created_at)
 
@@ -149,9 +150,18 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                                         <Icon name="notif-off" size={16} color="currentColor" />
                                     </span>
                                 )}
-                                {chat.pinned_at && !unread && (
+                                {chat.pinned_at && !unread && !unreadMentions && (
                                     <span role="img" aria-label="Закреплён" className={styles.flag}>
                                         <Icon name="pinned" size={16} color="currentColor" />
+                                    </span>
+                                )}
+                                {unreadMentions && (
+                                    <span
+                                        role="img"
+                                        aria-label="Непрочитанные упоминания"
+                                        className={styles.mentionBadge}
+                                    >
+                                        @
                                     </span>
                                 )}
                                 {unread && (

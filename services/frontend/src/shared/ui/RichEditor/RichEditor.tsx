@@ -10,16 +10,23 @@ import type { ClipboardEvent, KeyboardEvent, Ref } from 'react'
 
 import {
     cn,
+    CODE_LANGUAGES,
+    findLinkInRange,
+    findPreLanguageInRange,
     fromHtml,
     hasFormat,
+    isSafeHttpUrl,
     normalizeEntities,
     renderRich,
+    replaceRangeWithMention,
     selectionOffsets,
     serializeRich,
+    setLink,
+    setPre,
     setSelectionOffsets,
     toggleFormat,
 } from '@/shared/lib'
-import type { EntityType, MessageEntity, RichValue } from '@/shared/lib'
+import type { MessageEntity, RichValue, ToggleableFormat } from '@/shared/lib'
 
 import { Icon } from '../Icon'
 import styles from './RichEditor.module.scss'
@@ -30,6 +37,8 @@ export interface RichEditorHandle {
     setValue: (value: RichValue, caret?: number) => void
     // вставка в позицию курсора или поверх выделенного; фокус при этом переходит в поле
     insertText: (text: string) => void
+    // замена диапазона (например @query) упоминанием пользователя
+    insertMention: (start: number, end: number, label: string, userId: string) => void
     focus: () => void
 }
 
@@ -42,26 +51,84 @@ interface Props {
     // сколько символов (единиц UTF-16) можно ввести; лишнее не вставляется
     maxLength?: number
     onChange?: (value: RichValue) => void
+    // позиция курсора (или null при выделении/расфокусе) - используется для автодополнения @
+    onCaretChange?: (value: RichValue, caret: number | null) => void
+    // перехват клавиш (например навигация в списке упоминаний); true - событие обработано
+    onSpecialKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => boolean
     // Enter без Shift
     onSubmit?: () => void
     onEscape?: () => void
     className?: string
 }
 
-const FORMATS: { type: EntityType; icon: string; label: string; key: string }[] = [
-    { type: 'bold', icon: 'font-bold', label: 'Жирный', key: 'KeyB' },
-    { type: 'italic', icon: 'font-italic', label: 'Курсив', key: 'KeyI' },
-    { type: 'underline', icon: 'font-underline', label: 'Подчёркнутый', key: 'KeyU' },
+interface FormatTool {
+    type: ToggleableFormat
+    icon: string
+    label: string
+    code: string
+    shift?: boolean
+    hint: string
+}
+
+const FORMATS: FormatTool[] = [
+    { type: 'bold', icon: 'font-bold', label: 'Жирный', code: 'KeyB', hint: 'Ctrl+B' },
+    { type: 'italic', icon: 'font-italic', label: 'Курсив', code: 'KeyI', hint: 'Ctrl+I' },
+    { type: 'underline', icon: 'font-underline', label: 'Подчёркнутый', code: 'KeyU', hint: 'Ctrl+U' },
+    {
+        type: 'strikethrough',
+        icon: 'font-strikethrough',
+        label: 'Зачёркнутый',
+        code: 'KeyX',
+        shift: true,
+        hint: 'Ctrl+Shift+X',
+    },
+    {
+        type: 'code',
+        icon: 'font-code',
+        label: 'Код',
+        code: 'KeyM',
+        shift: true,
+        hint: 'Ctrl+Shift+M',
+    },
+    {
+        type: 'spoiler',
+        icon: 'eye-closed',
+        label: 'Спойлер',
+        code: 'KeyP',
+        shift: true,
+        hint: 'Ctrl+Shift+P',
+    },
+    {
+        type: 'blockquote',
+        icon: 'font-quote',
+        label: 'Цитата',
+        code: 'Period',
+        shift: true,
+        hint: 'Ctrl+Shift+.',
+    },
 ]
+
+const NATIVE_COMMANDS = new Set<ToggleableFormat>(['bold', 'italic', 'underline'])
 
 interface Bubble {
     top: number
     left: number
 }
 
-// поле ввода с форматированием: жирный, курсив и подчёркивание видны сразу. Над выделенным текстом
-// появляется панель B / I / U, работают и горячие клавиши Ctrl/Cmd + B / I / U. Вставка - только
-// простой текст; Enter отправляет, Shift+Enter переносит строку
+const EMPTY_ACTIVE: Record<ToggleableFormat, boolean> = {
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    code: false,
+    pre: false,
+    spoiler: false,
+    blockquote: false,
+}
+
+// поле ввода с форматированием: жирный, курсив, подчёркивание, зачёркнутый, код, спойлер, цитата и ссылка.
+// Над выделенным текстом появляется панель инструментов, работают горячие клавиши. Enter отправляет,
+// Shift+Enter переносит строку
 export function RichEditor({
     ref,
     initial,
@@ -69,6 +136,8 @@ export function RichEditor({
     'aria-label': ariaLabel,
     maxLength,
     onChange,
+    onCaretChange,
+    onSpecialKeyDown,
     onSubmit,
     onEscape,
     className,
@@ -77,11 +146,20 @@ export function RichEditor({
     // последнее выделение внутри поля: кнопка эмодзи и панель забирают фокус, а вставлять надо в это место
     const lastRange = useRef<{ start: number; end: number } | null>(null)
     const [bubble, setBubble] = useState<Bubble | null>(null)
-    const [active, setActive] = useState<Record<EntityType, boolean>>({
-        bold: false,
-        italic: false,
-        underline: false,
-    })
+    const [active, setActive] = useState<Record<ToggleableFormat, boolean>>(EMPTY_ACTIVE)
+    const [activeLink, setActiveLink] = useState<string | null>(null)
+    const [activePreLang, setActivePreLang] = useState<string | null>(null)
+    // встроенная форма ввода ссылки в плавающей панели
+    const [linkEditing, setLinkEditing] = useState(false)
+    const [linkInput, setLinkInput] = useState('')
+    const [linkError, setLinkError] = useState(false)
+    const linkRangeRef = useRef<{ start: number; end: number } | null>(null)
+    const linkInputRef = useRef<HTMLInputElement>(null)
+    // встроенная форма выбора языка блока кода (pre)
+    const [preEditing, setPreEditing] = useState(false)
+    const [preLang, setPreLang] = useState('')
+    const preRangeRef = useRef<{ start: number; end: number } | null>(null)
+    const preSelectRef = useRef<HTMLSelectElement>(null)
 
     const emit = useCallback(() => {
         const root = rootRef.current
@@ -95,7 +173,9 @@ export function RichEditor({
         }
         root.dataset.empty = String(value.text === '')
         onChange?.(value)
-    }, [onChange])
+        const offsets = selectionOffsets(root)
+        onCaretChange?.(value, offsets && offsets.start === offsets.end ? offsets.start : null)
+    }, [onCaretChange, onChange])
 
     // первое содержимое кладётся до отрисовки, чтобы поле не мигало пустым
     useLayoutEffect(() => {
@@ -107,6 +187,19 @@ export function RichEditor({
         // eslint-disable-next-line react-hooks/exhaustive-deps -- initial читается один раз
     }, [])
 
+    useEffect(() => {
+        if (linkEditing) {
+            linkInputRef.current?.focus()
+            linkInputRef.current?.select()
+        }
+    }, [linkEditing])
+
+    useEffect(() => {
+        if (preEditing) {
+            preSelectRef.current?.focus()
+        }
+    }, [preEditing])
+
     // панель над выделением и состояние кнопок следуют за выделением
     useEffect(() => {
         function onSelectionChange() {
@@ -114,27 +207,49 @@ export function RichEditor({
             if (!root) {
                 return
             }
+            // пока пользователь вводит URL или выбирает язык кода, панель не прячем
+            if (linkEditing || preEditing) {
+                return
+            }
             const offsets = selectionOffsets(root)
             if (!offsets) {
                 setBubble(null)
+                onCaretChange?.(serializeRich(root), null)
                 return
             }
             lastRange.current = offsets
             const value = serializeRich(root)
             if (offsets.start === offsets.end) {
                 setBubble(null)
+                setActiveLink(null)
+                setActivePreLang(null)
                 setActive({
+                    ...EMPTY_ACTIVE,
                     bold: queryState('bold'),
                     italic: queryState('italic'),
                     underline: queryState('underline'),
                 })
+                onCaretChange?.(value, offsets.start)
                 return
             }
+            onCaretChange?.(value, null)
             setActive({
                 bold: hasFormat(value.entities, 'bold', offsets.start, offsets.end),
                 italic: hasFormat(value.entities, 'italic', offsets.start, offsets.end),
                 underline: hasFormat(value.entities, 'underline', offsets.start, offsets.end),
+                strikethrough: hasFormat(
+                    value.entities,
+                    'strikethrough',
+                    offsets.start,
+                    offsets.end,
+                ),
+                code: hasFormat(value.entities, 'code', offsets.start, offsets.end),
+                pre: hasFormat(value.entities, 'pre', offsets.start, offsets.end),
+                spoiler: hasFormat(value.entities, 'spoiler', offsets.start, offsets.end),
+                blockquote: hasFormat(value.entities, 'blockquote', offsets.start, offsets.end),
             })
+            setActiveLink(findLinkInRange(value.entities, offsets.start, offsets.end))
+            setActivePreLang(findPreLanguageInRange(value.entities, offsets.start, offsets.end))
             const range = document.getSelection()?.getRangeAt(0)
             // где разметки нет (тесты), прямоугольника нет
             const rect =
@@ -145,12 +260,12 @@ export function RichEditor({
             const center = rect ? rect.left + rect.width / 2 : 0
             setBubble({
                 top: Math.max(8, (rect?.top ?? 0) - 48),
-                left: Math.min(Math.max(center, 84), Math.max(84, window.innerWidth - 84)),
+                left: Math.min(Math.max(center, 184), Math.max(184, window.innerWidth - 184)),
             })
         }
         document.addEventListener('selectionchange', onSelectionChange)
         return () => document.removeEventListener('selectionchange', onSelectionChange)
-    }, [])
+    }, [linkEditing, preEditing, onCaretChange])
 
     // вернуть выделение туда, где оно было (после клика по кнопке вне поля)
     const restoreSelection = useCallback(() => {
@@ -206,6 +321,29 @@ export function RichEditor({
         [emit, maxLength, restoreSelection],
     )
 
+    const insertMention = useCallback(
+        (start: number, end: number, label: string, userId: string) => {
+            const root = rootRef.current
+            if (!root) {
+                return
+            }
+            const current = serializeRich(root)
+            const nextLen = current.text.length - (end - start) + label.length + 1
+            if (maxLength !== undefined && nextLen > maxLength) {
+                return
+            }
+            const { value, caret } = replaceRangeWithMention(current, start, end, label, userId)
+            renderRich(root, value)
+            root.dataset.empty = String(value.text === '')
+            root.focus()
+            setSelectionOffsets(root, caret)
+            lastRange.current = { start: caret, end: caret }
+            onChange?.(value)
+            onCaretChange?.(value, caret)
+        },
+        [maxLength, onCaretChange, onChange],
+    )
+
     useImperativeHandle(
         ref,
         () => ({
@@ -215,26 +353,34 @@ export function RichEditor({
                 if (!root) {
                     return
                 }
+                setLinkEditing(false)
+                setPreEditing(false)
                 renderRich(root, value)
                 root.dataset.empty = String(value.text === '')
                 setSelectionOffsets(root, caret)
                 lastRange.current = { start: caret, end: caret }
                 onChange?.(value)
+                onCaretChange?.(value, caret)
             },
             insertText: insert,
+            insertMention,
             focus: () => rootRef.current?.focus(),
         }),
-        [insert, onChange],
+        [insert, insertMention, onCaretChange, onChange],
     )
 
-    function format(type: EntityType) {
+    function format(type: ToggleableFormat) {
         const root = rootRef.current
         if (!root) {
             return
         }
         restoreSelection()
-        // в браузере форматирует он сам: так сохраняется история отмены (Ctrl+Z)
-        if (typeof document.execCommand === 'function' && document.execCommand(type)) {
+        // для базовых форматов в браузере используем execCommand, чтобы работала история Ctrl+Z
+        if (
+            NATIVE_COMMANDS.has(type) &&
+            typeof document.execCommand === 'function' &&
+            document.execCommand(type)
+        ) {
             emit()
             return
         }
@@ -248,13 +394,137 @@ export function RichEditor({
         emit()
     }
 
+    function openLinkEditor() {
+        const root = rootRef.current
+        if (!root) {
+            return
+        }
+        const offsets = selectionOffsets(root) ?? lastRange.current
+        if (!offsets || offsets.start === offsets.end) {
+            return
+        }
+        const existing = findLinkInRange(serializeRich(root).entities, offsets.start, offsets.end)
+        linkRangeRef.current = offsets
+        setLinkInput(existing ?? 'https://')
+        setLinkError(false)
+        setLinkEditing(true)
+    }
+
+    function closeLinkEditor() {
+        setLinkEditing(false)
+        setLinkError(false)
+        const root = rootRef.current
+        const saved = linkRangeRef.current
+        if (root && saved) {
+            root.focus()
+            setSelectionOffsets(root, saved.start, saved.end)
+        }
+    }
+
+    function applyLink(rawUrl: string | null) {
+        const root = rootRef.current
+        const saved = linkRangeRef.current
+        if (!root || !saved) {
+            setLinkEditing(false)
+            return
+        }
+        if (rawUrl !== null) {
+            const trimmed = rawUrl.trim()
+            if (!trimmed) {
+                rawUrl = null
+            } else {
+                const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+                if (!isSafeHttpUrl(candidate)) {
+                    setLinkError(true)
+                    return
+                }
+                rawUrl = candidate
+            }
+        }
+        const next = setLink(serializeRich(root), saved.start, saved.end, rawUrl)
+        setLinkEditing(false)
+        setLinkError(false)
+        renderRich(root, next)
+        root.focus()
+        setSelectionOffsets(root, saved.start, saved.end)
+        lastRange.current = saved
+        emit()
+    }
+
+    function openPreEditor() {
+        const root = rootRef.current
+        if (!root) {
+            return
+        }
+        const offsets = selectionOffsets(root) ?? lastRange.current
+        if (!offsets || offsets.start === offsets.end) {
+            return
+        }
+        const existing = findPreLanguageInRange(
+            serializeRich(root).entities,
+            offsets.start,
+            offsets.end,
+        )
+        preRangeRef.current = offsets
+        setPreLang(existing ?? '')
+        setLinkEditing(false)
+        setPreEditing(true)
+    }
+
+    function closePreEditor() {
+        setPreEditing(false)
+        const root = rootRef.current
+        const saved = preRangeRef.current
+        if (root && saved) {
+            root.focus()
+            setSelectionOffsets(root, saved.start, saved.end)
+        }
+    }
+
+    function applyPre(language: string | null) {
+        const root = rootRef.current
+        const saved = preRangeRef.current
+        if (!root || !saved) {
+            setPreEditing(false)
+            return
+        }
+        const next = setPre(serializeRich(root), saved.start, saved.end, language)
+        setPreEditing(false)
+        renderRich(root, next)
+        root.focus()
+        setSelectionOffsets(root, saved.start, saved.end)
+        lastRange.current = saved
+        emit()
+    }
+
     function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
         if (event.nativeEvent.isComposing) {
             return
         }
-        if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+        if (onSpecialKeyDown?.(event)) {
+            return
+        }
+        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+            // Ctrl/Cmd + K - вставить или изменить ссылку на выделенном тексте
+            if (!event.shiftKey && event.code === 'KeyK') {
+                const offsets = rootRef.current ? selectionOffsets(rootRef.current) : null
+                if (offsets && offsets.start !== offsets.end) {
+                    event.preventDefault()
+                    openLinkEditor()
+                }
+                return
+            }
+            // Ctrl/Cmd + Shift + C - оформить блок кода с выбором языка
+            if (event.shiftKey && event.code === 'KeyC') {
+                const offsets = rootRef.current ? selectionOffsets(rootRef.current) : null
+                if (offsets && offsets.start !== offsets.end) {
+                    event.preventDefault()
+                    openPreEditor()
+                }
+                return
+            }
             // по физической клавише: работает и в русской раскладке
-            const hit = FORMATS.find((f) => f.key === event.code)
+            const hit = FORMATS.find((f) => f.code === event.code && !!f.shift === event.shiftKey)
             if (hit) {
                 event.preventDefault()
                 format(hit.type)
@@ -339,18 +609,18 @@ export function RichEditor({
                 if (to <= offsets.start) {
                     mergedEntities.push(e)
                 } else if (from >= offsets.end) {
-                    mergedEntities.push({ type: e.type, offset: from + delta, length: e.length })
+                    mergedEntities.push({ ...e, offset: from + delta })
                 } else {
                     if (from < offsets.start) {
                         mergedEntities.push({
-                            type: e.type,
+                            ...e,
                             offset: from,
                             length: offsets.start - from,
                         })
                     }
                     if (to > offsets.end) {
                         mergedEntities.push({
-                            type: e.type,
+                            ...e,
                             offset: offsets.start + insertedLen,
                             length: to - offsets.end,
                         })
@@ -363,7 +633,7 @@ export function RichEditor({
                 const to = Math.min(insertedLen, e.offset + e.length)
                 if (to > from) {
                     mergedEntities.push({
-                        type: e.type,
+                        ...e,
                         offset: offsets.start + from,
                         length: to - from,
                     })
@@ -382,6 +652,12 @@ export function RichEditor({
 
     function onPaste(event: ClipboardEvent<HTMLDivElement>) {
         event.preventDefault()
+        const plain = event.clipboardData.getData('text/plain')
+        // голый URL (например скопированный из <code> в чате или документации) вставляем обычной ссылкой, а не кодом
+        if (isSafeHttpUrl(plain.trim())) {
+            insert(plain)
+            return
+        }
         const html = event.clipboardData.getData('text/html')
         if (html) {
             const parsed = fromHtml(html)
@@ -390,7 +666,7 @@ export function RichEditor({
                 return
             }
         }
-        insert(event.clipboardData.getData('text/plain'))
+        insert(plain)
     }
 
     return (
@@ -422,22 +698,154 @@ export function RichEditor({
                     role="toolbar"
                     aria-label="Форматирование"
                     style={{ top: bubble.top, left: bubble.left }}
-                    // нажатие на панель не должно снимать выделение и фокус с поля
-                    onMouseDown={(event) => event.preventDefault()}
+                    // нажатие на кнопки панели не должно снимать выделение и фокус с поля
+                    onMouseDown={(event) => {
+                        if (!linkEditing && !preEditing) {
+                            event.preventDefault()
+                        }
+                    }}
                 >
-                    {FORMATS.map((f) => (
-                        <button
-                            key={f.type}
-                            type="button"
-                            className={cn(styles.tool, active[f.type] && styles.toolActive)}
-                            aria-label={f.label}
-                            aria-pressed={active[f.type]}
-                            title={`${f.label} (Ctrl+${f.key.slice(3)})`}
-                            onClick={() => format(f.type)}
-                        >
-                            <Icon name={f.icon} size={20} color="inherit" />
-                        </button>
-                    ))}
+                    {linkEditing ? (
+                        <div className={styles.linkForm}>
+                            <input
+                                ref={linkInputRef}
+                                type="url"
+                                className={cn(styles.linkInput, linkError && styles.linkInputError)}
+                                value={linkInput}
+                                placeholder="https://example.com"
+                                aria-label="Адрес ссылки"
+                                onChange={(event) => {
+                                    setLinkInput(event.target.value)
+                                    setLinkError(false)
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault()
+                                        applyLink(linkInput)
+                                    } else if (event.key === 'Escape') {
+                                        event.preventDefault()
+                                        closeLinkEditor()
+                                    }
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className={styles.tool}
+                                aria-label="Применить ссылку"
+                                onClick={() => applyLink(linkInput)}
+                            >
+                                <Icon name="check" size={18} color="inherit" />
+                            </button>
+                            {activeLink && (
+                                <button
+                                    type="button"
+                                    className={styles.tool}
+                                    aria-label="Убрать ссылку"
+                                    onClick={() => applyLink(null)}
+                                >
+                                    <Icon name="trash" size={18} color="inherit" />
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className={styles.tool}
+                                aria-label="Отменить ввод ссылки"
+                                onClick={closeLinkEditor}
+                            >
+                                <Icon name="close" size={18} color="inherit" />
+                            </button>
+                        </div>
+                    ) : preEditing ? (
+                        <div className={styles.linkForm}>
+                            <select
+                                ref={preSelectRef}
+                                className={styles.langSelect}
+                                aria-label="Язык кода"
+                                value={preLang}
+                                onChange={(event) => setPreLang(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault()
+                                        applyPre(preLang)
+                                    } else if (event.key === 'Escape') {
+                                        event.preventDefault()
+                                        closePreEditor()
+                                    }
+                                }}
+                            >
+                                {CODE_LANGUAGES.map((lang) => (
+                                    <option key={lang.value || 'plain'} value={lang.value}>
+                                        {lang.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                className={styles.tool}
+                                aria-label="Применить блок кода"
+                                onClick={() => applyPre(preLang)}
+                            >
+                                <Icon name="check" size={18} color="inherit" />
+                            </button>
+                            {activePreLang !== null && (
+                                <button
+                                    type="button"
+                                    className={styles.tool}
+                                    aria-label="Убрать блок кода"
+                                    onClick={() => applyPre(null)}
+                                >
+                                    <Icon name="trash" size={18} color="inherit" />
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className={styles.tool}
+                                aria-label="Отменить выбор языка"
+                                onClick={closePreEditor}
+                            >
+                                <Icon name="close" size={18} color="inherit" />
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {FORMATS.map((f) => (
+                                <button
+                                    key={f.type}
+                                    type="button"
+                                    className={cn(styles.tool, active[f.type] && styles.toolActive)}
+                                    aria-label={f.label}
+                                    aria-pressed={active[f.type]}
+                                    title={`${f.label} (${f.hint})`}
+                                    onClick={() => format(f.type)}
+                                >
+                                    <Icon name={f.icon} size={20} color="inherit" />
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                className={cn(
+                                    styles.tool,
+                                    activePreLang !== null && styles.toolActive,
+                                )}
+                                aria-label="Блок кода"
+                                aria-pressed={activePreLang !== null}
+                                title="Блок кода (Ctrl+Shift+C)"
+                                onClick={openPreEditor}
+                            >
+                                <Icon name="font-code-block" size={20} color="inherit" />
+                            </button>
+                            <button
+                                type="button"
+                                className={cn(styles.tool, !!activeLink && styles.toolActive)}
+                                aria-label="Ссылка"
+                                aria-pressed={!!activeLink}
+                                title="Ссылка (Ctrl+K)"
+                                onClick={openLinkEditor}
+                            >
+                                <Icon name="link" size={20} color="inherit" />
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
         </>
@@ -445,7 +853,7 @@ export function RichEditor({
 }
 
 // состояние оформления у курсора без выделения (где браузер его знает)
-function queryState(command: EntityType): boolean {
+function queryState(command: ToggleableFormat): boolean {
     try {
         return (
             typeof document.queryCommandState === 'function' && document.queryCommandState(command)

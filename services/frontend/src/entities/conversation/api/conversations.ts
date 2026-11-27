@@ -115,6 +115,14 @@ export function clearHistory(id: string): Promise<void> {
     return request<void>(`/conversations/${encodeURIComponent(id)}/clear`, { method: 'POST' })
 }
 
+// id непрочитанных сообщений, в которых упомянут текущий пользователь
+export async function listUnreadMentions(id: string): Promise<string[]> {
+    const res = await request<{ message_ids: string[] }>(
+        `/conversations/${encodeURIComponent(id)}/mentions/unread`,
+    )
+    return res.message_ids
+}
+
 export interface CreateGroupInput {
     name: string
     description?: string

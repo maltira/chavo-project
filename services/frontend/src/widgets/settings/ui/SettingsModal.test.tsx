@@ -48,6 +48,11 @@ function renderSettings() {
         hide_forward_author: false,
         favorite_emojis: [],
     })
+    client.setQueryData(['two-factor'], {
+        method: 'email',
+        totp_enabled: false,
+        backup_codes_remaining: 0,
+    })
     render(
         <QueryClientProvider client={client}>
             <MemoryRouter>
@@ -181,5 +186,100 @@ describe('SettingsModal', () => {
                 .map(([url]) => String(url))
         await vi.waitFor(() => expect(unblocked()).toHaveLength(51))
         expect(unblocked()).toContain('/api/users/p2-0/block')
+    })
+
+    it('connects TOTP authenticator and displays one-time backup codes', async () => {
+        fetchMock.mockImplementation((url: string) => {
+            if (url.endsWith('/auth/2fa/totp/setup')) {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            secret: 'JBSWY3DPEHPK3PXP',
+                            otpauth_url:
+                                'otpauth://totp/Chavo:me@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Chavo',
+                        }),
+                    ),
+                )
+            }
+            if (url.endsWith('/auth/2fa/totp/confirm')) {
+                return Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            backup_codes: [
+                                'AAAA-BBBB',
+                                'CCCC-DDDD',
+                                'EEEE-FFFF',
+                                'GGGG-HHHH',
+                                'JJJJ-KKKK',
+                                'LLLL-MMMM',
+                                'NNNN-PPPP',
+                                'QQQQ-RRRR',
+                            ],
+                        }),
+                    ),
+                )
+            }
+            return Promise.resolve(
+                new Response(
+                    JSON.stringify({
+                        method: 'totp',
+                        totp_enabled: true,
+                        backup_codes_remaining: 8,
+                    }),
+                ),
+            )
+        })
+        renderSettings()
+        fireEvent.click(screen.getByRole('menuitem', { name: /Двухфакторная защита/ }))
+        expect(screen.getByRole('dialog', { name: 'Двухфакторная защита' })).toBeInTheDocument()
+        expect(screen.getByRole('radio', { name: /Электронная почта/ })).toBeChecked()
+
+        fireEvent.click(screen.getByRole('radio', { name: /Приложение-аутентификатор/ }))
+        fireEvent.change(screen.getByLabelText('Текущий пароль'), {
+            target: { value: 'Secret123!' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
+
+        expect(
+            await screen.findByRole('img', { name: 'QR-код для приложения-аутентификатора' }),
+        ).toBeInTheDocument()
+        expect(screen.getByText('JBSWY3DPEHPK3PXP')).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Код из приложения'), {
+            target: { value: '123456' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Подтвердить' }))
+
+        expect(await screen.findByText('AAAA-BBBB')).toBeInTheDocument()
+        expect(screen.getByText('QQQQ-RRRR')).toBeInTheDocument()
+    })
+
+    it('deletes account permanently after confirmation', async () => {
+        renderSettings()
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Удалить аккаунт' }))
+        expect(screen.getByRole('dialog', { name: 'Удаление аккаунта' })).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Текущий пароль'), {
+            target: { value: 'Secret123!' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить аккаунт навсегда' }))
+        // окно подтверждения заменяет предыдущую модалку, а не накладывается поверх
+        expect(screen.getAllByRole('dialog')).toHaveLength(1)
+        const confirm = screen.getByRole('dialog', { name: 'Удалить аккаунт навсегда?' })
+        // «Отмена» возвращает к форме с сохранённым паролем
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Отмена' }))
+        expect(screen.getByRole('dialog', { name: 'Удаление аккаунта' })).toBeInTheDocument()
+        expect(screen.getByLabelText('Текущий пароль')).toHaveValue('Secret123!')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Удалить аккаунт навсегда' }))
+        const confirmAgain = screen.getByRole('dialog', { name: 'Удалить аккаунт навсегда?' })
+        fireEvent.click(within(confirmAgain).getByRole('button', { name: 'Удалить' }))
+
+        await vi.waitFor(() =>
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/auth/account',
+                expect.objectContaining({ method: 'DELETE' }),
+            ),
+        )
     })
 })

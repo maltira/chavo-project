@@ -44,13 +44,16 @@ export function ChatListItem({ chat, myId, compact }: Props) {
     const peer = useUser(isDirect ? chat.peer_id : null)
     const presence = usePresence(isDirect ? chat.peer_id : null)
 
+    const isDeletedPeer = isDirect && !!peer.data?.is_deleted
     const name = saved
         ? SAVED_NAME
         : isDirect
-          ? (peer.data?.display_name ?? '')
+          ? isDeletedPeer
+              ? 'Удалённый аккаунт'
+              : (peer.data?.display_name ?? '')
           : (chat.name ?? 'Группа')
-    const avatarUrl = isDirect ? peer.data?.avatar_url : chat.avatar_url
-    const online = isDirect && (presence?.online ?? peer.data?.online ?? false)
+    const avatarUrl = isDeletedPeer ? undefined : isDirect ? peer.data?.avatar_url : chat.avatar_url
+    const online = !isDeletedPeer && isDirect && (presence?.online ?? peer.data?.online ?? false)
 
     const systemText = useSystemText(chat.last_message)
     const draft = useDraft(chat.id)

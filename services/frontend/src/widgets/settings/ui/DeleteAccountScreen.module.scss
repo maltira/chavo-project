@@ -1,0 +1,10 @@
+.warning {
+    @include type(tag-regular);
+
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid alpha(var(--color-danger), 0.25);
+    border-radius: $radius-md;
+    background-color: alpha(var(--color-danger), 0.1);
+    color: var(--color-danger);
+}

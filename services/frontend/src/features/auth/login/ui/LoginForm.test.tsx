@@ -62,7 +62,7 @@ describe('LoginForm', () => {
     })
 
     it('passes the challenge to the next step on success', async () => {
-        loginMock.mockResolvedValue({ challenge_id: 'ch-1', message: 'ok' })
+        loginMock.mockResolvedValue({ challenge_id: 'ch-1', method: 'totp', message: 'ok' })
         const onSuccess = vi.fn()
         renderWithProviders(<LoginForm onSuccess={onSuccess} />)
 
@@ -75,6 +75,7 @@ describe('LoginForm', () => {
             expect(onSuccess).toHaveBeenCalledWith({
                 challengeId: 'ch-1',
                 email: 'user@example.com',
+                method: 'totp',
             }),
         )
         expect(loginMock.mock.calls[0]?.[0]).toEqual({

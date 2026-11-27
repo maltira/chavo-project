@@ -22,6 +22,7 @@ export interface Profile {
     status?: Status | null
     last_seen_at: string | null
     online: boolean
+    is_deleted?: boolean
     created_at: string
     updated_at: string
 }

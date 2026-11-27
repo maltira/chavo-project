@@ -144,4 +144,22 @@ describe('OtpForm', () => {
         expect(resendMock.mock.calls[0]?.[0]).toEqual({ challenge_id: 'ch-1' })
         expect(resend()).toBeDisabled()
     })
+
+    it('supports TOTP mode without resend and allows switching to a backup code', async () => {
+        verifyMock.mockResolvedValue({ access_token: 'tok-backup', token_type: 'Bearer' })
+        renderWithProviders(
+            <OtpForm challengeId="ch-2" email="user@example.com" method="totp" onExpired={vi.fn()} />,
+        )
+        expect(screen.getByRole('heading', { name: 'Код из приложения' })).toBeInTheDocument()
+        expect(screen.queryByText('Код не пришёл?')).toBeNull()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Использовать резервный код' }))
+        expect(screen.getByRole('heading', { name: 'Резервный код' })).toBeInTheDocument()
+        const input = screen.getByLabelText('Резервный код')
+        fireEvent.change(input, { target: { value: 'abcd-efgh' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
+
+        await waitFor(() => expect(useSession.getState().status).toBe('authenticated'))
+        expect(verifyMock.mock.calls[0]?.[0]).toEqual({ challenge_id: 'ch-2', code: 'ABCD-EFGH' })
+    })
 })

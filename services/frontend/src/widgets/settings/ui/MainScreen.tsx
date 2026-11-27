@@ -1,4 +1,4 @@
-import { useSessions } from '@/entities/session'
+import { useSessions, useTwoFactor } from '@/entities/session'
 import { useBlocked, useMe, useProfileCard, UserAvatar } from '@/entities/user'
 import { useLogout } from '@/features/auth/logout'
 import { StatusButton } from '@/features/set-status'
@@ -18,6 +18,7 @@ interface Props {
 export function MainScreen({ open, onClose, onNavigate }: Props) {
     const me = useMe()
     const sessions = useSessions(open)
+    const twoFactor = useTwoFactor(open)
     const blocked = useBlocked(open)
     const openProfile = useProfileCard((state) => state.open)
     const logout = useLogout()
@@ -59,6 +60,19 @@ export function MainScreen({ open, onClose, onNavigate }: Props) {
                     <MenuItem icon="lock" onClick={() => onNavigate('password')}>
                         Изменить пароль
                     </MenuItem>
+                    <MenuItem
+                        icon="protect"
+                        onClick={() => onNavigate('two-factor')}
+                        trailing={
+                            twoFactor.data && (
+                                <Tag variant="muted">
+                                    {twoFactor.data.method === 'totp' ? 'TOTP' : 'Почта'}
+                                </Tag>
+                            )
+                        }
+                    >
+                        Двухфакторная защита
+                    </MenuItem>
                 </div>
 
                 <div className={common.card}>
@@ -93,6 +107,12 @@ export function MainScreen({ open, onClose, onNavigate }: Props) {
                         }
                     >
                         Чёрный список
+                    </MenuItem>
+                </div>
+
+                <div className={common.card}>
+                    <MenuItem icon="trash" onClick={() => onNavigate('delete-account')}>
+                        Удалить аккаунт
                     </MenuItem>
                 </div>
 

@@ -300,3 +300,55 @@ func TestMembershipCacheInvalidated(t *testing.T) {
 		t.Fatalf("invalidated %v, want %v", cache.invalidated, want)
 	}
 }
+
+type fakeSessions struct {
+	revoked []string
+	err     error
+}
+
+func (s *fakeSessions) Revoke(_ context.Context, ids ...string) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.revoked = append(s.revoked, ids...)
+	return nil
+}
+
+func TestRouterRevokesRedisSessionsOnAuthEvents(t *testing.T) {
+	sink, profiles, sessions := &fakeSink{}, &fakeProfiles{}, &fakeSessions{}
+	r := NewRouter(sink, nil, profiles, DefaultOptions(), zap.NewNop()).WithSessions(sessions)
+	r.now = func() time.Time { return now }
+
+	// при сбое Redis событие session.revoked возвращает retryable-ошибку, затем проходит повторно
+	evRevoked := event(TypeSessionRevoked, map[string]any{"session_id": "s1", "user_id": "u", "reason": "logout"}, now)
+	sessions.err = errors.New("redis down")
+	if err := r.Handle(context.Background(), evRevoked); err == nil || errors.Is(err, ErrMalformed) {
+		t.Fatalf("expected retryable error on session.revoked, got %v", err)
+	}
+	sessions.err = nil
+	if err := r.Handle(context.Background(), evRevoked); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(sessions.revoked, []string{"s1"}) {
+		t.Fatalf("revoked = %v, want [s1]", sessions.revoked)
+	}
+
+	// при user.account_deleted удаляются все session_ids, но наружу в WS-кадр они не попадают
+	evDeleted := event(TypeAccountDeleted, map[string]any{"user_id": "u", "session_ids": []string{"s2", "s3"}}, now)
+	sessions.err = errors.New("redis down")
+	if err := r.Handle(context.Background(), evDeleted); err == nil || errors.Is(err, ErrMalformed) {
+		t.Fatalf("expected retryable error on account_deleted, got %v", err)
+	}
+	sessions.err = nil
+	if err := r.Handle(context.Background(), evDeleted); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(sessions.revoked, []string{"s1", "s2", "s3"}) {
+		t.Fatalf("revoked = %v, want [s1 s2 s3]", sessions.revoked)
+	}
+	frame := decode(t, sink.closedUser[0].final)
+	data := frame["data"].(map[string]any)
+	if _, leaked := data["session_ids"]; leaked {
+		t.Fatalf("session_ids leaked to WS client: %v", data)
+	}
+}

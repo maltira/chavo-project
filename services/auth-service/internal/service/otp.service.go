@@ -42,12 +42,13 @@ type OtpService interface {
 }
 
 type otpService struct {
-	rdb        *redis.Client
-	userRepo   repository.UserRepository
-	backupRepo repository.BackupCodeRepository
-	totpKey    []byte
-	mail       email.EmailSender
-	log        *zap.Logger
+	rdb              *redis.Client
+	userRepo         repository.UserRepository
+	backupRepo       repository.BackupCodeRepository
+	totpKey          []byte
+	totpFallbackKeys [][]byte
+	mail             email.EmailSender
+	log              *zap.Logger
 }
 
 func NewOtpService(
@@ -57,14 +58,16 @@ func NewOtpService(
 	totpKey []byte,
 	mail email.EmailSender,
 	log *zap.Logger,
+	totpFallbackKeys ...[]byte,
 ) OtpService {
 	return &otpService{
-		rdb:        rdb,
-		userRepo:   userRepo,
-		backupRepo: backupRepo,
-		totpKey:    totpKey,
-		mail:       mail,
-		log:        log,
+		rdb:              rdb,
+		userRepo:         userRepo,
+		backupRepo:       backupRepo,
+		totpKey:          totpKey,
+		totpFallbackKeys: totpFallbackKeys,
+		mail:             mail,
+		log:              log,
 	}
 }
 
@@ -120,7 +123,7 @@ func (s *otpService) VerifyTOTPCode(ctx context.Context, user *models.User, code
 	if len(user.TOTPSecretEnc) == 0 {
 		return false, nil
 	}
-	secretBytes, err := utils.DecryptAESGCM(s.totpKey, user.TOTPSecretEnc)
+	secretBytes, err := utils.DecryptAESGCMWithFallback(s.totpKey, s.totpFallbackKeys, user.TOTPSecretEnc)
 	if err != nil {
 		return false, fmt.Errorf("decrypt totp secret: %w", err)
 	}

@@ -133,6 +133,20 @@ func DecryptAESGCM(key, ciphertext []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, body, nil)
 }
 
+// DecryptAESGCMWithFallback сначала пробует расшифровать основным ключом, затем по очереди предыдущими.
+func DecryptAESGCMWithFallback(primary []byte, fallbacks [][]byte, ciphertext []byte) ([]byte, error) {
+	plain, err := DecryptAESGCM(primary, ciphertext)
+	if err == nil {
+		return plain, nil
+	}
+	for _, key := range fallbacks {
+		if plain, fbErr := DecryptAESGCM(key, ciphertext); fbErr == nil {
+			return plain, nil
+		}
+	}
+	return nil, err
+}
+
 // GenerateBackupCodes создаёт n одноразовых резервных кодов вида XXXX-XXXX.
 func GenerateBackupCodes(n int) ([]string, error) {
 	codes := make([]string, 0, n)

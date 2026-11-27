@@ -153,7 +153,8 @@ func New() (*App, error) {
 		a.Close()
 		return nil, err
 	}
-	evRouter := events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log)
+	sessions := auth.NewRedisSessions(rdb)
+	evRouter := events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log).WithSessions(sessions)
 	evRouter.SetMembershipCache(typingSvc)
 	a.consumer = events.NewConsumer(cfg.KafkaBrokers, evRouter, log)
 
@@ -177,7 +178,7 @@ func New() (*App, error) {
 		Auth:           authClient,
 		Users:          userv1.NewUserServiceClient(userConn),
 		Conversations:  conversationv1.NewConversationServiceClient(convConn),
-		Verifier:       auth.NewVerifier(cfg.JWTSecret, auth.NewRedisSessions(rdb)),
+		Verifier:       auth.NewVerifier(cfg.JWTSecret, sessions),
 		Profiles:       profiles,
 		Health:         health,
 		Limiter:        ratelimit.New(ratelimit.NewRedisCounter(rdb)),

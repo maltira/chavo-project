@@ -72,29 +72,42 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             void queryClient.invalidateQueries({ queryKey: blockedKey })
             break
         case 'user.account_deleted':
-            // удаление аккаунта необратимо: сразу обновляем кеш собеседника, не дожидаясь консьюмера user-service
+            // удаление аккаунта необратимо: отменяем текущие запросы профиля и сразу обновляем кеш,
+            // чтобы запоздавший ответ API не перезаписал собеседника старыми данными
             if (data.user_id) {
                 const deletedId = data.user_id
+                void queryClient.cancelQueries(
+                    { queryKey: presenceKey(deletedId) },
+                    { revert: false, silent: true },
+                )
+                void queryClient.cancelQueries(
+                    { queryKey: userKey(deletedId) },
+                    { revert: false, silent: true },
+                )
                 queryClient.setQueryData<Presence>(presenceKey(deletedId), {
                     online: false,
                     lastSeenAt: null,
                 })
-                queryClient.setQueryData<Profile>(userKey(deletedId), (prev) =>
-                    prev
-                        ? {
-                              ...prev,
-                              username: '',
-                              display_name: 'Удалённый аккаунт',
-                              bio: undefined,
-                              avatar_url: undefined,
-                              avatar_shape: null,
-                              status: null,
-                              online: false,
-                              last_seen_at: null,
-                              is_deleted: true,
-                          }
-                        : prev,
+                const hasUserQuery = Boolean(
+                    queryClient.getQueryCache().find({ queryKey: userKey(deletedId) }),
                 )
+                if (hasUserQuery) {
+                    queryClient.setQueryData<Profile>(userKey(deletedId), (prev) => ({
+                        user_id: deletedId,
+                        created_at: prev?.created_at ?? '',
+                        updated_at: prev?.updated_at ?? '',
+                        ...prev,
+                        username: '',
+                        display_name: 'Удалённый аккаунт',
+                        bio: undefined,
+                        avatar_url: undefined,
+                        avatar_shape: null,
+                        status: null,
+                        online: false,
+                        last_seen_at: null,
+                        is_deleted: true,
+                    }))
+                }
                 void queryClient.invalidateQueries({ queryKey: blockStatusKey(deletedId) })
                 void queryClient.invalidateQueries({ queryKey: blockedKey })
             }

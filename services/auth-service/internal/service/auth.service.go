@@ -289,12 +289,12 @@ func (s *authService) ConfirmPasswordReset(ctx context.Context, token, newPasswo
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	// инвалидация сессий в Redis и немедленный запуск публикации outbox
-	for _, sid := range revokedIDs {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
-	}
+	// немедленный запуск публикации outbox и инвалидация сессий в Redis
 	if s.notifyOutbox != nil && len(revokedIDs) > 0 {
 		s.notifyOutbox()
+	}
+	if err = deleteRedisKeys(ctx, s.rdb, s.log, sessionRedisKeys(revokedIDs...)...); err != nil {
+		return fmt.Errorf("delete revoked sessions from redis on password reset: %w", err)
 	}
 
 	return nil
@@ -350,12 +350,12 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, curr
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	// инвалидируем остальные сессии в Redis и будим outbox-воркер
-	for _, sid := range revokedIDs {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
-	}
+	// будим outbox-воркер и инвалидируем остальные сессии в Redis
 	if s.notifyOutbox != nil && len(revokedIDs) > 0 {
 		s.notifyOutbox()
+	}
+	if err = deleteRedisKeys(ctx, s.rdb, s.log, sessionRedisKeys(revokedIDs...)...); err != nil {
+		return fmt.Errorf("delete revoked sessions from redis on password change: %w", err)
 	}
 
 	return nil
@@ -423,7 +423,7 @@ func (s *authService) ConfirmTOTP(ctx context.Context, userID uuid.UUID, code st
 		}
 		return nil, fmt.Errorf("get pending totp secret: %w", err)
 	}
-	secretBytes, err := utils.DecryptAESGCM(s.cfg.TOTPEncryptionKey, enc)
+	secretBytes, err := utils.DecryptAESGCMWithFallback(s.cfg.TOTPEncryptionKey, s.cfg.TOTPEncryptionPrevKeys, enc)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt pending totp secret: %w", err)
 	}
@@ -591,7 +591,8 @@ func (s *authService) DeleteAccount(ctx context.Context, userID uuid.UUID, passw
 	}
 	if s.outboxRepo != nil {
 		evMsg := events.NewEvent(events.TypeAccountDeleted, events.AccountDeletedPayload{
-			UserID: user.ID,
+			UserID:     user.ID,
+			SessionIDs: revokedIDs,
 		})
 		if err = s.outboxRepo.InsertTx(ctx, tx, events.TopicAuthEvents, user.ID.String(), evMsg); err != nil {
 			return fmt.Errorf("enqueue account_deleted event: %w", err)
@@ -602,12 +603,14 @@ func (s *authService) DeleteAccount(ctx context.Context, userID uuid.UUID, passw
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	_ = s.rdb.Del(ctx, totpPendingKeyPrefix+user.ID.String()).Err()
-	for _, sid := range revokedIDs {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
-	}
 	if s.notifyOutbox != nil {
 		s.notifyOutbox()
+	}
+	keys := make([]string, 0, len(revokedIDs)+1)
+	keys = append(keys, totpPendingKeyPrefix+user.ID.String())
+	keys = append(keys, sessionRedisKeys(revokedIDs...)...)
+	if err = deleteRedisKeys(ctx, s.rdb, s.log, keys...); err != nil {
+		return fmt.Errorf("delete revoked sessions from redis on account delete: %w", err)
 	}
 
 	return nil

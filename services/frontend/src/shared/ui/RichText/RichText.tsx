@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 
-import { cn, codeLanguageLabel, toSegments, withAutoLinks } from '@/shared/lib'
-import type { MessageEntity } from '@/shared/lib'
+import { cn, codeLanguageLabel, normalizeEntities, toSegments, withAutoLinks } from '@/shared/lib'
+import type { MessageEntity, Segment } from '@/shared/lib'
 
 import { Icon } from '../Icon'
 import styles from './RichText.module.scss'
@@ -120,124 +120,204 @@ interface Props {
 // переводы строк сохраняются стилем pre-wrap у родителя
 export function RichText({ text, entities, interactive = true, onMentionClick }: Props) {
     const [revealed, setRevealed] = useState<Set<number>>(() => new Set())
-    const allEntities = withAutoLinks(text, entities ?? [])
+    const allEntities = withAutoLinks(text, normalizeEntities(entities ?? []))
 
     if (allEntities.length === 0) {
         return <>{text}</>
     }
 
-    function revealSpoiler(start: number) {
+    function revealSpoiler(key: number) {
         setRevealed((prev) => {
-            if (prev.has(start)) {
+            if (prev.has(key)) {
                 return prev
             }
             const next = new Set(prev)
-            next.add(start)
+            next.add(key)
             return next
         })
     }
 
-    return (
-        <>
-            {toSegments(text, allEntities).map((segment) => {
-                let node: ReactNode = segment.text
-                if (segment.code) {
-                    node = <code className={styles.code}>{node}</code>
+    function renderLeaf(segment: Segment): ReactNode {
+        let node: ReactNode = segment.text
+        if (segment.code) {
+            node = <code className={styles.code}>{node}</code>
+        }
+        if (segment.strikethrough) {
+            node = <s className={styles.strikethrough}>{node}</s>
+        }
+        if (segment.underline) {
+            node = <u className={styles.underline}>{node}</u>
+        }
+        if (segment.italic) {
+            node = <em className={styles.italic}>{node}</em>
+        }
+        if (segment.bold) {
+            node = <strong className={styles.bold}>{node}</strong>
+        }
+        if (segment.linkUrl) {
+            node = interactive ? (
+                <a
+                    href={segment.linkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.link}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    {node}
+                </a>
+            ) : (
+                <span className={styles.link}>{node}</span>
+            )
+        }
+        if (segment.mentionUserId) {
+            const userId = segment.mentionUserId
+            node =
+                interactive && onMentionClick ? (
+                    <button
+                        type="button"
+                        className={styles.mention}
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onMentionClick(userId)
+                        }}
+                    >
+                        {node}
+                    </button>
+                ) : (
+                    <span className={styles.mention}>{node}</span>
+                )
+        }
+        return node
+    }
+
+    // группируем смежные сегменты одного спойлера, чтобы вложенный bold/italic не резал спойлер на части
+    function renderInlineRun(run: Segment[]): ReactNode[] {
+        const out: ReactNode[] = []
+        let i = 0
+        while (i < run.length) {
+            const first = run[i]!
+            if (!first.spoiler) {
+                out.push(<Fragment key={first.start}>{renderLeaf(first)}</Fragment>)
+                i++
+                continue
+            }
+            const spoilerKey = first.spoilerKey ?? first.start
+            const group: Segment[] = [first]
+            i++
+            while (i < run.length && run[i]!.spoiler && (run[i]!.spoilerKey ?? run[i]!.start) === spoilerKey) {
+                group.push(run[i]!)
+                i++
+            }
+            const shown = revealed.has(spoilerKey)
+            const len = group.reduce((sum, s) => sum + s.text.length, 0)
+            const inner = group.map((s) => <Fragment key={s.start}>{renderLeaf(s)}</Fragment>)
+            out.push(
+                interactive ? (
+                    <span
+                        key={first.start}
+                        role="button"
+                        tabIndex={shown ? -1 : 0}
+                        aria-label={shown ? undefined : 'Показать скрытый текст'}
+                        className={cn(styles.spoiler, shown && styles.spoilerRevealed)}
+                        onClick={(event) => {
+                            if (!shown) {
+                                event.stopPropagation()
+                                revealSpoiler(spoilerKey)
+                            }
+                        }}
+                        onKeyDown={(event) => {
+                            if (!shown && (event.key === 'Enter' || event.key === ' ')) {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                revealSpoiler(spoilerKey)
+                            }
+                        }}
+                    >
+                        <span className={styles.spoilerText}>{inner}</span>
+                        <SpoilerMosaic length={len} />
+                    </span>
+                ) : (
+                    <span key={first.start} className={styles.spoiler}>
+                        <span className={styles.spoilerText}>{inner}</span>
+                        <SpoilerMosaic length={len} />
+                    </span>
+                ),
+            )
+        }
+        return out
+    }
+
+    // группируем смежные сегменты одного блока pre (вложенные стили не разбивают карточку кода)
+    function renderPreRuns(run: Segment[]): ReactNode[] {
+        const out: ReactNode[] = []
+        let i = 0
+        while (i < run.length) {
+            const first = run[i]!
+            if (!first.pre) {
+                const inlineGroup: Segment[] = [first]
+                i++
+                while (i < run.length && !run[i]!.pre) {
+                    inlineGroup.push(run[i]!)
+                    i++
                 }
-                if (segment.strikethrough) {
-                    node = <s className={styles.strikethrough}>{node}</s>
-                }
-                if (segment.underline) {
-                    node = <u className={styles.underline}>{node}</u>
-                }
-                if (segment.italic) {
-                    node = <em className={styles.italic}>{node}</em>
-                }
-                if (segment.bold) {
-                    node = <strong className={styles.bold}>{node}</strong>
-                }
-                if (segment.linkUrl) {
-                    node = interactive ? (
-                        <a
-                            href={segment.linkUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={styles.link}
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            {node}
-                        </a>
-                    ) : (
-                        <span className={styles.link}>{node}</span>
-                    )
-                }
-                if (segment.mentionUserId) {
-                    const userId = segment.mentionUserId
-                    node =
-                        interactive && onMentionClick ? (
-                            <button
-                                type="button"
-                                className={styles.mention}
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    onMentionClick(userId)
-                                }}
-                            >
-                                {node}
-                            </button>
-                        ) : (
-                            <span className={styles.mention}>{node}</span>
-                        )
-                }
-                if (segment.spoiler) {
-                    const shown = revealed.has(segment.start)
-                    const len = segment.text.length
-                    node = interactive ? (
-                        <span
-                            role="button"
-                            tabIndex={shown ? -1 : 0}
-                            aria-label={shown ? undefined : 'Показать скрытый текст'}
-                            className={cn(styles.spoiler, shown && styles.spoilerRevealed)}
-                            onClick={(event) => {
-                                if (!shown) {
-                                    event.stopPropagation()
-                                    revealSpoiler(segment.start)
-                                }
-                            }}
-                            onKeyDown={(event) => {
-                                if (!shown && (event.key === 'Enter' || event.key === ' ')) {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    revealSpoiler(segment.start)
-                                }
-                            }}
-                        >
-                            <span className={styles.spoilerText}>{node}</span>
-                            <SpoilerMosaic length={len} />
-                        </span>
-                    ) : (
-                        <span className={styles.spoiler}>
-                            <span className={styles.spoilerText}>{node}</span>
-                            <SpoilerMosaic length={len} />
-                        </span>
-                    )
-                }
-                if (segment.pre) {
-                    node = (
-                        <CodeBlock
-                            code={segment.text}
-                            language={segment.preLanguage}
-                            interactive={interactive}
-                        >
-                            {node}
-                        </CodeBlock>
-                    )
-                }
-                if (segment.blockquote) {
-                    node = <span className={styles.blockquote}>{node}</span>
-                }
-                return <Fragment key={segment.start}>{node}</Fragment>
-            })}
-        </>
-    )
+                out.push(<Fragment key={first.start}>{renderInlineRun(inlineGroup)}</Fragment>)
+                continue
+            }
+            const preKey = first.preKey ?? first.start
+            const group: Segment[] = [first]
+            i++
+            while (i < run.length && run[i]!.pre && (run[i]!.preKey ?? run[i]!.start) === preKey) {
+                group.push(run[i]!)
+                i++
+            }
+            const fullCode = group.map((s) => s.text).join('')
+            out.push(
+                <CodeBlock
+                    key={first.start}
+                    code={fullCode}
+                    language={first.preLanguage}
+                    interactive={interactive}
+                >
+                    {renderInlineRun(group)}
+                </CodeBlock>,
+            )
+        }
+        return out
+    }
+
+    // верхний уровень: группируем смежные сегменты одной цитаты blockquote
+    const segments = toSegments(text, allEntities)
+    const nodes: ReactNode[] = []
+    let i = 0
+    while (i < segments.length) {
+        const first = segments[i]!
+        if (!first.blockquote) {
+            const group: Segment[] = [first]
+            i++
+            while (i < segments.length && !segments[i]!.blockquote) {
+                group.push(segments[i]!)
+                i++
+            }
+            nodes.push(<Fragment key={first.start}>{renderPreRuns(group)}</Fragment>)
+            continue
+        }
+        const quoteKey = first.blockquoteKey ?? first.start
+        const group: Segment[] = [first]
+        i++
+        while (
+            i < segments.length &&
+            segments[i]!.blockquote &&
+            (segments[i]!.blockquoteKey ?? segments[i]!.start) === quoteKey
+        ) {
+            group.push(segments[i]!)
+            i++
+        }
+        nodes.push(
+            <span key={first.start} className={styles.blockquote}>
+                {renderPreRuns(group)}
+            </span>,
+        )
+    }
+
+    return <>{nodes}</>
 }

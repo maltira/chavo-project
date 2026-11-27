@@ -94,6 +94,43 @@ describe('RichText', () => {
         expect(screen.getByText('Скопировано')).toBeInTheDocument()
     })
 
+    it('keeps a code block and a spoiler as single blocks when nested formatting splits segments', () => {
+        const writeText = vi.fn().mockResolvedValue(undefined)
+        Object.assign(navigator, { clipboard: { writeText } })
+
+        const code = 'const a = 1\nconst b = 2'
+        const { container } = render(
+            <RichText
+                text={code}
+                entities={[
+                    { type: 'pre', offset: 0, length: code.length, language: 'typescript' },
+                    { type: 'bold', offset: 6, length: 5 },
+                ]}
+            />,
+        )
+        // один блок кода с одной кнопкой копирования, которая копирует весь блок целиком
+        const copyButtons = screen.getAllByRole('button', { name: 'Копировать код' })
+        expect(copyButtons).toHaveLength(1)
+        expect(container.querySelector('strong')?.textContent).toBe('a = 1')
+        fireEvent.click(copyButtons[0]!)
+        expect(writeText).toHaveBeenCalledWith(code)
+
+        // вложенный bold внутри спойлера тоже остаётся одной кнопкой спойлера
+        const spoilerView = render(
+            <RichText
+                text="тайный текст"
+                entities={[
+                    { type: 'spoiler', offset: 0, length: 12 },
+                    { type: 'bold', offset: 0, length: 6 },
+                ]}
+            />,
+        )
+        const spoilerBtns = spoilerView.getAllByRole('button', { name: 'Показать скрытый текст' })
+        expect(spoilerBtns).toHaveLength(1)
+        fireEvent.click(spoilerBtns[0]!)
+        expect(spoilerView.queryByRole('button', { name: 'Показать скрытый текст' })).toBeNull()
+    })
+
     it('renders non-interactive spans when interactive is false', () => {
         const { container } = render(
             <RichText

@@ -134,4 +134,44 @@ describe('notifyNewMessage', () => {
             vi.unstubAllGlobals()
         }
     })
+
+    it('masks spoiler ranges in in-app and desktop notifications', async () => {
+        const shown: { title: string; body?: string }[] = []
+        class FakeNotification {
+            static permission: NotificationPermission = 'granted'
+            constructor(title: string, options?: NotificationOptions) {
+                shown.push({ title, body: options?.body })
+            }
+        }
+        vi.stubGlobal('Notification', FakeNotification)
+        const prev = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+        try {
+            await notifyNewMessage(
+                {
+                    type: 'message.created',
+                    data: {
+                        conversation_id: 'c1',
+                        sender_id: 'u1',
+                        content: 'Убийца - садовник',
+                        entities: [{ type: 'spoiler', offset: 9, length: 8 }],
+                    },
+                },
+                setup('direct'),
+                'me',
+            )
+            expect(notices()[0]).toMatchObject({ description: 'Убийца - •••' })
+            expect(shown).toEqual([{ title: 'Давыд', body: 'Убийца - •••' }])
+        } finally {
+            if (prev) {
+                Object.defineProperty(document, 'visibilityState', prev)
+            } else {
+                Object.defineProperty(document, 'visibilityState', {
+                    value: 'visible',
+                    configurable: true,
+                })
+            }
+            vi.unstubAllGlobals()
+        }
+    })
 })

@@ -7,6 +7,7 @@ export {
     joinGroup,
     listUnreadMentions,
     searchGroups,
+    searchMembers,
 } from './api/conversations'
 export type { CreateGroupInput, Member, PublicGroup } from './api/conversations'
 export {

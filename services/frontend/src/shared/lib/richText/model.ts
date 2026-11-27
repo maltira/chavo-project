@@ -207,9 +207,57 @@ export function withAutoLinks(text: string, entities: MessageEntity[]): MessageE
     return extra.length > 0 ? normalizeEntities([...entities, ...extra]) : entities
 }
 
-// первая ссылка из text_link, url или текста сообщения (для превью ссылки)
+function overlapsAny(start: number, end: number, ranges: [number, number][]): boolean {
+    return ranges.some(([from, to]) => from < end && to > start)
+}
+
+// скрывает текст внутри диапазонов спойлера (для уведомлений и превью в списке чатов)
+export function maskSpoilers(text: string, entities?: MessageEntity[]): string {
+    if (!text || !entities || entities.length === 0) {
+        return text
+    }
+    const spoilers = normalizeEntities(entities).filter((e) => e.type === 'spoiler')
+    if (spoilers.length === 0) {
+        return text
+    }
+    let out = ''
+    let cursor = 0
+    for (const s of spoilers) {
+        const from = Math.max(cursor, Math.min(text.length, s.offset))
+        const to = Math.max(from, Math.min(text.length, s.offset + s.length))
+        if (from > cursor) {
+            out += text.slice(cursor, from)
+        }
+        if (to > from) {
+            out += '•••'
+        }
+        cursor = to
+    }
+    if (cursor < text.length) {
+        out += text.slice(cursor)
+    }
+    return out
+}
+
+// первая видимая ссылка из text_link, url или текста сообщения (исключая спойлеры, code и pre)
 export function extractFirstUrl(value: RichValue): string | null {
+    const blocked: [number, number][] = []
     for (const e of value.entities) {
+        if (e.length <= 0 || e.offset < 0) {
+            continue
+        }
+        if (e.type === 'spoiler' || e.type === 'code' || e.type === 'pre') {
+            blocked.push([e.offset, e.offset + e.length])
+        }
+    }
+
+    for (const e of value.entities) {
+        if (e.length <= 0 || e.offset < 0) {
+            continue
+        }
+        if (overlapsAny(e.offset, e.offset + e.length, blocked)) {
+            continue
+        }
         if (e.type === 'text_link' && e.url && isSafeHttpUrl(e.url)) {
             return e.url.trim()
         }
@@ -220,8 +268,12 @@ export function extractFirstUrl(value: RichValue): string | null {
             }
         }
     }
-    const urls = extractUrls(value.text)
-    return urls[0]?.url ?? null
+    for (const u of extractUrls(value.text)) {
+        if (!overlapsAny(u.offset, u.offset + u.length, blocked)) {
+            return u.url
+        }
+    }
+    return null
 }
 
 // участок текста с одинаковым оформлением
@@ -235,9 +287,12 @@ export interface Segment {
     strikethrough: boolean
     code: boolean
     pre: boolean
+    preKey?: number
     preLanguage?: string
     spoiler: boolean
+    spoilerKey?: number
     blockquote: boolean
+    blockquoteKey?: number
     linkUrl?: string
     mentionUserId?: string
 }
@@ -260,6 +315,8 @@ export function toSegments(text: string, entities: MessageEntity[]): Segment[] {
         const covering = (type: EntityType) =>
             entities.find((e) => e.type === type && e.offset <= start && e.offset + e.length >= end)
         const preEnt = covering('pre')
+        const spoilerEnt = covering('spoiler')
+        const blockquoteEnt = covering('blockquote')
         const textLinkEnt = covering('text_link')
         const urlEnt = covering('url')
         const mentionEnt = covering('mention')
@@ -277,9 +334,12 @@ export function toSegments(text: string, entities: MessageEntity[]): Segment[] {
             strikethrough: !!covering('strikethrough'),
             code: !!covering('code'),
             pre: !!preEnt,
+            ...(preEnt ? { preKey: preEnt.offset } : {}),
             ...(preEnt?.language ? { preLanguage: preEnt.language } : {}),
-            spoiler: !!covering('spoiler'),
-            blockquote: !!covering('blockquote'),
+            spoiler: !!spoilerEnt,
+            ...(spoilerEnt ? { spoilerKey: spoilerEnt.offset } : {}),
+            blockquote: !!blockquoteEnt,
+            ...(blockquoteEnt ? { blockquoteKey: blockquoteEnt.offset } : {}),
             ...(linkUrl ? { linkUrl } : {}),
             ...(mentionEnt?.user_id ? { mentionUserId: mentionEnt.user_id } : {}),
         })

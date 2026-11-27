@@ -1,11 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 
-import { sendTyping, TYPING_SEND_INTERVAL_MS, useMembers } from '@/entities/conversation'
+import { searchMembers, sendTyping, TYPING_SEND_INTERVAL_MS } from '@/entities/conversation'
 import { getDraft, getLinkPreview, MAX_MESSAGE_LENGTH, useDrafts } from '@/entities/message'
 import type { Message } from '@/entities/message'
-import { useFavoriteEmojis, UserAvatar, useUsers } from '@/entities/user'
+import { useFavoriteEmojis, UserAvatar } from '@/entities/user'
 import type { Profile } from '@/entities/user'
 import {
     cn,
@@ -119,37 +119,24 @@ export function MessageComposer({
     const suppressClickRef = useRef(false)
     const lastTypingRef = useRef(0)
 
-    // автодополнение упоминаний по @ в группах
+    // автодополнение упоминаний по @ в группах: серверный поиск по всему составу (до 5000 участников)
     const [mention, setMention] = useState<(MentionQuery & { index: number }) | null>(null)
-    const members = useMembers(isGroup ? conversationId : null)
-    const memberIds = useMemo(
+    const debouncedMentionQuery = useDebouncedValue(mention ? mention.query.trim() : null, 120)
+    const mentionQuery = useQuery({
+        queryKey: ['member-search', conversationId, debouncedMentionQuery],
+        queryFn: () =>
+            searchMembers(conversationId!, debouncedMentionQuery!, MAX_MENTION_SUGGESTIONS, true),
+        enabled: isGroup && !!conversationId && !!mention && debouncedMentionQuery !== null,
+        staleTime: 30_000,
+        placeholderData: keepPreviousData,
+    })
+    const mentionSuggestions = useMemo<Profile[]>(
         () =>
-            isGroup && mention
-                ? (members.data ?? []).map((m) => m.user_id).filter((id) => id !== myId)
+            mention
+                ? (mentionQuery.data ?? []).filter((p) => !p.is_deleted && p.user_id !== myId)
                 : [],
-        [isGroup, members.data, mention, myId],
+        [mention, mentionQuery.data, myId],
     )
-    const memberProfiles = useUsers(memberIds)
-    const mentionSuggestions = useMemo<Profile[]>(() => {
-        if (!mention) {
-            return []
-        }
-        const q = mention.query.trim().toLowerCase()
-        return memberProfiles
-            .filter((p) => {
-                if (p.is_deleted) {
-                    return false
-                }
-                if (!q) {
-                    return true
-                }
-                return (
-                    p.username.toLowerCase().includes(q) ||
-                    p.display_name.toLowerCase().includes(q)
-                )
-            })
-            .slice(0, MAX_MENTION_SUGGESTIONS)
-    }, [memberProfiles, mention])
 
     // живое превью первой ссылки в сообщении с возможностью скрыть его перед отправкой
     const activeUrl = useMemo(() => extractFirstUrl(value), [value])

@@ -2,6 +2,7 @@ import {
     extractFirstUrl,
     hasFormat,
     isSafeHttpUrl,
+    maskSpoilers,
     normalizeEntities,
     replaceRangeWithMention,
     sameValue,
@@ -194,5 +195,40 @@ describe('extended entities helpers', () => {
             entities: [{ type: 'mention', offset: 3, length: 6, user_id: 'u-alice' }],
         })
         expect(mentioned.caret).toBe(10)
+    })
+
+    it('masks spoilers and skips URLs inside spoilers or code when extracting preview URL', () => {
+        expect(
+            maskSpoilers('Убийца - садовник (и повар)', [
+                { type: 'spoiler', offset: 9, length: 8 },
+                { type: 'spoiler', offset: 21, length: 5 },
+            ]),
+        ).toBe('Убийца - ••• (и •••)')
+
+        // URL под спойлером и внутри code игнорируется, а открытый URL после него - берётся
+        const text = 'секрет https://hidden.example/a и https://open.example/b'
+        expect(
+            extractFirstUrl({
+                text,
+                entities: [{ type: 'spoiler', offset: 7, length: 24 }],
+            }),
+        ).toBe('https://open.example/b')
+
+        expect(
+            extractFirstUrl({
+                text: 'https://only-spoiler.example',
+                entities: [{ type: 'spoiler', offset: 0, length: 28 }],
+            }),
+        ).toBeNull()
+
+        expect(
+            extractFirstUrl({
+                text: 'ссылка',
+                entities: [
+                    { type: 'spoiler', offset: 0, length: 6 },
+                    { type: 'text_link', offset: 0, length: 6, url: 'https://secret.example' },
+                ],
+            }),
+        ).toBeNull()
     })
 })

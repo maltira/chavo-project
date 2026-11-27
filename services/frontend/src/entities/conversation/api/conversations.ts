@@ -1,6 +1,6 @@
 import { request } from '@/shared/api'
 
-import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
+import type { AvatarShape, Profile, Status } from '@/entities/user/@x/conversation'
 
 import type { ChatSettings, ConversationSummary } from '../model/types'
 
@@ -75,6 +75,24 @@ export async function getMembers(id: string): Promise<Member[]> {
         `/conversations/${encodeURIComponent(id)}/members?limit=${MEMBERS_LIMIT}`,
     )
     return page.items
+}
+
+// серверный поиск участников группы по username/display_name среди всего состава (до 5000 человек)
+export async function searchMembers(
+    id: string,
+    query: string,
+    limit = 6,
+    excludeMe = true,
+): Promise<Profile[]> {
+    const params = new URLSearchParams({
+        q: query,
+        limit: String(limit),
+        ...(excludeMe ? { exclude_me: 'true' } : {}),
+    })
+    const res = await request<{ items: Profile[] }>(
+        `/conversations/${encodeURIComponent(id)}/members/search?${params}`,
+    )
+    return res.items
 }
 
 // открытая группа в поиске (закрытые сервер не отдаёт)

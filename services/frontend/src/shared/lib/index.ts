@@ -44,6 +44,7 @@ export {
     fromHtml,
     hasFormat,
     isSafeHttpUrl,
+    maskSpoilers,
     normalizeEntities,
     render as renderRich,
     replaceRangeWithMention,

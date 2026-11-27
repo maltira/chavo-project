@@ -13,7 +13,7 @@ import { isSystem, useDraft, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { ChatActionsMenu } from '@/features/chat-actions'
 import { chatPath } from '@/shared/config'
-import { cn, formatChatTime } from '@/shared/lib'
+import { cn, formatChatTime, maskSpoilers } from '@/shared/lib'
 import { Icon, Tag } from '@/shared/ui'
 import type { MenuPosition } from '@/shared/ui'
 
@@ -37,7 +37,9 @@ function preview(chat: ConversationSummary, myId: string | undefined, systemText
     if (isSystem(message)) {
         return systemText
     }
-    const text = message.is_deleted ? 'Сообщение удалено' : (message.content ?? '')
+    const text = message.is_deleted
+        ? 'Сообщение удалено'
+        : maskSpoilers(message.content ?? '', message.entities)
     // в «Избранном» все сообщения свои - без «Вы:»
     return message.sender_id === myId && !chat.is_saved ? `Вы: ${text}` : text
 }

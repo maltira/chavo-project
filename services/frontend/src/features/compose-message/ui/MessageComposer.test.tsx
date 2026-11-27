@@ -300,44 +300,22 @@ describe('MessageComposer', () => {
         })
     })
 
-    it('autocompletes @mentions in groups and sends mention entity', async () => {
+    it('autocompletes @mentions in groups via server member search and sends mention entity', async () => {
         fetchMock.mockImplementation((url: string) => {
-            if (url.startsWith('/api/conversations/g1/members')) {
+            if (url.startsWith('/api/conversations/g1/members/search?')) {
                 return Promise.resolve(
                     new Response(
                         JSON.stringify({
                             items: [
                                 {
-                                    conversation_id: 'g1',
-                                    user_id: 'me',
-                                    role: 'admin',
-                                    last_read_message_id: null,
-                                    joined_at: '2026-01-01T00:00:00Z',
-                                },
-                                {
-                                    conversation_id: 'g1',
                                     user_id: 'u-bob',
-                                    role: 'member',
-                                    last_read_message_id: null,
-                                    joined_at: '2026-01-01T00:00:00Z',
+                                    username: 'bob',
+                                    display_name: 'Боб',
+                                    bio: '',
+                                    avatar_url: '',
+                                    avatar_shape: 'circle',
                                 },
                             ],
-                            limit: 100,
-                            offset: 0,
-                        }),
-                    ),
-                )
-            }
-            if (url === '/api/users/u-bob') {
-                return Promise.resolve(
-                    new Response(
-                        JSON.stringify({
-                            user_id: 'u-bob',
-                            username: 'bob',
-                            display_name: 'Боб',
-                            bio: '',
-                            avatar_url: '',
-                            avatar_shape: 'circle',
                         }),
                     ),
                 )
@@ -353,6 +331,10 @@ describe('MessageComposer', () => {
         select(field, 'Привет @bo'.length, 'Привет @bo'.length)
 
         const option = await screen.findByRole('option', { name: /@bob/ })
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/conversations/g1/members/search?q=bo&limit=6&exclude_me=true',
+            expect.anything(),
+        )
         fireEvent.click(option)
 
         expect(field.textContent).toBe('Привет @bob ')

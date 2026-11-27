@@ -17,6 +17,7 @@ export {
     findPreLanguageInRange,
     hasFormat,
     isSafeHttpUrl,
+    maskSpoilers,
     normalizeEntities,
     replaceRangeWithMention,
     sameValue,

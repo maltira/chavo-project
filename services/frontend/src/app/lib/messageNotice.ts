@@ -5,12 +5,19 @@ import { getUser, userKey } from '@/entities/user'
 import type { Profile } from '@/entities/user'
 import type { ServerEvent } from '@/shared/api'
 import { chatPath } from '@/shared/config'
-import { notify, playNotificationSound, showDesktopNotification } from '@/shared/lib'
+import {
+    maskSpoilers,
+    notify,
+    playNotificationSound,
+    showDesktopNotification,
+} from '@/shared/lib'
+import type { MessageEntity } from '@/shared/lib'
 
 interface CreatedData {
     conversation_id?: string
     sender_id?: string
     content?: string | null
+    entities?: MessageEntity[]
     kind?: string
     is_silent?: boolean
 }
@@ -69,7 +76,7 @@ export async function notifyNewMessage(
             return
         }
         const isGroup = chat.conversation_type === 'group'
-        const text = data.content ?? ''
+        const text = maskSpoilers(data.content ?? '', data.entities)
         const title = isGroup ? (chat.name ?? 'Группа') : sender.display_name
         // в группе видно, кто написал
         const description = isGroup ? `${sender.display_name}: ${text}` : text

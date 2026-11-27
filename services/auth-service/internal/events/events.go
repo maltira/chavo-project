@@ -36,5 +36,6 @@ type SessionRevokedPayload struct {
 }
 
 type AccountDeletedPayload struct {
-	UserID uuid.UUID `json:"user_id"`
+	UserID     uuid.UUID   `json:"user_id"`
+	SessionIDs []uuid.UUID `json:"session_ids,omitempty"`
 }

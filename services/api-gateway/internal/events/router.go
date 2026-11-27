@@ -46,7 +46,7 @@ const (
 var Topics = []string{TopicAuthEvents, TopicUserEvents, TopicConversationEvents, TopicMessageEvents}
 
 // Поля маршрутизации и шифртекст клиенту не отправляются.
-var hiddenFields = []string{"member_ids", "admin_ids", "author_ids", "content_enc"}
+var hiddenFields = []string{"member_ids", "admin_ids", "author_ids", "session_ids", "content_enc"}
 
 // ErrMalformed — событие нельзя разобрать; повтор его не исправит.
 var ErrMalformed = errors.New("malformed event")
@@ -69,6 +69,11 @@ type ProfileCache interface {
 	Deleted(ctx context.Context, userID string) error
 }
 
+// SessionRevoker — удаление отозванных сессий из Redis-whitelist при обработке событий безопасности.
+type SessionRevoker interface {
+	Revoke(ctx context.Context, sessionIDs ...string) error
+}
+
 type envelope struct {
 	EventID    string          `json:"event_id"`
 	EventType  string          `json:"event_type"`
@@ -87,6 +92,7 @@ type recipients struct {
 	BlockerID        string   `json:"blocker_id"`
 	BlockedID        string   `json:"blocked_id"`
 	SessionID        string   `json:"session_id"`
+	SessionIDs       []string `json:"session_ids"`
 	UserID           string   `json:"user_id"`
 }
 
@@ -114,6 +120,7 @@ type Router struct {
 	sink     Sink
 	presence Presence
 	profiles ProfileCache
+	sessions SessionRevoker
 	log      *zap.Logger
 	maxAge   time.Duration
 	seen     *dedup
@@ -126,6 +133,12 @@ func NewRouter(sink Sink, presence Presence, profiles ProfileCache, opts Options
 		sink: sink, presence: presence, profiles: profiles, log: log, maxAge: opts.MaxAge,
 		seen: newDedup(opts.DedupTTL, opts.DedupSize), now: time.Now,
 	}
+}
+
+// WithSessions подключает удаление ключей отозванных сессий из Redis при обработке auth-событий.
+func (r *Router) WithSessions(sessions SessionRevoker) *Router {
+	r.sessions = sessions
+	return r
 }
 
 // Handle обрабатывает одно событие. Ошибка, кроме ErrMalformed, означает временный сбой: событие стоит повторить.
@@ -160,6 +173,11 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 		if to.SessionID == "" {
 			return ErrMalformed
 		}
+		if r.sessions != nil {
+			if err := r.sessions.Revoke(ctx, to.SessionID); err != nil {
+				return err
+			}
+		}
 		final, err := r.frame(ev)
 		if err != nil {
 			return err
@@ -170,6 +188,11 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 	case TypeAccountDeleted:
 		if to.UserID == "" {
 			return ErrMalformed
+		}
+		if r.sessions != nil && len(to.SessionIDs) > 0 {
+			if err := r.sessions.Revoke(ctx, to.SessionIDs...); err != nil {
+				return err
+			}
 		}
 		if err := r.profiles.Deleted(ctx, to.UserID); err != nil {
 			return err

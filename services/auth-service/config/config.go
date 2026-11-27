@@ -15,9 +15,10 @@ type Config struct {
 	DatabaseURL string
 	RedisURL    string
 
-	JWTSecret            string
-	TOTPEncryptionKey    []byte
-	AccessTokenDuration  time.Duration
+	JWTSecret              string
+	TOTPEncryptionKey      []byte
+	TOTPEncryptionPrevKeys [][]byte
+	AccessTokenDuration    time.Duration
 	RefreshTokenDuration time.Duration
 	VerificationTTL      time.Duration
 
@@ -65,19 +66,45 @@ func Load() (*Config, error) {
 		return nil, errors.New("REDIS_URL is required")
 	}
 
-	// ключ шифрования TOTP-секретов: явный TOTP_ENCRYPTION_KEY (base64, 32 байта) или производный от JWT_SECRET
-	if raw := os.Getenv("TOTP_ENCRYPTION_KEY"); raw != "" {
-		key, err := base64.StdEncoding.DecodeString(raw)
-		if err != nil || len(key) != 32 {
-			return nil, errors.New("TOTP_ENCRYPTION_KEY must be base64-encoded 32 bytes")
+	// ключ шифрования TOTP-секретов: вне development обязателен явный TOTP_ENCRYPTION_KEY (base64, 32 байта),
+	// чтобы ротация JWT_SECRET не ломала существующие секреты; в development допускается производный от JWT_SECRET
+	if raw := strings.TrimSpace(os.Getenv("TOTP_ENCRYPTION_KEY")); raw != "" {
+		key, err := parseTOTPKey(raw, "TOTP_ENCRYPTION_KEY")
+		if err != nil {
+			return nil, err
 		}
 		cfg.TOTPEncryptionKey = key
+	} else if cfg.Env != "development" {
+		return nil, errors.New("TOTP_ENCRYPTION_KEY is required outside development")
 	} else {
 		sum := sha256.Sum256([]byte("chavo-totp-v1:" + cfg.JWTSecret))
 		cfg.TOTPEncryptionKey = sum[:]
 	}
 
+	// предыдущие ключи шифрования TOTP для бесшовной ротации и переезда с fallback от JWT_SECRET
+	if rawPrev := strings.TrimSpace(os.Getenv("TOTP_ENCRYPTION_KEY_PREV")); rawPrev != "" {
+		for _, part := range strings.Split(rawPrev, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			key, err := parseTOTPKey(part, "TOTP_ENCRYPTION_KEY_PREV")
+			if err != nil {
+				return nil, err
+			}
+			cfg.TOTPEncryptionPrevKeys = append(cfg.TOTPEncryptionPrevKeys, key)
+		}
+	}
+
 	return cfg, nil
+}
+
+func parseTOTPKey(raw, name string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil || len(key) != 32 {
+		return nil, errors.New(name + " must be base64-encoded 32 bytes")
+	}
+	return key, nil
 }
 
 func getEnv(key, fallback string) string {

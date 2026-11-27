@@ -76,7 +76,7 @@ func New() (*App, error) {
 	outboxRepo := repository.NewOutboxRepository(pool)
 	publisher := outbox.NewPublisher(pool, outboxRepo, producer, log, outbox.DefaultOptions())
 
-	otpSvc := service.NewOtpService(rdb, userRepo, backupRepo, cfg.TOTPEncryptionKey, mail, log)
+	otpSvc := service.NewOtpService(rdb, userRepo, backupRepo, cfg.TOTPEncryptionKey, mail, log, cfg.TOTPEncryptionPrevKeys...)
 	tokenSvc := service.NewTokenService(tokenRepo, outboxRepo, pool, rdb, publisher.Notify, cfg, log)
 	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, backupRepo, outboxRepo, otpSvc, pool, rdb, publisher.Notify, mail, cfg, log)
 

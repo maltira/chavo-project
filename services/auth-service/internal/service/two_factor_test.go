@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -93,6 +94,36 @@ func TestBackupCodeWorksEvenWhenTOTPSecretCannotDecrypt(t *testing.T) {
 	ok, err = otpSvc.VerifyTOTPCode(context.Background(), user, backupCode, true)
 	if err != nil || ok {
 		t.Fatalf("reused backup code must fail: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestVerifyTOTPCodeWithFallbackKeyAfterRotation(t *testing.T) {
+	uid := uuid.New()
+	oldKey := make([]byte, 32)
+	newKey := make([]byte, 32)
+	oldKey[0], newKey[0] = 1, 2
+
+	secret := "JBSWY3DPEHPK3PXP"
+	enc, err := utils.EncryptAESGCM(oldKey, []byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rdb, _ := newFakeRedis()
+	otpSvc := NewOtpService(rdb, nil, nil, newKey, nil, zap.NewNop(), oldKey)
+	user := &models.User{
+		ID:              uid,
+		TwoFactorMethod: models.TwoFactorTOTP,
+		TOTPSecretEnc:   enc,
+	}
+
+	code, err := utils.GenerateTOTPCode(secret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, err := otpSvc.VerifyTOTPCode(context.Background(), user, code, false)
+	if err != nil || !ok {
+		t.Fatalf("VerifyTOTPCode with fallback key = (%v, %v), want (true, nil)", ok, err)
 	}
 }
 

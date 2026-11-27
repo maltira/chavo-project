@@ -68,18 +68,32 @@ func (v *Verifier) Verify(ctx context.Context, header string) (userID, sid strin
 	return c.Subject, c.SID, nil
 }
 
-type redisSessions struct {
+type RedisSessions struct {
 	rdb *redis.Client
 }
 
-func NewRedisSessions(rdb *redis.Client) Sessions {
-	return &redisSessions{rdb: rdb}
+func NewRedisSessions(rdb *redis.Client) *RedisSessions {
+	return &RedisSessions{rdb: rdb}
 }
 
-func (s *redisSessions) Owner(ctx context.Context, sid string) (string, error) {
+func (s *RedisSessions) Owner(ctx context.Context, sid string) (string, error) {
 	owner, err := s.rdb.Get(ctx, sessionKeyPrefix+sid).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", nil
 	}
 	return owner, err
+}
+
+// Revoke удаляет сессии из Redis-whitelist; при сбое возвращает ошибку для повтора.
+func (s *RedisSessions) Revoke(ctx context.Context, sids ...string) error {
+	keys := make([]string, 0, len(sids))
+	for _, sid := range sids {
+		if sid != "" {
+			keys = append(keys, sessionKeyPrefix+sid)
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	return s.rdb.Del(ctx, keys...).Err()
 }

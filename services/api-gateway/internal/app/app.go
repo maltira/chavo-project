@@ -151,7 +151,8 @@ func New() (*App, error) {
 		a.Close()
 		return nil, err
 	}
-	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log), log)
+	sessions := auth.NewRedisSessions(rdb)
+	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log).WithSessions(sessions), log)
 
 	store, err := media.NewS3(media.S3Config{
 		Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
@@ -173,7 +174,7 @@ func New() (*App, error) {
 		Auth:           authClient,
 		Users:          userv1.NewUserServiceClient(userConn),
 		Conversations:  conversationv1.NewConversationServiceClient(convConn),
-		Verifier:       auth.NewVerifier(cfg.JWTSecret, auth.NewRedisSessions(rdb)),
+		Verifier:       auth.NewVerifier(cfg.JWTSecret, sessions),
 		Profiles:       profiles,
 		Health:         health,
 		Limiter:        ratelimit.New(ratelimit.NewRedisCounter(rdb)),

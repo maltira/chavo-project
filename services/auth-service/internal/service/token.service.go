@@ -23,6 +23,48 @@ const (
 	SessionKeyPrefix = "ws:session:"
 )
 
+var redisDeleteBackoff = []time.Duration{0, 25 * time.Millisecond, 75 * time.Millisecond}
+
+// sessionRedisKeys строит список Redis-ключей для набора идентификаторов сессий.
+func sessionRedisKeys(ids ...uuid.UUID) []string {
+	keys := make([]string, 0, len(ids))
+	for _, id := range ids {
+		keys = append(keys, SessionKeyPrefix+id.String())
+	}
+	return keys
+}
+
+// deleteRedisKeys удаляет ключи из Redis с короткими повторами при временном сбое.
+func deleteRedisKeys(ctx context.Context, rdb *redis.Client, log *zap.Logger, keys ...string) error {
+	if rdb == nil || len(keys) == 0 {
+		return nil
+	}
+	var err error
+	for i, wait := range redisDeleteBackoff {
+		if wait > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(wait):
+			}
+		}
+		if err = rdb.Del(ctx, keys...).Err(); err == nil {
+			return nil
+		}
+		if log != nil {
+			log.Warn("Failed to delete Redis keys",
+				zap.Int("attempt", i+1),
+				zap.Strings("keys", keys),
+				zap.Error(err),
+			)
+		}
+	}
+	if log != nil {
+		log.Error("Exhausted retries deleting Redis keys", zap.Strings("keys", keys), zap.Error(err))
+	}
+	return err
+}
+
 // Tokens — результат входа или обновления; SessionID (sid) стабилен на всё время сессии устройства.
 type Tokens struct {
 	AccessToken  string
@@ -124,13 +166,29 @@ func (s *tokenService) issue(ctx context.Context, userID, sessionID uuid.UUID, r
 	if ttl <= 0 {
 		ttl = s.cfg.RefreshTokenDuration
 	}
-	if err = s.rdb.Set(ctx, SessionKeyPrefix+sessionID.String(), userID.String(), ttl).Err(); err != nil {
-		s.log.Error("Failed to cache session in Redis", zap.String("session_id", sessionID.String()), zap.Error(err))
+	cached := false
+	if s.rdb != nil {
+		if err = s.rdb.Set(ctx, SessionKeyPrefix+sessionID.String(), userID.String(), ttl).Err(); err != nil {
+			s.log.Error("Failed to cache session in Redis", zap.String("session_id", sessionID.String()), zap.Error(err))
+		} else {
+			cached = true
+		}
 	}
 
-	// страховка от гонки с удалением аккаунта между Save/Rotate и записью ключа в Redis
-	if current, err := s.repo.FindByID(ctx, sessionID); err == nil && current.RevokedAt != nil {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
+	// страховка от гонки с удалением аккаунта или отзывом между Save/Rotate и записью ключа в Redis
+	current, err := s.repo.FindByID(ctx, sessionID)
+	if err != nil {
+		if cached {
+			_ = deleteRedisKeys(ctx, s.rdb, s.log, SessionKeyPrefix+sessionID.String())
+		}
+		return nil, fmt.Errorf("verify session after cache: %w", err)
+	}
+	if current.RevokedAt != nil {
+		if cached {
+			if delErr := deleteRedisKeys(ctx, s.rdb, s.log, SessionKeyPrefix+sessionID.String()); delErr != nil {
+				return nil, fmt.Errorf("delete revoked session from redis: %w", delErr)
+			}
+		}
 		return nil, apperror.ErrUnauthorized
 	}
 
@@ -204,6 +262,10 @@ func (s *tokenService) RevokeByToken(ctx context.Context, refreshToken string) e
 		return err
 	}
 	if rt.RevokedAt != nil {
+		// сессия уже отозвана в БД - дочищаем ключ в Redis (например, при повторе после сбоя)
+		if err = deleteRedisKeys(ctx, s.rdb, s.log, SessionKeyPrefix+rt.ID.String()); err != nil {
+			return fmt.Errorf("delete revoked session from redis: %w", err)
+		}
 		return nil
 	}
 	return s.revoke(ctx, rt.UserID, rt.ID, "logout")
@@ -226,6 +288,13 @@ func (s *tokenService) revoke(ctx context.Context, userID, sessionID uuid.UUID, 
 
 	if rt.UserID != userID {
 		return apperror.ErrForbidden
+	}
+
+	if rt.RevokedAt != nil {
+		if err = deleteRedisKeys(ctx, s.rdb, s.log, SessionKeyPrefix+sessionID.String()); err != nil {
+			return fmt.Errorf("delete revoked session from redis: %w", err)
+		}
+		return nil
 	}
 
 	if s.pool != nil && s.outboxRepo != nil {
@@ -259,8 +328,8 @@ func (s *tokenService) revoke(ctx context.Context, userID, sessionID uuid.UUID, 
 	}
 
 	// удаляем из Redis
-	if s.rdb != nil {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sessionID.String()).Err()
+	if err = deleteRedisKeys(ctx, s.rdb, s.log, SessionKeyPrefix+sessionID.String()); err != nil {
+		return fmt.Errorf("delete session from redis: %w", err)
 	}
 
 	return nil

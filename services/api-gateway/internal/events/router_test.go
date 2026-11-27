@@ -101,6 +101,8 @@ func TestRecipients(t *testing.T) {
 		{TypeJoinRequestApproved, map[string]any{"member_ids": []string{"a"}}, []string{"a"}},
 		{TypeChatSettingsUpdated, map[string]any{"member_ids": []string{"me"}, "user_id": "me"}, []string{"me"}},
 		{TypePinsChanged, map[string]any{"member_ids": []string{"a", "b"}}, []string{"a", "b"}},
+		{TypeHistoryCleared, map[string]any{"member_ids": []string{"me"}, "conversation_id": "c1", "user_id": "me"}, []string{"me"}},
+		{TypeMessageReactionUpdated, map[string]any{"member_ids": []string{"a", "b"}, "message_id": "m1", "emoji": "👍"}, []string{"a", "b"}},
 		{TypeJoinRequestCreated, map[string]any{"admin_ids": []string{"adm"}, "user_id": "x"}, []string{"adm"}},
 		{TypeMessageRead, map[string]any{"author_ids": []string{"a1", "a2"}, "reader_id": "r"}, []string{"a1", "a2", "r"}},
 		{TypeMessageRead, map[string]any{"author_ids": []string{}, "reader_id": "r"}, []string{"r"}},
@@ -275,5 +277,26 @@ func TestDirectCreatedWatchesPeers(t *testing.T) {
 	}
 	if len(sink.sent) != 1 {
 		t.Fatalf("sent %d, want only the fresh group event", len(sink.sent))
+	}
+}
+
+type fakeMembershipCache struct{ invalidated []string }
+
+func (c *fakeMembershipCache) Invalidate(id string) { c.invalidated = append(c.invalidated, id) }
+
+func TestMembershipCacheInvalidated(t *testing.T) {
+	r, _, _ := newRouter()
+	cache := &fakeMembershipCache{}
+	r.SetMembershipCache(cache)
+
+	for _, typ := range []string{TypeMemberAdded, TypeMemberRemoved, TypeConversationDeleted} {
+		payload := map[string]any{"conversation_id": "c-" + typ, "member_ids": []string{"a"}}
+		if err := r.Handle(context.Background(), event(typ, payload, now)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"c-" + TypeMemberAdded, "c-" + TypeMemberRemoved, "c-" + TypeConversationDeleted}
+	if !slices.Equal(cache.invalidated, want) {
+		t.Fatalf("invalidated %v, want %v", cache.invalidated, want)
 	}
 }

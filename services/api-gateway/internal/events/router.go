@@ -30,16 +30,19 @@ const (
 	// TypeChatSettingsUpdated - личные настройки чата; member_ids - только сам участник (все его вкладки)
 	TypeChatSettingsUpdated = "conversation.settings.updated"
 	// TypePinsChanged - закрепы чата изменились; member_ids - все участники или владелец личного закрепа
-	TypePinsChanged         = "conversation.pins.changed"
+	TypePinsChanged = "conversation.pins.changed"
+	// TypeHistoryCleared - участник очистил историю чата только у себя
+	TypeHistoryCleared      = "conversation.history.cleared"
 	TypeMemberAdded         = "conversation.member.added"
 	TypeMemberRemoved       = "conversation.member.removed"
 	TypeJoinRequestCreated  = "conversation.join_request.created"
 	TypeJoinRequestApproved = "conversation.join_request.approved"
 
-	TypeMessageCreated = "message.created"
-	TypeMessageUpdated = "message.updated"
-	TypeMessageDeleted = "message.deleted"
-	TypeMessageRead    = "message.read"
+	TypeMessageCreated         = "message.created"
+	TypeMessageUpdated         = "message.updated"
+	TypeMessageDeleted         = "message.deleted"
+	TypeMessageRead            = "message.read"
+	TypeMessageReactionUpdated = "message.reaction.updated"
 )
 
 // Topics — топики, которые читает Gateway.
@@ -69,6 +72,11 @@ type ProfileCache interface {
 	Deleted(ctx context.Context, userID string) error
 }
 
+// MembershipCache - сброс кеша состава чата (для индикатора набора) при изменении участников
+type MembershipCache interface {
+	Invalidate(conversationID string)
+}
+
 type envelope struct {
 	EventID    string          `json:"event_id"`
 	EventType  string          `json:"event_type"`
@@ -78,7 +86,8 @@ type envelope struct {
 
 // recipients — поля payload, по которым выбираются получатели.
 type recipients struct {
-	MemberIDs []string `json:"member_ids"`
+	ConversationID string   `json:"conversation_id"`
+	MemberIDs      []string `json:"member_ids"`
 	// ConversationType — у conversation.created ("direct" / "group").
 	ConversationType string   `json:"conversation_type"`
 	AdminIDs         []string `json:"admin_ids"`
@@ -111,13 +120,14 @@ func DefaultOptions() Options {
 }
 
 type Router struct {
-	sink     Sink
-	presence Presence
-	profiles ProfileCache
-	log      *zap.Logger
-	maxAge   time.Duration
-	seen     *dedup
-	now      func() time.Time
+	sink       Sink
+	presence   Presence
+	profiles   ProfileCache
+	membership MembershipCache
+	log        *zap.Logger
+	maxAge     time.Duration
+	seen       *dedup
+	now        func() time.Time
 }
 
 // presence может быть nil.
@@ -126,6 +136,11 @@ func NewRouter(sink Sink, presence Presence, profiles ProfileCache, opts Options
 		sink: sink, presence: presence, profiles: profiles, log: log, maxAge: opts.MaxAge,
 		seen: newDedup(opts.DedupTTL, opts.DedupSize), now: time.Now,
 	}
+}
+
+// SetMembershipCache подключает сброс кеша участников чата при смене состава
+func (r *Router) SetMembershipCache(c MembershipCache) {
+	r.membership = c
 }
 
 // Handle обрабатывает одно событие. Ошибка, кроме ErrMalformed, означает временный сбой: событие стоит повторить.
@@ -189,13 +204,19 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 	if ev.EventType == TypeConversationCreated && to.ConversationType == "direct" && len(to.MemberIDs) == 2 && r.presence != nil {
 		r.presence.DirectCreated(ctx, to.MemberIDs[0], to.MemberIDs[1])
 	}
+	if r.membership != nil && to.ConversationID != "" {
+		switch ev.EventType {
+		case TypeMemberAdded, TypeMemberRemoved, TypeConversationDeleted:
+			r.membership.Invalidate(to.ConversationID)
+		}
+	}
 
 	var users []string
 	switch ev.EventType {
-	case TypeMessageCreated, TypeMessageUpdated, TypeMessageDeleted,
+	case TypeMessageCreated, TypeMessageUpdated, TypeMessageDeleted, TypeMessageReactionUpdated,
 		TypeConversationCreated, TypeConversationUpdated, TypeConversationDeleted,
 		TypeMemberAdded, TypeMemberRemoved, TypeJoinRequestApproved, TypeChatSettingsUpdated,
-		TypePinsChanged:
+		TypePinsChanged, TypeHistoryCleared:
 		users = to.MemberIDs
 	case TypeMessageRead:
 		// Читатель получает событие во все свои вкладки: счётчик непрочитанных синхронизируется между ними.

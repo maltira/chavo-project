@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 	"time"
 
@@ -54,12 +55,23 @@ func Pool(t *testing.T, schema string) *pgxpool.Pool {
 	t.Cleanup(pool.Close)
 
 	_, file, _, _ := runtime.Caller(0)
-	migration, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../../migrations/conversation/000001_init.up.sql"))
+	dir := filepath.Join(filepath.Dir(file), "../../../../migrations/conversation")
+	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, string(migration)); err != nil {
-		t.Fatal(err)
+	if len(files) == 0 {
+		t.Fatalf("no conversation migrations found in %s", dir)
+	}
+	sort.Strings(files)
+	for _, mf := range files {
+		migration, err := os.ReadFile(mf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, string(migration)); err != nil {
+			t.Fatalf("apply %s: %v", filepath.Base(mf), err)
+		}
 	}
 	return pool
 }

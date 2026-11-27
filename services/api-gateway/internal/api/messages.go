@@ -11,7 +11,11 @@ import (
 
 func (h *Handler) listMessages(c *gin.Context) {
 	resp, err := h.conversations.ListMessages(c.Request.Context(), &conversationv1.ListMessagesRequest{
-		ConversationId: c.Query("conversation_id"), Before: optString(c.Query("before")), Limit: queryInt(c, "limit"),
+		ConversationId: c.Query("conversation_id"),
+		Before:         optString(c.Query("before")),
+		After:          optString(c.Query("after")),
+		Around:         optString(c.Query("around")),
+		Limit:          queryInt(c, "limit"),
 	})
 	if err != nil {
 		h.fail(c, err)
@@ -21,7 +25,14 @@ func (h *Handler) listMessages(c *gin.Context) {
 	for _, m := range resp.GetItems() {
 		items = append(items, toMessage(m))
 	}
-	c.JSON(http.StatusOK, gin.H{"items": items, "limit": resp.GetLimit(), "next_before": resp.NextBefore})
+	c.JSON(http.StatusOK, gin.H{
+		"items":       items,
+		"limit":       resp.GetLimit(),
+		"next_before": resp.NextBefore,
+		"next_after":  resp.NextAfter,
+		"has_older":   resp.GetHasOlder(),
+		"has_newer":   resp.GetHasNewer(),
+	})
 }
 
 func (h *Handler) sendMessage(c *gin.Context) {
@@ -32,13 +43,15 @@ func (h *Handler) sendMessage(c *gin.Context) {
 		ReplyToMessageID *string `json:"reply_to_message_id"`
 		// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
 		Entities []entityJSON `json:"entities"`
+		IsSilent bool         `json:"is_silent"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
 	resp, err := h.conversations.SendMessage(c.Request.Context(), &conversationv1.SendMessageRequest{
 		ConversationId: body.ConversationID, RecipientId: body.RecipientID,
-		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID, Entities: fromEntities(body.Entities),
+		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID,
+		Entities: fromEntities(body.Entities), IsSilent: body.IsSilent,
 	})
 	if err != nil {
 		h.fail(c, err)
@@ -130,4 +143,44 @@ func (h *Handler) deleteMessages(c *gin.Context) {
 		return
 	}
 	httpx.Success(c, http.StatusOK, "Сообщения удалены")
+}
+
+func (h *Handler) addReaction(c *gin.Context) {
+	var body struct {
+		Emoji string `json:"emoji"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.conversations.AddReaction(c.Request.Context(), &conversationv1.AddReactionRequest{
+		MessageId: c.Param("message_id"),
+		Emoji:     body.Emoji,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"reactions": toReactions(resp.GetReactions())})
+}
+
+func (h *Handler) removeReaction(c *gin.Context) {
+	emoji := c.Query("emoji")
+	if emoji == "" && c.Request.ContentLength != 0 {
+		var body struct {
+			Emoji string `json:"emoji"`
+		}
+		if !httpx.BindJSON(c, &body) {
+			return
+		}
+		emoji = body.Emoji
+	}
+	resp, err := h.conversations.RemoveReaction(c.Request.Context(), &conversationv1.RemoveReactionRequest{
+		MessageId: c.Param("message_id"),
+		Emoji:     emoji,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"reactions": toReactions(resp.GetReactions())})
 }

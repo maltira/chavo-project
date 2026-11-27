@@ -130,12 +130,26 @@ func (p *fakePresence) snapshot() []presenceCall {
 	return append([]presenceCall(nil), p.calls...)
 }
 
+type fakeTyping struct {
+	mu    sync.Mutex
+	calls [][2]string
+	err   error
+}
+
+func (f *fakeTyping) Notify(_ context.Context, userID, convID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, [2]string{userID, convID})
+	return f.err
+}
+
 type env struct {
 	url      string
 	auth     *fakeAuth
 	hub      *hub.Hub
 	reg      *fakeRegistry
 	presence *fakePresence
+	typing   *fakeTyping
 }
 
 func newEnv(t *testing.T, opts ws.Options) *env {
@@ -150,12 +164,13 @@ func newEnv(t *testing.T, opts ws.Options) *env {
 		}},
 		reg:      &fakeRegistry{conns: map[string]string{}},
 		presence: &fakePresence{},
+		typing:   &fakeTyping{},
 	}
 	log := zap.NewNop()
 	e.hub = hub.New(e.reg, log)
 	users := &fakeUsers{profiles: map[string]bool{"u1": true, "u3": true}}
 	h, err := ws.New(ws.Deps{
-		Auth: e.auth, Profiles: profile.NewGate(noCache{}, users, log), Hub: e.hub, Presence: e.presence,
+		Auth: e.auth, Profiles: profile.NewGate(noCache{}, users, log), Hub: e.hub, Presence: e.presence, Typing: e.typing,
 		Origin: origin + "/", Options: opts, Log: log,
 	})
 	if err != nil {
@@ -476,5 +491,34 @@ func TestMessageRateLimit(t *testing.T) {
 	}
 	if code := closeCode(t, conn); code != hub.ClosePolicy {
 		t.Fatalf("close code %d", code)
+	}
+}
+
+func TestTypingCommand(t *testing.T) {
+	e := newEnv(t, ws.DefaultOptions())
+	conn, _ := connect(t, e, "tab")
+
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"typing","conversation_id":"00000000-0000-0000-0000-000000000001"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"ping"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if m := read(t, conn); m["type"] != "pong" {
+		t.Fatalf("valid typing must not reply, got %v", m)
+	}
+	e.typing.mu.Lock()
+	calls := append([][2]string(nil), e.typing.calls...)
+	e.typing.err = ws.ErrInvalidConversationID
+	e.typing.mu.Unlock()
+	if len(calls) != 1 || calls[0] != [2]string{"u1", "00000000-0000-0000-0000-000000000001"} {
+		t.Fatalf("typing calls: %+v", calls)
+	}
+
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"typing","conversation_id":"bad"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if m := read(t, conn); m["type"] != "error" || m["reason"] != "INVALID_MESSAGE" {
+		t.Fatalf("invalid typing: %v", m)
 	}
 }

@@ -26,6 +26,8 @@ type MessageRecord struct {
 	ForwardedFromUserID *uuid.UUID
 	// Entities - форматирование текста (nil - обычный текст)
 	Entities []models.Entity
+	// IsSilent - отправлено без звука
+	IsSilent bool
 	// Kind - user или system; у системного нет текста, есть SystemEvent и TargetID
 	Kind        string
 	SystemEvent *string
@@ -39,8 +41,12 @@ type MessageRepository interface {
 	Create(ctx context.Context, q DBTX, rec *MessageRecord) error
 	CreateSystem(ctx context.Context, q DBTX, rec *MessageRecord) error
 	FindByID(ctx context.Context, q DBTX, id uuid.UUID) (*MessageRecord, error)
-	// List отдаёт только сообщения, видимые участнику userID.
+	// LockByID блокирует строку сообщения (FOR UPDATE) на время транзакции
+	LockByID(ctx context.Context, q DBTX, id uuid.UUID) (*MessageRecord, error)
+	// List отдаёт только сообщения, видимые участнику userID (от новых к старым).
 	List(ctx context.Context, q DBTX, convID, userID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error)
+	// ListAfter отдаёт сообщения строго новее курсора after (от старых к новым - ближайшие к курсору первыми)
+	ListAfter(ctx context.Context, q DBTX, convID, userID, after uuid.UUID, limit int) ([]MessageRecord, error)
 	// FindVisible — сообщение, которое участник вправе видеть (ErrNotFound иначе).
 	FindVisible(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
 	// FindForViewer — как FindVisible, но также отдаёт сообщение, на которое отвечает видимое участнику сообщение.
@@ -66,17 +72,17 @@ const visibleToMember = `((cm.member_role = 'admin' OR m.created_at >= cm.joined
 
 const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
 	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at,
-	m.is_forwarded, m.forwarded_from_user_id, m.entities`
+	m.is_forwarded, m.forwarded_from_user_id, m.entities, m.is_silent`
 
 const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited,
 	kind, system_event, target_id, created_at, updated_at, deleted_at,
-	is_forwarded, forwarded_from_user_id, entities`
+	is_forwarded, forwarded_from_user_id, entities, is_silent`
 
 // messageDest - поля для Scan в порядке messageColumns
 func messageDest(m *MessageRecord) []any {
 	return []any{&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
 		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
-		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities}
+		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities, &m.IsSilent}
 }
 
 func scanMessage(row pgx.Row) (*MessageRecord, error) {
@@ -99,11 +105,11 @@ func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageReco
 	// clock_timestamp(), а не NOW(): порядок сообщений должен отражать момент вставки, а не начало транзакции.
 	err := q.QueryRow(ctx,
 		`INSERT INTO messages (conversation_id, sender_id, content_enc, reply_to_message_id,
-		                       is_forwarded, forwarded_from_user_id, entities, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp())
+		                       is_forwarded, forwarded_from_user_id, entities, is_silent, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp())
 		 RETURNING id, created_at`,
 		rec.ConversationID, rec.SenderID, rec.ContentEnc, rec.ReplyToMessageID,
-		rec.IsForwarded, rec.ForwardedFromUserID, entitiesArg(rec.Entities),
+		rec.IsForwarded, rec.ForwardedFromUserID, entitiesArg(rec.Entities), rec.IsSilent,
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create message: %w", err)
@@ -137,6 +143,17 @@ func (r *messageRepository) FindByID(ctx context.Context, q DBTX, id uuid.UUID) 
 	return m, nil
 }
 
+func (r *messageRepository) LockByID(ctx context.Context, q DBTX, id uuid.UUID) (*MessageRecord, error) {
+	m, err := scanMessage(q.QueryRow(ctx, `SELECT `+messageColumns+` FROM messages WHERE id = $1 FOR UPDATE`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotFound
+		}
+		return nil, fmt.Errorf("lock message: %w", err)
+	}
+	return m, nil
+}
+
 // List возвращает сообщения от новых к старым; before — id сообщения-курсора (строго старше него).
 func (r *messageRepository) List(ctx context.Context, q DBTX, convID, userID uuid.UUID, before *uuid.UUID, limit int) ([]MessageRecord, error) {
 	rows, err := q.Query(ctx,
@@ -154,6 +171,37 @@ func (r *messageRepository) List(ctx context.Context, q DBTX, convID, userID uui
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
+	}
+	defer rows.Close()
+
+	res := make([]MessageRecord, 0, limit)
+	for rows.Next() {
+		m, err := scanMessage(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
+		}
+		res = append(res, *m)
+	}
+	return res, rows.Err()
+}
+
+// ListAfter возвращает сообщения строго новее курсора after (от старых к новым)
+func (r *messageRepository) ListAfter(ctx context.Context, q DBTX, convID, userID, after uuid.UUID, limit int) ([]MessageRecord, error) {
+	rows, err := q.Query(ctx,
+		`WITH cur AS (SELECT created_at, id FROM messages WHERE id = $2 AND conversation_id = $1)
+		 SELECT `+messageColumnsM+`
+		 FROM messages m
+		 JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = $4
+		 WHERE m.conversation_id = $1
+		   AND `+visibleToMember+`
+		   AND EXISTS (
+		        SELECT 1 FROM cur WHERE (m.created_at, m.id) > (cur.created_at, cur.id))
+		 ORDER BY m.created_at ASC, m.id ASC
+		 LIMIT $3`,
+		convID, after, limit, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list messages after: %w", err)
 	}
 	defer rows.Close()
 

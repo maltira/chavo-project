@@ -73,11 +73,17 @@ type Presence interface {
 	Unsubscribe(c *hub.Conn, userIDs []string) error
 }
 
+// Typing - рассылка индикатора набора участникам чата; nil - отключено
+type Typing interface {
+	Notify(ctx context.Context, userID, conversationID string) error
+}
+
 type Deps struct {
 	Auth     authv1.AuthServiceClient
 	Profiles *profile.Gate
 	Hub      *hub.Hub
 	Presence Presence
+	Typing   Typing
 	Origin   string
 	Options  Options
 	Log      *zap.Logger
@@ -88,6 +94,7 @@ type Handler struct {
 	profiles *profile.Gate
 	hub      *hub.Hub
 	presence Presence
+	typing   Typing
 	origin   string
 	opts     Options
 	log      *zap.Logger
@@ -99,7 +106,7 @@ func New(d Deps) (*Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid frontend origin %q", d.Origin)
 	}
-	h := &Handler{auth: d.Auth, profiles: d.Profiles, hub: d.Hub, presence: d.Presence, origin: origin, opts: d.Options, log: d.Log}
+	h := &Handler{auth: d.Auth, profiles: d.Profiles, hub: d.Hub, presence: d.Presence, typing: d.Typing, origin: origin, opts: d.Options, log: d.Log}
 	h.upgrader = websocket.Upgrader{
 		HandshakeTimeout: 10 * time.Second,
 		// Origin уже проверен в Handle.
@@ -135,8 +142,9 @@ type errorMsg struct {
 }
 
 type clientMsg struct {
-	Type    string   `json:"type"`
-	UserIDs []string `json:"user_ids"`
+	Type           string   `json:"type"`
+	UserIDs        []string `json:"user_ids"`
+	ConversationID string   `json:"conversation_id"`
 }
 
 func encode(v any) []byte {
@@ -364,6 +372,14 @@ func (h *Handler) dispatch(ctx context.Context, c *hub.Conn, data []byte) {
 		}
 		if err != nil {
 			c.Enqueue(h.presenceError(c, err))
+		}
+	case "typing":
+		if h.typing == nil {
+			c.Enqueue(errorFrame(ReasonUnknownType, "Неизвестный тип сообщения"))
+			return
+		}
+		if err := h.typing.Notify(ctx, c.UserID, msg.ConversationID); errors.Is(err, ErrInvalidConversationID) {
+			c.Enqueue(errorFrame(ReasonInvalidMessage, "conversation_id: ожидается UUID"))
 		}
 	default:
 		c.Enqueue(errorFrame(ReasonUnknownType, "Неизвестный тип сообщения"))

@@ -20,6 +20,8 @@ const (
 	TypeChatSettingsUpdated = "conversation.settings.updated"
 	// TypePinsChanged - список закреплённых сообщений чата изменился: клиенты его перечитывают
 	TypePinsChanged = "conversation.pins.changed"
+	// TypeHistoryCleared - участник очистил историю чата только у себя
+	TypeHistoryCleared = "conversation.history.cleared"
 
 	TypeMemberAdded   = "conversation.member.added"
 	TypeMemberRemoved = "conversation.member.removed"
@@ -27,10 +29,11 @@ const (
 	TypeJoinRequestCreated  = "conversation.join_request.created"
 	TypeJoinRequestApproved = "conversation.join_request.approved"
 
-	TypeMessageCreated = "message.created"
-	TypeMessageUpdated = "message.updated"
-	TypeMessageDeleted = "message.deleted"
-	TypeMessageRead    = "message.read"
+	TypeMessageCreated         = "message.created"
+	TypeMessageUpdated         = "message.updated"
+	TypeMessageDeleted         = "message.deleted"
+	TypeMessageRead            = "message.read"
+	TypeMessageReactionUpdated = "message.reaction.updated"
 )
 
 type Event[T any] struct {

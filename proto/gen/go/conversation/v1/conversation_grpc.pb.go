@@ -29,6 +29,7 @@ const (
 	ConversationService_SetGroupAvatarShape_FullMethodName   = "/conversation.v1.ConversationService/SetGroupAvatarShape"
 	ConversationService_ClearGroupAvatarShape_FullMethodName = "/conversation.v1.ConversationService/ClearGroupAvatarShape"
 	ConversationService_DeleteConversation_FullMethodName    = "/conversation.v1.ConversationService/DeleteConversation"
+	ConversationService_ClearHistory_FullMethodName          = "/conversation.v1.ConversationService/ClearHistory"
 	ConversationService_JoinGroup_FullMethodName             = "/conversation.v1.ConversationService/JoinGroup"
 	ConversationService_ListGroupAvatars_FullMethodName      = "/conversation.v1.ConversationService/ListGroupAvatars"
 	ConversationService_AddGroupAvatar_FullMethodName        = "/conversation.v1.ConversationService/AddGroupAvatar"
@@ -61,6 +62,8 @@ const (
 	ConversationService_ListPins_FullMethodName              = "/conversation.v1.ConversationService/ListPins"
 	ConversationService_PinMessage_FullMethodName            = "/conversation.v1.ConversationService/PinMessage"
 	ConversationService_UnpinMessage_FullMethodName          = "/conversation.v1.ConversationService/UnpinMessage"
+	ConversationService_AddReaction_FullMethodName           = "/conversation.v1.ConversationService/AddReaction"
+	ConversationService_RemoveReaction_FullMethodName        = "/conversation.v1.ConversationService/RemoveReaction"
 )
 
 // ConversationServiceClient is the client API for ConversationService service.
@@ -82,6 +85,8 @@ type ConversationServiceClient interface {
 	ClearGroupAvatarShape(ctx context.Context, in *ClearGroupAvatarShapeRequest, opts ...grpc.CallOption) (*ClearGroupAvatarShapeResponse, error)
 	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
+	// ClearHistory - очищает историю чата только для вызывающего, сам чат остаётся в списке
+	ClearHistory(ctx context.Context, in *ClearHistoryRequest, opts ...grpc.CallOption) (*ClearHistoryResponse, error)
 	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
 	// История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
 	// и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
@@ -125,6 +130,9 @@ type ConversationServiceClient interface {
 	ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error)
 	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
 	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
+	// реакции на сообщения: добавить или снять свою реакцию; ответ - актуальные реакции сообщения
+	AddReaction(ctx context.Context, in *AddReactionRequest, opts ...grpc.CallOption) (*AddReactionResponse, error)
+	RemoveReaction(ctx context.Context, in *RemoveReactionRequest, opts ...grpc.CallOption) (*RemoveReactionResponse, error)
 }
 
 type conversationServiceClient struct {
@@ -229,6 +237,16 @@ func (c *conversationServiceClient) DeleteConversation(ctx context.Context, in *
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteConversationResponse)
 	err := c.cc.Invoke(ctx, ConversationService_DeleteConversation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) ClearHistory(ctx context.Context, in *ClearHistoryRequest, opts ...grpc.CallOption) (*ClearHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearHistoryResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ClearHistory_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -555,6 +573,26 @@ func (c *conversationServiceClient) UnpinMessage(ctx context.Context, in *UnpinM
 	return out, nil
 }
 
+func (c *conversationServiceClient) AddReaction(ctx context.Context, in *AddReactionRequest, opts ...grpc.CallOption) (*AddReactionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddReactionResponse)
+	err := c.cc.Invoke(ctx, ConversationService_AddReaction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) RemoveReaction(ctx context.Context, in *RemoveReactionRequest, opts ...grpc.CallOption) (*RemoveReactionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveReactionResponse)
+	err := c.cc.Invoke(ctx, ConversationService_RemoveReaction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConversationServiceServer is the server API for ConversationService service.
 // All implementations must embed UnimplementedConversationServiceServer
 // for forward compatibility.
@@ -574,6 +612,8 @@ type ConversationServiceServer interface {
 	ClearGroupAvatarShape(context.Context, *ClearGroupAvatarShapeRequest) (*ClearGroupAvatarShapeResponse, error)
 	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
+	// ClearHistory - очищает историю чата только для вызывающего, сам чат остаётся в списке
+	ClearHistory(context.Context, *ClearHistoryRequest) (*ClearHistoryResponse, error)
 	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
 	// История аватарок группы: до 5 последних фото, первое (самое новое) - текущее. Список виден участникам
 	// и всем, если группа открытая; менять - только админы. Изменение уходит участникам как conversation.updated
@@ -617,6 +657,9 @@ type ConversationServiceServer interface {
 	ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error)
 	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
 	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
+	// реакции на сообщения: добавить или снять свою реакцию; ответ - актуальные реакции сообщения
+	AddReaction(context.Context, *AddReactionRequest) (*AddReactionResponse, error)
+	RemoveReaction(context.Context, *RemoveReactionRequest) (*RemoveReactionResponse, error)
 	mustEmbedUnimplementedConversationServiceServer()
 }
 
@@ -656,6 +699,9 @@ func (UnimplementedConversationServiceServer) ClearGroupAvatarShape(context.Cont
 }
 func (UnimplementedConversationServiceServer) DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteConversation not implemented")
+}
+func (UnimplementedConversationServiceServer) ClearHistory(context.Context, *ClearHistoryRequest) (*ClearHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearHistory not implemented")
 }
 func (UnimplementedConversationServiceServer) JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinGroup not implemented")
@@ -752,6 +798,12 @@ func (UnimplementedConversationServiceServer) PinMessage(context.Context, *PinMe
 }
 func (UnimplementedConversationServiceServer) UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnpinMessage not implemented")
+}
+func (UnimplementedConversationServiceServer) AddReaction(context.Context, *AddReactionRequest) (*AddReactionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddReaction not implemented")
+}
+func (UnimplementedConversationServiceServer) RemoveReaction(context.Context, *RemoveReactionRequest) (*RemoveReactionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveReaction not implemented")
 }
 func (UnimplementedConversationServiceServer) mustEmbedUnimplementedConversationServiceServer() {}
 func (UnimplementedConversationServiceServer) testEmbeddedByValue()                             {}
@@ -950,6 +1002,24 @@ func _ConversationService_DeleteConversation_Handler(srv interface{}, ctx contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).DeleteConversation(ctx, req.(*DeleteConversationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_ClearHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ClearHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ClearHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ClearHistory(ctx, req.(*ClearHistoryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1530,6 +1600,42 @@ func _ConversationService_UnpinMessage_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConversationService_AddReaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddReactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).AddReaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_AddReaction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).AddReaction(ctx, req.(*AddReactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_RemoveReaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveReactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).RemoveReaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_RemoveReaction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).RemoveReaction(ctx, req.(*RemoveReactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConversationService_ServiceDesc is the grpc.ServiceDesc for ConversationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1576,6 +1682,10 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteConversation",
 			Handler:    _ConversationService_DeleteConversation_Handler,
+		},
+		{
+			MethodName: "ClearHistory",
+			Handler:    _ConversationService_ClearHistory_Handler,
 		},
 		{
 			MethodName: "JoinGroup",
@@ -1705,6 +1815,14 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "UnpinMessage",
 			Handler:    _ConversationService_UnpinMessage_Handler,
 		},
+		{
+			MethodName: "AddReaction",
+			Handler:    _ConversationService_AddReaction_Handler,
+		},
+		{
+			MethodName: "RemoveReaction",
+			Handler:    _ConversationService_RemoveReaction_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "conversation/v1/conversation.proto",
@@ -1712,6 +1830,7 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	ConversationInternalService_ListDirectPeers_FullMethodName = "/conversation.v1.ConversationInternalService/ListDirectPeers"
+	ConversationInternalService_ListMemberIDs_FullMethodName   = "/conversation.v1.ConversationInternalService/ListMemberIDs"
 )
 
 // ConversationInternalServiceClient is the client API for ConversationInternalService service.
@@ -1722,6 +1841,8 @@ const (
 type ConversationInternalServiceClient interface {
 	// ListDirectPeers — собеседники пользователя по direct-чатам (presence в Gateway).
 	ListDirectPeers(ctx context.Context, in *ListDirectPeersRequest, opts ...grpc.CallOption) (*ListDirectPeersResponse, error)
+	// ListMemberIDs - участники чата, если user_id состоит в нём (индикатор набора в Gateway)
+	ListMemberIDs(ctx context.Context, in *ListMemberIDsRequest, opts ...grpc.CallOption) (*ListMemberIDsResponse, error)
 }
 
 type conversationInternalServiceClient struct {
@@ -1742,6 +1863,16 @@ func (c *conversationInternalServiceClient) ListDirectPeers(ctx context.Context,
 	return out, nil
 }
 
+func (c *conversationInternalServiceClient) ListMemberIDs(ctx context.Context, in *ListMemberIDsRequest, opts ...grpc.CallOption) (*ListMemberIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMemberIDsResponse)
+	err := c.cc.Invoke(ctx, ConversationInternalService_ListMemberIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConversationInternalServiceServer is the server API for ConversationInternalService service.
 // All implementations must embed UnimplementedConversationInternalServiceServer
 // for forward compatibility.
@@ -1750,6 +1881,8 @@ func (c *conversationInternalServiceClient) ListDirectPeers(ctx context.Context,
 type ConversationInternalServiceServer interface {
 	// ListDirectPeers — собеседники пользователя по direct-чатам (presence в Gateway).
 	ListDirectPeers(context.Context, *ListDirectPeersRequest) (*ListDirectPeersResponse, error)
+	// ListMemberIDs - участники чата, если user_id состоит в нём (индикатор набора в Gateway)
+	ListMemberIDs(context.Context, *ListMemberIDsRequest) (*ListMemberIDsResponse, error)
 	mustEmbedUnimplementedConversationInternalServiceServer()
 }
 
@@ -1762,6 +1895,9 @@ type UnimplementedConversationInternalServiceServer struct{}
 
 func (UnimplementedConversationInternalServiceServer) ListDirectPeers(context.Context, *ListDirectPeersRequest) (*ListDirectPeersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDirectPeers not implemented")
+}
+func (UnimplementedConversationInternalServiceServer) ListMemberIDs(context.Context, *ListMemberIDsRequest) (*ListMemberIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMemberIDs not implemented")
 }
 func (UnimplementedConversationInternalServiceServer) mustEmbedUnimplementedConversationInternalServiceServer() {
 }
@@ -1803,6 +1939,24 @@ func _ConversationInternalService_ListDirectPeers_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConversationInternalService_ListMemberIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMemberIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationInternalServiceServer).ListMemberIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationInternalService_ListMemberIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationInternalServiceServer).ListMemberIDs(ctx, req.(*ListMemberIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConversationInternalService_ServiceDesc is the grpc.ServiceDesc for ConversationInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1813,6 +1967,10 @@ var ConversationInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDirectPeers",
 			Handler:    _ConversationInternalService_ListDirectPeers_Handler,
+		},
+		{
+			MethodName: "ListMemberIDs",
+			Handler:    _ConversationInternalService_ListMemberIDs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

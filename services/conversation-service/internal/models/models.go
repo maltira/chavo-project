@@ -94,6 +94,25 @@ type Message struct {
 	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id"`
 	// Entities - форматирование текста; пусто - обычный текст
 	Entities []Entity `json:"entities"`
+	// IsSilent - отправлено без звука (не показывает уведомление и не воспроизводит звук)
+	IsSilent bool `json:"is_silent"`
+	// Reactions - агрегированные реакции на сообщение
+	Reactions []ReactionSummary `json:"reactions"`
+}
+
+// ReactionSummary - агрегированная реакция на сообщение для конкретного зрителя
+type ReactionSummary struct {
+	Emoji   string      `json:"emoji"`
+	Count   int         `json:"count"`
+	Me      bool        `json:"me"`
+	UserIDs []uuid.UUID `json:"user_ids"`
+}
+
+// MessagePage - страница истории сообщений в порядке от новых к старым
+type MessagePage struct {
+	Items    []Message
+	HasOlder bool
+	HasNewer bool
 }
 
 // виды форматирования текста

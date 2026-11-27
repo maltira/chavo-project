@@ -145,6 +145,21 @@ func (s *Server) DeleteConversation(ctx context.Context, req *conversationv1.Del
 	return &conversationv1.DeleteConversationResponse{}, nil
 }
 
+func (s *Server) ClearHistory(ctx context.Context, req *conversationv1.ClearHistoryRequest) (*conversationv1.ClearHistoryResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	if err = s.convs.ClearHistory(ctx, user, convID); err != nil {
+		return nil, err
+	}
+	return &conversationv1.ClearHistoryResponse{}, nil
+}
+
 func (s *Server) JoinGroup(ctx context.Context, req *conversationv1.JoinGroupRequest) (*conversationv1.JoinGroupResponse, error) {
 	user, err := currentUser(ctx)
 	if err != nil {
@@ -411,6 +426,7 @@ func (s *Server) SendMessage(ctx context.Context, req *conversationv1.SendMessag
 		Content:          req.GetContent(),
 		ReplyToMessageID: reply,
 		Entities:         fromEntities(req.GetEntities()),
+		IsSilent:         req.GetIsSilent(),
 	})
 	if err != nil {
 		return nil, err
@@ -447,18 +463,41 @@ func (s *Server) ListMessages(ctx context.Context, req *conversationv1.ListMessa
 	if err != nil {
 		return nil, err
 	}
-	limit, _ := page(req.GetLimit(), 0, 50, 100)
-	items, err := s.msgs.List(ctx, user, convID, before, limit)
+	after, err := parseOptionalID(req.After)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*conversationv1.Message, len(items))
-	for i := range items {
-		out[i] = toMessage(&items[i])
+	around, err := parseOptionalID(req.Around)
+	if err != nil {
+		return nil, err
 	}
-	resp := &conversationv1.ListMessagesResponse{Items: out, Limit: int32(limit)}
-	if len(items) == limit {
-		resp.NextBefore = optStr(&items[len(items)-1].ID)
+	limit, _ := page(req.GetLimit(), 0, 50, 100)
+	res, err := s.msgs.ListPage(ctx, user, convID, service.ListMessagesQuery{
+		Before: before,
+		After:  after,
+		Around: around,
+		Limit:  limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*conversationv1.Message, len(res.Items))
+	for i := range res.Items {
+		out[i] = toMessage(&res.Items[i])
+	}
+	resp := &conversationv1.ListMessagesResponse{
+		Items:    out,
+		Limit:    int32(limit),
+		HasOlder: res.HasOlder,
+		HasNewer: res.HasNewer,
+	}
+	if len(res.Items) > 0 {
+		if res.HasOlder {
+			resp.NextBefore = optStr(&res.Items[len(res.Items)-1].ID)
+		}
+		if res.HasNewer {
+			resp.NextAfter = optStr(&res.Items[0].ID)
+		}
 	}
 	return resp, nil
 }
@@ -560,6 +599,54 @@ func (s *Server) ListDirectPeers(ctx context.Context, req *conversationv1.ListDi
 		return nil, err
 	}
 	return &conversationv1.ListDirectPeersResponse{UserIds: strs(ids)}, nil
+}
+
+func (s *Server) ListMemberIDs(ctx context.Context, req *conversationv1.ListMemberIDsRequest) (*conversationv1.ListMemberIDsResponse, error) {
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	user, err := parseID(req.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	ids, err := s.convs.MemberIDs(ctx, user, convID)
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.ListMemberIDsResponse{UserIds: strs(ids)}, nil
+}
+
+func (s *Server) AddReaction(ctx context.Context, req *conversationv1.AddReactionRequest) (*conversationv1.AddReactionResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := parseID(req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.msgs.AddReaction(ctx, user, msgID, req.GetEmoji())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.AddReactionResponse{Reactions: toReactions(items)}, nil
+}
+
+func (s *Server) RemoveReaction(ctx context.Context, req *conversationv1.RemoveReactionRequest) (*conversationv1.RemoveReactionResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := parseID(req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.msgs.RemoveReaction(ctx, user, msgID, req.GetEmoji())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.RemoveReactionResponse{Reactions: toReactions(items)}, nil
 }
 
 func (s *Server) SetGroupStatus(ctx context.Context, req *conversationv1.SetGroupStatusRequest) (*conversationv1.SetGroupStatusResponse, error) {

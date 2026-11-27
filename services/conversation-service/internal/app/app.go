@@ -87,12 +87,14 @@ func New() (*App, error) {
 	producer := pkgkafka.NewProducer(cfg.KafkaBrokers, log)
 	publisher := outbox.NewPublisher(db, outboxRepo, producer, cipher, log, outbox.DefaultOptions())
 
+	pinRepo := repository.NewPinRepository()
+	reactionRepo := repository.NewReactionRepository()
 	groupSvc := service.NewGroupService(db, convRepo, outboxRepo, users, banRepo, repository.NewAvatarHistoryRepository(), cipher, msgRepo)
 	srv := grpcserver.New(
-		service.NewConversationService(db, convRepo, outboxRepo, cipher),
+		service.NewConversationService(db, convRepo, pinRepo, outboxRepo, cipher),
 		groupSvc,
 		service.NewJoinService(db, convRepo, joinRepo, outboxRepo, banRepo, cipher, msgRepo),
-		service.NewMessageService(db, convRepo, msgRepo, repository.NewPinRepository(), outboxRepo, users, cipher, log),
+		service.NewMessageService(db, convRepo, msgRepo, pinRepo, reactionRepo, outboxRepo, users, cipher, log),
 	)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
 	conversationv1.RegisterConversationServiceServer(server, srv)

@@ -193,6 +193,7 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.GET("/:id", h.getConversation)
 	conv.PATCH("/:id", h.updateGroup)
 	conv.DELETE("/:id", h.deleteConversation)
+	conv.POST("/:id/clear", h.clearHistory)
 	conv.POST("/:id/status", h.setGroupStatus)
 	conv.DELETE("/:id/status", h.clearGroupStatus)
 	conv.POST("/:id/avatar-shape", h.setGroupAvatarShape)
@@ -239,6 +240,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	msg.GET("/:message_id", h.getMessage)
 	msg.PATCH("/:message_id", h.editMessage)
 	msg.DELETE("/:message_id", h.deleteMessage)
+	msg.POST("/:message_id/reactions", h.addReaction)
+	msg.DELETE("/:message_id/reactions", h.removeReaction)
 
 	return r, nil
 }

@@ -436,7 +436,7 @@ func (s *groupService) Delete(ctx context.Context, userID, convID uuid.UUID, for
 			return err
 		}
 		if access.Type == models.ConversationDirect && !forEveryone {
-			if err = s.convs.ClearHistory(ctx, tx, convID, userID); err != nil {
+			if err = s.convs.HideAndClearDirect(ctx, tx, convID, userID); err != nil {
 				return err
 			}
 			return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeConversationDeleted, events.ConversationDeletedPayload{

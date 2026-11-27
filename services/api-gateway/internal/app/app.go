@@ -140,18 +140,22 @@ func New() (*App, error) {
 
 	authClient := authv1.NewAuthServiceClient(authConn)
 	userInternal := userv1.NewUserInternalServiceClient(userConn)
+	convInternal := conversationv1.NewConversationInternalServiceClient(convConn)
 	profiles := profile.NewGate(profile.NewRedisCache(rdb), userInternal, log)
-	a.presence = presence.New(a.hub, userInternal, conversationv1.NewConversationInternalServiceClient(convConn),
+	a.presence = presence.New(a.hub, userInternal, convInternal,
 		presence.NewKafkaPublisher(cfg.KafkaBrokers, log), presence.DefaultOptions(), log)
+	typingSvc := ws.NewTypingService(a.hub, convInternal, log)
 	wsHandler, err := ws.New(ws.Deps{
-		Auth: authClient, Profiles: profiles, Hub: a.hub, Presence: a.presence,
+		Auth: authClient, Profiles: profiles, Hub: a.hub, Presence: a.presence, Typing: typingSvc,
 		Origin: cfg.FrontendOrigin, Options: wsOpts, Log: log,
 	})
 	if err != nil {
 		a.Close()
 		return nil, err
 	}
-	a.consumer = events.NewConsumer(cfg.KafkaBrokers, events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log), log)
+	evRouter := events.NewRouter(a.hub, a.presence, profiles, events.DefaultOptions(), log)
+	evRouter.SetMembershipCache(typingSvc)
+	a.consumer = events.NewConsumer(cfg.KafkaBrokers, evRouter, log)
 
 	store, err := media.NewS3(media.S3Config{
 		Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,

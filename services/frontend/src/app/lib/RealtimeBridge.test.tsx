@@ -191,6 +191,92 @@ describe('RealtimeBridge', () => {
         })
     })
 
+    it('keeps peer marked deleted even if an in-flight profile request resolves later', async () => {
+        const { client, socket } = mount()
+        client.setQueryData(['me'], { user_id: 'me', username: 'me' })
+
+        const staleProfile: Profile = {
+            user_id: 'peer',
+            username: 'bob',
+            display_name: 'Боб',
+            bio: 'hi',
+            avatar_url: '/media/avatars/bob.jpg',
+            online: true,
+            last_seen_at: null,
+            created_at: '2026-10-01T00:00:00Z',
+            updated_at: '2026-10-01T00:00:00Z',
+        }
+        client.setQueryData<Profile>(userKey('peer'), staleProfile)
+
+        let resolveFetch!: (profile: Profile) => void
+        const inflight = client
+            .fetchQuery({
+                queryKey: userKey('peer'),
+                queryFn: () =>
+                    new Promise<Profile>((resolve) => {
+                        resolveFetch = resolve
+                    }),
+            })
+            .catch(() => undefined)
+
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'user.account_deleted', data: { user_id: 'peer' } }),
+        })
+
+        // запоздавший ответ API приходит уже после события удаления аккаунта
+        resolveFetch(staleProfile)
+        await inflight
+        await Promise.resolve()
+
+        expect(client.getQueryData<Profile>(userKey('peer'))).toMatchObject({
+            user_id: 'peer',
+            username: '',
+            display_name: 'Удалённый аккаунт',
+            is_deleted: true,
+        })
+    })
+
+    it('marks uncached peer deleted when initial profile request resolves after deletion event', async () => {
+        const { client, socket } = mount()
+        client.setQueryData(['me'], { user_id: 'me', username: 'me' })
+
+        const staleProfile: Profile = {
+            user_id: 'peer',
+            username: 'bob',
+            display_name: 'Боб',
+            online: true,
+            last_seen_at: null,
+            created_at: '2026-10-01T00:00:00Z',
+            updated_at: '2026-10-01T00:00:00Z',
+        }
+
+        let resolveFetch!: (profile: Profile) => void
+        const inflight = client
+            .fetchQuery({
+                queryKey: userKey('peer'),
+                queryFn: () =>
+                    new Promise<Profile>((resolve) => {
+                        resolveFetch = resolve
+                    }),
+            })
+            .catch(() => undefined)
+
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'user.account_deleted', data: { user_id: 'peer' } }),
+        })
+
+        resolveFetch(staleProfile)
+        await inflight
+        await Promise.resolve()
+
+        expect(client.getQueryData<Profile>(userKey('peer'))).toMatchObject({
+            user_id: 'peer',
+            username: '',
+            display_name: 'Удалённый аккаунт',
+            is_deleted: true,
+        })
+    })
+
     it('does not claim an expired session when the server just refused it', () => {
         const { socket } = mount()
         socket().onclose?.({ code: 4401 })

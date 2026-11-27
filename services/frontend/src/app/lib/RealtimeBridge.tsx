@@ -63,6 +63,34 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             // блокировали с другого моего устройства - чёрный список здесь тоже меняется
             void queryClient.invalidateQueries({ queryKey: blockedKey })
             break
+        case 'user.account_deleted':
+            // удаление аккаунта необратимо: сразу обновляем кеш собеседника, не дожидаясь консьюмера user-service
+            if (data.user_id) {
+                const deletedId = data.user_id
+                queryClient.setQueryData<Presence>(presenceKey(deletedId), {
+                    online: false,
+                    lastSeenAt: null,
+                })
+                queryClient.setQueryData<Profile>(userKey(deletedId), (prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              username: '',
+                              display_name: 'Удалённый аккаунт',
+                              bio: undefined,
+                              avatar_url: undefined,
+                              avatar_shape: null,
+                              status: null,
+                              online: false,
+                              last_seen_at: null,
+                              is_deleted: true,
+                          }
+                        : prev,
+                )
+                void queryClient.invalidateQueries({ queryKey: blockStatusKey(deletedId) })
+                void queryClient.invalidateQueries({ queryKey: blockedKey })
+            }
+            break
         case 'message.read': {
             // курсор участника - для галочек в открытом чате
             const read = event.data as {
@@ -217,11 +245,19 @@ export function RealtimeBridge() {
 
         const socket = connectSocket({
             onEvent: (event) => {
-                if (event.type === 'session.revoked' || event.type === 'user.account_deleted') {
-                    revokeReason =
-                        event.type === 'user.account_deleted'
-                            ? 'account_deleted'
-                            : (event.data as { reason?: string } | undefined)?.reason
+                const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
+                const deletedUserId =
+                    event.type === 'user.account_deleted'
+                        ? (event.data as { user_id?: string } | undefined)?.user_id
+                        : undefined
+                const isOwnAccountDeleted =
+                    event.type === 'user.account_deleted' &&
+                    (!deletedUserId || !myId || deletedUserId === myId)
+
+                if (event.type === 'session.revoked' || isOwnAccountDeleted) {
+                    revokeReason = isOwnAccountDeleted
+                        ? 'account_deleted'
+                        : (event.data as { reason?: string } | undefined)?.reason
                     clearTimeout(revokeTimer)
                     revokeTimer = setTimeout(() => {
                         endSession(revokeReason)
@@ -237,7 +273,6 @@ export function RealtimeBridge() {
                 if (deleted && window.location.pathname === chatPath(deleted)) {
                     navigateRef.current('/', { replace: true })
                 }
-                const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
                 void notifyNewMessage(event, queryClient, myId, open)
                 void notifyGroupEvent(event, queryClient, myId, open)
             },

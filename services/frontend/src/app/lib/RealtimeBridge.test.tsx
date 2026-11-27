@@ -3,8 +3,8 @@ import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 import { useSession } from '@/entities/session'
-import { presenceKey } from '@/entities/user'
-import type { Presence } from '@/entities/user'
+import { presenceKey, userKey } from '@/entities/user'
+import type { Presence, Profile } from '@/entities/user'
 import { useNotifications } from '@/shared/lib'
 
 import { applyEvent, RealtimeBridge } from './RealtimeBridge'
@@ -142,7 +142,7 @@ describe('RealtimeBridge', () => {
 
     it('signs out and notifies when the account is deleted from another session', () => {
         const { client, socket } = mount()
-        client.setQueryData(['me'], { username: 'me' })
+        client.setQueryData(['me'], { user_id: 'me', username: 'me' })
         socket().onmessage?.({
             data: JSON.stringify({ type: 'user.account_deleted', data: { user_id: 'me' } }),
         })
@@ -152,6 +152,43 @@ describe('RealtimeBridge', () => {
         expect(useNotifications.getState().items).toEqual(
             expect.arrayContaining([expect.objectContaining({ title: 'Аккаунт удалён' })]),
         )
+    })
+
+    it('updates peer profile and presence in cache when a peer deletes their account', () => {
+        const { client, socket } = mount()
+        client.setQueryData(['me'], { user_id: 'me', username: 'me' })
+        client.setQueryData<Profile>(userKey('peer'), {
+            user_id: 'peer',
+            username: 'bob',
+            display_name: 'Боб',
+            bio: 'hi',
+            avatar_url: '/media/avatars/bob.jpg',
+            online: true,
+            last_seen_at: '2026-10-14T10:00:00Z',
+            created_at: '2026-10-01T00:00:00Z',
+            updated_at: '2026-10-01T00:00:00Z',
+        })
+        client.setQueryData<Presence>(presenceKey('peer'), { online: true, lastSeenAt: null })
+
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'user.account_deleted', data: { user_id: 'peer' } }),
+        })
+
+        expect(useSession.getState().status).toBe('authenticated')
+        expect(client.getQueryData<Profile>(userKey('peer'))).toMatchObject({
+            user_id: 'peer',
+            username: '',
+            display_name: 'Удалённый аккаунт',
+            bio: undefined,
+            avatar_url: undefined,
+            online: false,
+            last_seen_at: null,
+            is_deleted: true,
+        })
+        expect(client.getQueryData<Presence>(presenceKey('peer'))).toEqual({
+            online: false,
+            lastSeenAt: null,
+        })
     })
 
     it('does not claim an expired session when the server just refused it', () => {

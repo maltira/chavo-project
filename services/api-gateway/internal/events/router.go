@@ -54,6 +54,7 @@ var ErrMalformed = errors.New("malformed event")
 // Sink — часть Hub, нужная маршрутизации.
 type Sink interface {
 	SendToUsers(userIDs []string, msg []byte)
+	SendToWatchers(userID string, msg []byte)
 	CloseSID(sid string, final []byte, code int, reason string)
 	CloseUser(userID string, final []byte, code int, reason string)
 }
@@ -178,6 +179,8 @@ func (r *Router) route(ctx context.Context, ev envelope, to recipients, now time
 			return err
 		}
 		r.sink.CloseUser(to.UserID, final, hub.CloseSessionRevoked, "account deleted")
+		// уведомляем собеседников и подписчиков, чтобы открытый личный чат сразу обновил профиль и заблокировал ввод
+		r.sink.SendToWatchers(to.UserID, final)
 		log.Debug("ws user closed", zap.String("user_id", to.UserID))
 		return nil
 	}

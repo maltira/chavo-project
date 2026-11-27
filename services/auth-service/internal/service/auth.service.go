@@ -19,7 +19,6 @@ import (
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/models"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/repository"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/utils"
-	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
 )
 
 const (
@@ -47,18 +46,19 @@ type AuthService interface {
 }
 
 type authService struct {
-	userRepo   repository.UserRepository
-	verRepo    repository.VerificationRepository
-	resetRepo  repository.PasswordResetRepository
-	tokenRepo  repository.TokenRepository
-	backupRepo repository.BackupCodeRepository
-	otpSvc     OtpService
-	pool       *pgxpool.Pool
-	rdb        *redis.Client
-	producer   *kafka.Producer
-	mail       email.EmailSender
-	cfg        *config.Config
-	log        *zap.Logger
+	userRepo     repository.UserRepository
+	verRepo      repository.VerificationRepository
+	resetRepo    repository.PasswordResetRepository
+	tokenRepo    repository.TokenRepository
+	backupRepo   repository.BackupCodeRepository
+	outboxRepo   repository.OutboxRepository
+	otpSvc       OtpService
+	pool         *pgxpool.Pool
+	rdb          *redis.Client
+	notifyOutbox func()
+	mail         email.EmailSender
+	cfg          *config.Config
+	log          *zap.Logger
 }
 
 func NewAuthService(
@@ -67,27 +67,29 @@ func NewAuthService(
 	resetRepo repository.PasswordResetRepository,
 	tokenRepo repository.TokenRepository,
 	backupRepo repository.BackupCodeRepository,
+	outboxRepo repository.OutboxRepository,
 	otpSvc OtpService,
 	pool *pgxpool.Pool,
 	rdb *redis.Client,
-	producer *kafka.Producer,
+	notifyOutbox func(),
 	mail email.EmailSender,
 	cfg *config.Config,
 	log *zap.Logger,
 ) AuthService {
 	return &authService{
-		userRepo:   userRepo,
-		verRepo:    verRepo,
-		resetRepo:  resetRepo,
-		tokenRepo:  tokenRepo,
-		backupRepo: backupRepo,
-		otpSvc:     otpSvc,
-		pool:       pool,
-		rdb:        rdb,
-		producer:   producer,
-		mail:       mail,
-		cfg:        cfg,
-		log:        log,
+		userRepo:     userRepo,
+		verRepo:      verRepo,
+		resetRepo:    resetRepo,
+		tokenRepo:    tokenRepo,
+		backupRepo:   backupRepo,
+		outboxRepo:   outboxRepo,
+		otpSvc:       otpSvc,
+		pool:         pool,
+		rdb:          rdb,
+		notifyOutbox: notifyOutbox,
+		mail:         mail,
+		cfg:          cfg,
+		log:          log,
 	}
 }
 
@@ -270,22 +272,29 @@ func (s *authService) ConfirmPasswordReset(ctx context.Context, token, newPasswo
 	if err != nil {
 		return fmt.Errorf("revoke all tokens on password reset: %w", err)
 	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Инвалидация сессий в Redis и Kafka
-	for _, sid := range revokedIDs {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
-		if s.producer != nil {
+	if s.outboxRepo != nil {
+		for _, sid := range revokedIDs {
 			evMsg := events.NewEvent(events.TypeSessionRevoked, events.SessionRevokedPayload{
 				SessionID: sid,
 				UserID:    user.ID,
 				Reason:    "password_reset",
 			})
-			_ = s.producer.Publish(ctx, events.TopicAuthEvents, user.ID.String(), evMsg)
+			if err = s.outboxRepo.InsertTx(ctx, tx, events.TopicAuthEvents, user.ID.String(), evMsg); err != nil {
+				return fmt.Errorf("enqueue session.revoked on password reset: %w", err)
+			}
 		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	// инвалидация сессий в Redis и немедленный запуск публикации outbox
+	for _, sid := range revokedIDs {
+		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
+	}
+	if s.notifyOutbox != nil && len(revokedIDs) > 0 {
+		s.notifyOutbox()
 	}
 
 	return nil
@@ -324,22 +333,29 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, curr
 	if err != nil {
 		return fmt.Errorf("revoke other tokens on password change: %w", err)
 	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-
-	// Инвалидируем остальные сессии
-	for _, sid := range revokedIDs {
-		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
-		if s.producer != nil {
+	if s.outboxRepo != nil {
+		for _, sid := range revokedIDs {
 			evMsg := events.NewEvent(events.TypeSessionRevoked, events.SessionRevokedPayload{
 				SessionID: sid,
 				UserID:    user.ID,
 				Reason:    "password_changed",
 			})
-			_ = s.producer.Publish(ctx, events.TopicAuthEvents, user.ID.String(), evMsg)
+			if err = s.outboxRepo.InsertTx(ctx, tx, events.TopicAuthEvents, user.ID.String(), evMsg); err != nil {
+				return fmt.Errorf("enqueue session.revoked on password change: %w", err)
+			}
 		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	// инвалидируем остальные сессии в Redis и будим outbox-воркер
+	for _, sid := range revokedIDs {
+		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
+	}
+	if s.notifyOutbox != nil && len(revokedIDs) > 0 {
+		s.notifyOutbox()
 	}
 
 	return nil
@@ -573,6 +589,14 @@ func (s *authService) DeleteAccount(ctx context.Context, userID uuid.UUID, passw
 	if err != nil {
 		return fmt.Errorf("revoke all tokens on account delete: %w", err)
 	}
+	if s.outboxRepo != nil {
+		evMsg := events.NewEvent(events.TypeAccountDeleted, events.AccountDeletedPayload{
+			UserID: user.ID,
+		})
+		if err = s.outboxRepo.InsertTx(ctx, tx, events.TopicAuthEvents, user.ID.String(), evMsg); err != nil {
+			return fmt.Errorf("enqueue account_deleted event: %w", err)
+		}
+	}
 
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
@@ -582,13 +606,8 @@ func (s *authService) DeleteAccount(ctx context.Context, userID uuid.UUID, passw
 	for _, sid := range revokedIDs {
 		_ = s.rdb.Del(ctx, SessionKeyPrefix+sid.String()).Err()
 	}
-	if s.producer != nil {
-		evMsg := events.NewEvent(events.TypeAccountDeleted, events.AccountDeletedPayload{
-			UserID: user.ID,
-		})
-		if err = s.producer.Publish(ctx, events.TopicAuthEvents, user.ID.String(), evMsg); err != nil {
-			s.log.Error("Failed to publish account_deleted event", zap.String("user_id", user.ID.String()), zap.Error(err))
-		}
+	if s.notifyOutbox != nil {
+		s.notifyOutbox()
 	}
 
 	return nil

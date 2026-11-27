@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/auth-service/config"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/email"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/grpcserver"
+	"github.com/maltira/chavo-project-backend/services/auth-service/internal/outbox"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/repository"
 	"github.com/maltira/chavo-project-backend/services/auth-service/internal/service"
 	"github.com/maltira/chavo-project-backend/services/auth-service/pkg/kafka"
@@ -29,13 +31,14 @@ import (
 )
 
 type App struct {
-	cfg      *config.Config
-	log      *zap.Logger
-	pool     *pgxpool.Pool
-	rdb      *redis.Client
-	producer *kafka.Producer
-	server   *grpc.Server
-	health   *health.Server
+	cfg       *config.Config
+	log       *zap.Logger
+	pool      *pgxpool.Pool
+	rdb       *redis.Client
+	producer  *kafka.Producer
+	publisher *outbox.Publisher
+	server    *grpc.Server
+	health    *health.Server
 }
 
 func New() (*App, error) {
@@ -70,10 +73,12 @@ func New() (*App, error) {
 	resetRepo := repository.NewPasswordResetRepository(pool)
 	tokenRepo := repository.NewTokenRepository(pool)
 	backupRepo := repository.NewBackupCodeRepository(pool)
+	outboxRepo := repository.NewOutboxRepository(pool)
+	publisher := outbox.NewPublisher(pool, outboxRepo, producer, log, outbox.DefaultOptions())
 
 	otpSvc := service.NewOtpService(rdb, userRepo, backupRepo, cfg.TOTPEncryptionKey, mail, log)
-	tokenSvc := service.NewTokenService(tokenRepo, rdb, producer, cfg, log)
-	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, backupRepo, otpSvc, pool, rdb, producer, mail, cfg, log)
+	tokenSvc := service.NewTokenService(tokenRepo, outboxRepo, pool, rdb, publisher.Notify, cfg, log)
+	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, backupRepo, outboxRepo, otpSvc, pool, rdb, publisher.Notify, mail, cfg, log)
 
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
 	authv1.RegisterAuthServiceServer(server, grpcserver.New(authSvc, otpSvc, tokenSvc))
@@ -85,13 +90,14 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg:      cfg,
-		log:      log,
-		pool:     pool,
-		rdb:      rdb,
-		producer: producer,
-		server:   server,
-		health:   healthSrv,
+		cfg:       cfg,
+		log:       log,
+		pool:      pool,
+		rdb:       rdb,
+		producer:  producer,
+		publisher: publisher,
+		server:    server,
+		health:    healthSrv,
 	}, nil
 }
 
@@ -106,7 +112,7 @@ func Run() error {
 	return application.Start()
 }
 
-// Start запускает gRPC-сервер до SIGINT/SIGTERM.
+// Start запускает gRPC-сервер и outbox publisher до SIGINT/SIGTERM.
 func (a *App) Start() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -115,6 +121,13 @@ func (a *App) Start() error {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		a.publisher.Run(ctx)
+	}()
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -125,6 +138,8 @@ func (a *App) Start() error {
 
 	select {
 	case err := <-serverErr:
+		stop()
+		wg.Wait()
 		return fmt.Errorf("grpc server failed: %w", err)
 	case <-ctx.Done():
 		a.log.Info("Shutting down server...")
@@ -141,6 +156,17 @@ func (a *App) Start() error {
 	case <-time.After(10 * time.Second):
 		a.log.Error("Server forced to shutdown")
 		a.server.Stop()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		a.log.Error("Outbox publisher did not stop in time")
 	}
 
 	a.log.Info("Server exited gracefully")

@@ -27,11 +27,15 @@ type closed struct {
 
 type fakeSink struct {
 	sent       []sent
+	watchers   []sent
 	closedSIDs []closed
 	closedUser []closed
 }
 
 func (s *fakeSink) SendToUsers(ids []string, msg []byte) { s.sent = append(s.sent, sent{ids, msg}) }
+func (s *fakeSink) SendToWatchers(userID string, msg []byte) {
+	s.watchers = append(s.watchers, sent{[]string{userID}, msg})
+}
 func (s *fakeSink) CloseSID(sid string, final []byte, code int, _ string) {
 	s.closedSIDs = append(s.closedSIDs, closed{sid, final, code})
 }
@@ -178,6 +182,9 @@ func TestAccountDeleted(t *testing.T) {
 	}
 	if !slices.Equal(profiles.deleted, []string{"u"}) || len(sink.closedUser) != 1 || sink.closedUser[0].key != "u" {
 		t.Fatalf("deleted %v closed %+v", profiles.deleted, sink.closedUser)
+	}
+	if len(sink.watchers) != 1 || !slices.Equal(sink.watchers[0].users, []string{"u"}) {
+		t.Fatalf("watchers must be notified on account deletion: %+v", sink.watchers)
 	}
 }
 

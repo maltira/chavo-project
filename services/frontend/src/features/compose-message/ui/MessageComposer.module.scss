@@ -64,8 +64,50 @@
     min-width: 0;
 }
 
+.sendWrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
 .send {
     flex-shrink: 0;
+}
+
+.silentMenu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+    z-index: 20;
+
+    padding: 6px;
+    border-radius: $radius-lg;
+    background-color: var(--color-bg-tertiary);
+    box-shadow: $drop-shadow;
+    white-space: nowrap;
+}
+
+.silentItem {
+    @include type(tag-regular);
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+
+    border: none;
+    border-radius: $radius-md;
+    background: none;
+    color: var(--color-text);
+    cursor: pointer;
+
+    &:hover {
+        background-color: alpha(var(--color-text), 0.08);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: -2px;
+    }
 }
 
 // кнопка эмодзи и её панель: панель над полем, по правому краю кнопки

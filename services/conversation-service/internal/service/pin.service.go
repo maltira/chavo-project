@@ -200,6 +200,7 @@ func (s *messageService) listPins(ctx context.Context, q repository.DBTX, userID
 		return nil, err
 	}
 	res := make([]models.PinnedMessage, 0, len(recs))
+	ids := make([]uuid.UUID, 0, len(recs))
 	for i := range recs {
 		m, err := s.toModel(&recs[i].Message)
 		if err != nil {
@@ -209,9 +210,19 @@ func (s *messageService) listPins(ctx context.Context, q repository.DBTX, userID
 		if recs[i].OwnerID != nil {
 			scope = models.PinScopeMe
 		}
+		ids = append(ids, m.ID)
 		res = append(res, models.PinnedMessage{
 			Message: *m, Scope: scope, PinnedBy: recs[i].PinnedBy, PinnedAt: recs[i].PinnedAt,
 		})
+	}
+	if len(ids) > 0 {
+		byMsg, err := s.reactions.ListByMessages(ctx, q, ids, userID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range res {
+			res[i].Message.Reactions = byMsg[res[i].Message.ID]
+		}
 	}
 	return res, nil
 }

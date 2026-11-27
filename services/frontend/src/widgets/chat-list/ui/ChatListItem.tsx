@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 
-import { isMuted, SAVED_NAME, SavedAvatar } from '@/entities/conversation'
+import {
+    isMuted,
+    SAVED_NAME,
+    SavedAvatar,
+    TypingIndicator,
+    useTypingUsers,
+} from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import { isSystem, useDraft, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
@@ -43,8 +49,18 @@ export function ChatListItem({ chat, myId, compact }: Props) {
 
     const peer = useUser(isDirect ? chat.peer_id : null)
     const presence = usePresence(isDirect ? chat.peer_id : null)
+    const typingIds = useTypingUsers(chat.id)
+    const firstTyper = useUser(!isDirect && typingIds.length > 0 ? typingIds[0]! : null)
 
     const isDeletedPeer = isDirect && !!peer.data?.is_deleted
+    const showTyping = !saved && !isDeletedPeer && typingIds.length > 0
+    const typingLabel = showTyping
+        ? isDirect
+            ? 'печатает'
+            : typingIds.length === 1
+              ? `${firstTyper.data?.display_name ?? 'Кто-то'} печатает`
+              : `${firstTyper.data?.display_name ?? 'Кто-то'} и ещё ${typingIds.length - 1} печатают`
+        : ''
     const name = saved
         ? SAVED_NAME
         : isDirect
@@ -103,7 +119,9 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                         <span className={cn(styles.texts, unread && styles.unread)}>
                             <span className={styles.name}>{name || ' '}</span>
                             <span className={styles.preview}>
-                                {draftText ? (
+                                {showTyping ? (
+                                    <TypingIndicator label={typingLabel} />
+                                ) : draftText ? (
                                     <>
                                         <span className={styles.draft}>Черновик: </span>
                                         {draftText}

@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react'
 
-import { SAVED_NAME, SavedAvatar } from '@/entities/conversation'
+import {
+    SAVED_NAME,
+    SavedAvatar,
+    TypingIndicator,
+    useTypingUsers,
+} from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { formatLastSeen, plural } from '@/shared/lib'
@@ -29,6 +34,8 @@ export function ChatHeader({ chat, peerId, saved: savedDraft, onOpenInfo, action
 
     const peer = useUser(isDirect ? peerUserId : null)
     const presence = usePresence(isDirect ? peerUserId : null)
+    const typingIds = useTypingUsers(chat?.id)
+    const firstTyper = useUser(!isDirect && typingIds.length > 0 ? typingIds[0]! : null)
 
     const profile = peer.data
     const isDeleted = isDirect && !!profile?.is_deleted
@@ -40,8 +47,20 @@ export function ChatHeader({ chat, peerId, saved: savedDraft, onOpenInfo, action
     const status = isDeleted ? undefined : isDirect ? profile?.status : chat?.status
     const online = !isDeleted && isDirect && (presence?.online ?? profile?.online ?? false)
 
+    const showTyping = !saved && !isDeleted && typingIds.length > 0
+    let typingLabel = ''
     let subtitle = ''
-    if (saved) {
+    if (showTyping) {
+        if (isDirect) {
+            typingLabel = 'печатает'
+        } else {
+            const firstName = firstTyper.data?.display_name ?? 'Кто-то'
+            typingLabel =
+                typingIds.length === 1
+                    ? `${firstName} печатает`
+                    : `${firstName} и ещё ${typingIds.length - 1} печатают`
+        }
+    } else if (saved) {
         subtitle = 'Сообщения для себя'
     } else if (isDeleted) {
         subtitle = 'был(а) давно'
@@ -80,7 +99,9 @@ export function ChatHeader({ chat, peerId, saved: savedDraft, onOpenInfo, action
                 )}
                 <div className={styles.texts}>
                     <h2 className={styles.name}>{saved ? SAVED_NAME : name || ' '}</h2>
-                    <span className={styles.subtitle}>{subtitle || ' '}</span>
+                    <span className={styles.subtitle}>
+                        {showTyping ? <TypingIndicator label={typingLabel} /> : subtitle || ' '}
+                    </span>
                 </div>
             </button>
             {status && (

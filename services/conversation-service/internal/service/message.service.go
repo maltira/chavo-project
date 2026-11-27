@@ -25,11 +25,22 @@ type SendMessageInput struct {
 	ReplyToMessageID *uuid.UUID
 	// Entities - форматирование текста; смещения в единицах UTF-16
 	Entities []models.Entity
+	// IsSilent - отправить без звука (без уведомления и звука у получателей)
+	IsSilent bool
+}
+
+// ListMessagesQuery - параметры постраничного чтения истории; задаётся не более одного курсора
+type ListMessagesQuery struct {
+	Before *uuid.UUID
+	After  *uuid.UUID
+	Around *uuid.UUID
+	Limit  int
 }
 
 type MessageService interface {
 	Send(ctx context.Context, senderID uuid.UUID, in SendMessageInput) (*models.Message, error)
 	List(ctx context.Context, userID, convID uuid.UUID, before *uuid.UUID, limit int) ([]models.Message, error)
+	ListPage(ctx context.Context, userID, convID uuid.UUID, q ListMessagesQuery) (*models.MessagePage, error)
 	// Edit заменяет текст и форматирование целиком
 	Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error)
 	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
@@ -46,17 +57,22 @@ type MessageService interface {
 	UnpinMessage(ctx context.Context, userID, convID, messageID uuid.UUID, scope string) error
 	// ListPins - новые сверху; только сообщения, которые участник видит
 	ListPins(ctx context.Context, userID, convID uuid.UUID) ([]models.PinnedMessage, error)
+
+	// реакции на сообщения: добавить или снять свою реакцию
+	AddReaction(ctx context.Context, userID, messageID uuid.UUID, emoji string) ([]models.ReactionSummary, error)
+	RemoveReaction(ctx context.Context, userID, messageID uuid.UUID, emoji string) ([]models.ReactionSummary, error)
 }
 
 type messageService struct {
-	db     *repository.DB
-	convs  repository.ConversationRepository
-	msgs   repository.MessageRepository
-	pins   repository.PinRepository
-	outbox repository.OutboxRepository
-	users  userclient.Client
-	cipher *crypto.Cipher
-	log    *zap.Logger
+	db        *repository.DB
+	convs     repository.ConversationRepository
+	msgs      repository.MessageRepository
+	pins      repository.PinRepository
+	reactions repository.ReactionRepository
+	outbox    repository.OutboxRepository
+	users     userclient.Client
+	cipher    *crypto.Cipher
+	log       *zap.Logger
 }
 
 func NewMessageService(
@@ -64,12 +80,13 @@ func NewMessageService(
 	convs repository.ConversationRepository,
 	msgs repository.MessageRepository,
 	pins repository.PinRepository,
+	reactions repository.ReactionRepository,
 	outbox repository.OutboxRepository,
 	users userclient.Client,
 	cipher *crypto.Cipher,
 	log *zap.Logger,
 ) MessageService {
-	return &messageService{db: db, convs: convs, msgs: msgs, pins: pins, outbox: outbox, users: users, cipher: cipher, log: log}
+	return &messageService{db: db, convs: convs, msgs: msgs, pins: pins, reactions: reactions, outbox: outbox, users: users, cipher: cipher, log: log}
 }
 
 func validateContent(content string) error {
@@ -113,6 +130,7 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 		IsForwarded:         rec.IsForwarded,
 		ForwardedFromUserID: rec.ForwardedFromUserID,
 		Entities:            rec.Entities,
+		IsSilent:            rec.IsSilent,
 	}
 	if m.Kind == "" {
 		m.Kind = models.MessageUser
@@ -198,6 +216,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			ContentEnc:       enc,
 			ReplyToMessageID: in.ReplyToMessageID,
 			Entities:         entities,
+			IsSilent:         in.IsSilent,
 		}
 		if err = s.msgs.Create(ctx, tx, rec); err != nil {
 			return err
@@ -220,6 +239,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			ContentEnc:       enc,
 			Kind:             models.MessageUser,
 			Entities:         entities,
+			IsSilent:         in.IsSilent,
 		}); err != nil {
 			return err
 		}
@@ -227,7 +247,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		content := in.Content
 		result = &models.Message{
 			ID: rec.ID, ConversationID: convID, SenderID: senderID, Content: &content, Kind: models.MessageUser,
-			ReplyToMessageID: in.ReplyToMessageID, CreatedAt: rec.CreatedAt, Entities: entities,
+			ReplyToMessageID: in.ReplyToMessageID, CreatedAt: rec.CreatedAt, Entities: entities, IsSilent: in.IsSilent,
 		}
 		return nil
 	})
@@ -271,21 +291,114 @@ func (s *messageService) resolveConversation(ctx context.Context, tx repository.
 }
 
 func (s *messageService) List(ctx context.Context, userID, convID uuid.UUID, before *uuid.UUID, limit int) ([]models.Message, error) {
+	page, err := s.ListPage(ctx, userID, convID, ListMessagesQuery{Before: before, Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	return page.Items, nil
+}
+
+func (s *messageService) ListPage(ctx context.Context, userID, convID uuid.UUID, query ListMessagesQuery) (*models.MessagePage, error) {
+	cursors := 0
+	if query.Before != nil {
+		cursors++
+	}
+	if query.After != nil {
+		cursors++
+	}
+	if query.Around != nil {
+		cursors++
+	}
+	if cursors > 1 {
+		return nil, apperror.ErrIncorrectData
+	}
+	limit := query.Limit
+	if limit < 1 {
+		limit = 50
+	}
+
 	q := s.db.Q()
 	if _, err := s.convs.Access(ctx, q, convID, userID); err != nil {
 		return nil, err
 	}
-	if before != nil {
-		cur, err := s.msgs.FindVisible(ctx, q, *before, userID)
+
+	var (
+		recs     []repository.MessageRecord
+		hasOlder bool
+		hasNewer bool
+	)
+
+	switch {
+	case query.Around != nil:
+		cur, err := s.msgs.FindVisible(ctx, q, *query.Around, userID)
+		if err != nil || cur.ConversationID != convID {
+			return nil, apperror.ErrNotFound
+		}
+		newerBudget := (limit - 1) / 2
+		newer, err := s.msgs.ListAfter(ctx, q, convID, userID, *query.Around, newerBudget+1)
+		if err != nil {
+			return nil, err
+		}
+		if len(newer) > newerBudget {
+			hasNewer = true
+			newer = newer[:newerBudget]
+		}
+		// если новее целевого меньше половины окна, отдаём остаток бюджета под более старые сообщения
+		olderBudget := limit - 1 - len(newer)
+		older, err := s.msgs.List(ctx, q, convID, userID, query.Around, olderBudget+1)
+		if err != nil {
+			return nil, err
+		}
+		if len(older) > olderBudget {
+			hasOlder = true
+			older = older[:olderBudget]
+		}
+		recs = make([]repository.MessageRecord, 0, len(newer)+1+len(older))
+		for i := len(newer) - 1; i >= 0; i-- {
+			recs = append(recs, newer[i])
+		}
+		recs = append(recs, *cur)
+		recs = append(recs, older...)
+
+	case query.After != nil:
+		cur, err := s.msgs.FindVisible(ctx, q, *query.After, userID)
 		if err != nil || cur.ConversationID != convID {
 			return nil, apperror.ErrIncorrectData
 		}
+		raw, err := s.msgs.ListAfter(ctx, q, convID, userID, *query.After, limit+1)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) > limit {
+			hasNewer = true
+			raw = raw[:limit]
+		}
+		// приводим к порядку от новых к старым, как в остальных режимах
+		recs = make([]repository.MessageRecord, len(raw))
+		for i := range raw {
+			recs[len(raw)-1-i] = raw[i]
+		}
+		hasOlder = len(recs) > 0
+
+	default:
+		if query.Before != nil {
+			cur, err := s.msgs.FindVisible(ctx, q, *query.Before, userID)
+			if err != nil || cur.ConversationID != convID {
+				return nil, apperror.ErrIncorrectData
+			}
+		}
+		raw, err := s.msgs.List(ctx, q, convID, userID, query.Before, limit+1)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) > limit {
+			hasOlder = true
+			raw = raw[:limit]
+		}
+		recs = raw
+		hasNewer = query.Before != nil && len(recs) > 0
 	}
 
-	recs, err := s.msgs.List(ctx, q, convID, userID, before, limit)
-	if err != nil {
-		return nil, err
-	}
 	items := make([]models.Message, 0, len(recs))
 	for i := range recs {
 		m, err := s.toModel(&recs[i])
@@ -294,7 +407,10 @@ func (s *messageService) List(ctx context.Context, userID, convID uuid.UUID, bef
 		}
 		items = append(items, *m)
 	}
-	return items, nil
+	if err := s.attachReactions(ctx, q, items, userID); err != nil {
+		return nil, err
+	}
+	return &models.MessagePage{Items: items, HasOlder: hasOlder, HasNewer: hasNewer}, nil
 }
 
 func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error) {
@@ -350,10 +466,14 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			return err
 		}
 
+		byMsg, err := s.reactions.ListByMessages(ctx, tx, []uuid.UUID{messageID}, userID)
+		if err != nil {
+			return err
+		}
 		result = &models.Message{
 			ID: rec.ID, ConversationID: rec.ConversationID, SenderID: rec.SenderID, Content: &content,
 			ReplyToMessageID: rec.ReplyToMessageID, IsEdited: true, CreatedAt: rec.CreatedAt, UpdatedAt: updatedAt,
-			Entities: entities,
+			Entities: entities, IsSilent: rec.IsSilent, Reactions: byMsg[messageID],
 		}
 		return nil
 	})
@@ -365,11 +485,23 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 
 // Get отдаёт одно сообщение: видимое участнику или цель reply из видимого ему сообщения.
 func (s *messageService) Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error) {
-	rec, err := s.msgs.FindForViewer(ctx, s.db.Q(), messageID, userID)
+	q := s.db.Q()
+	rec, err := s.msgs.FindForViewer(ctx, q, messageID, userID)
 	if err != nil {
 		return nil, err
 	}
-	return s.toModel(rec)
+	m, err := s.toModel(rec)
+	if err != nil {
+		return nil, err
+	}
+	if !m.IsDeleted {
+		byMsg, err := s.reactions.ListByMessages(ctx, q, []uuid.UUID{m.ID}, userID)
+		if err != nil {
+			return nil, err
+		}
+		m.Reactions = byMsg[m.ID]
+	}
+	return m, nil
 }
 
 func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID) error {
@@ -398,6 +530,9 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 			return err // повторное удаление идемпотентно и не порождает событие
 		}
 		if err = s.outbox.ScrubMessageContent(ctx, tx, messageID); err != nil {
+			return err
+		}
+		if err = s.reactions.DeleteByMessage(ctx, tx, messageID); err != nil {
 			return err
 		}
 		// удалённое сообщение не остаётся закреплённым ни у кого
@@ -472,6 +607,9 @@ func (s *messageService) DeleteBatch(ctx context.Context, userID uuid.UUID, mess
 				continue
 			}
 			if err = s.outbox.ScrubMessageContent(ctx, tx, id); err != nil {
+				return err
+			}
+			if err = s.reactions.DeleteByMessage(ctx, tx, id); err != nil {
 				return err
 			}
 			owners, err := s.pins.DeleteForMessage(ctx, tx, id)

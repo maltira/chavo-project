@@ -41,6 +41,13 @@ export interface Socket {
     close: () => void
 }
 
+// текущее активное соединение вкладки для отправки легковесных клиентских команд (например, typing)
+let activeSocket: Socket | null = null
+
+export function sendSocketMessage(message: object) {
+    activeSocket?.send(message)
+}
+
 function defaultUrl() {
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
     return `${scheme}://${location.host}/ws`
@@ -129,7 +136,7 @@ export function connectSocket({
 
     connect()
 
-    return {
+    const handle: Socket = {
         send(message) {
             if (socket?.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify(message))
@@ -138,7 +145,12 @@ export function connectSocket({
         close() {
             stopped = true
             clearTimeout(timer)
+            if (activeSocket === handle) {
+                activeSocket = null
+            }
             socket?.close()
         },
     }
+    activeSocket = handle
+    return handle
 }

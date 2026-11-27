@@ -1,4 +1,5 @@
 export {
+    clearHistory,
     createGroup,
     deleteConversation,
     getConversation,
@@ -76,3 +77,11 @@ export { isMuted } from './model/types'
 export type { ChatSettings, Conversation, ConversationSummary } from './model/types'
 export { SlugField } from './ui/SlugField'
 export { SAVED_NAME, SavedAvatar } from './ui/SavedAvatar'
+export { TypingIndicator } from './ui/TypingIndicator'
+export {
+    sendTyping,
+    TYPING_SEND_INTERVAL_MS,
+    TYPING_TTL_MS,
+    useTypingStore,
+    useTypingUsers,
+} from './model/typing'

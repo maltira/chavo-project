@@ -101,6 +101,16 @@ func (h *Handler) deleteConversation(c *gin.Context) {
 	httpx.Success(c, http.StatusOK, "Готово")
 }
 
+func (h *Handler) clearHistory(c *gin.Context) {
+	if _, err := h.conversations.ClearHistory(c.Request.Context(), &conversationv1.ClearHistoryRequest{
+		ConversationId: c.Param("id"),
+	}); err != nil {
+		h.fail(c, err)
+		return
+	}
+	httpx.Success(c, http.StatusOK, "История очищена")
+}
+
 func (h *Handler) joinGroup(c *gin.Context) {
 	if _, err := h.conversations.JoinGroup(c.Request.Context(), &conversationv1.JoinGroupRequest{
 		ConversationId: c.Param("id"),

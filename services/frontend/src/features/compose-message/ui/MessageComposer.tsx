@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { sendTyping, TYPING_SEND_INTERVAL_MS } from '@/entities/conversation'
 import { getDraft, MAX_MESSAGE_LENGTH, useDrafts } from '@/entities/message'
 import type { Message } from '@/entities/message'
 import { useFavoriteEmojis } from '@/entities/user'
@@ -32,6 +33,7 @@ interface Props {
 }
 
 const EMPTY: RichValue = { text: '', entities: [] }
+const SEND_LONG_PRESS_MS = 450
 
 // текст и форматирование сообщения, которое правят
 function valueOf(message: Message | null | undefined): RichValue {
@@ -72,6 +74,24 @@ export function MessageComposer({
     useDismiss(emojiOpen, emojiRef, closeEmoji)
     const favorites = useFavoriteEmojis(emojiOpen)
 
+    // меню «Отправить без звука» по правому клику или долгому нажатию на кнопку отправки
+    const [silentMenuOpen, setSilentMenuOpen] = useState(false)
+    const sendWrapRef = useRef<HTMLDivElement>(null)
+    const closeSilentMenu = useCallback(() => setSilentMenuOpen(false), [])
+    useDismiss(silentMenuOpen, sendWrapRef, closeSilentMenu)
+    const sendPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const suppressClickRef = useRef(false)
+    const lastTypingRef = useRef(0)
+
+    function clearSendLongPress() {
+        if (sendPressTimerRef.current !== null) {
+            clearTimeout(sendPressTimerRef.current)
+            sendPressTimerRef.current = null
+        }
+    }
+
+    useEffect(() => clearSendLongPress, [])
+
     // при изменении ответа синхронизируем черновик (после первого рендера, чтобы не писать пустой)
     const replyMountedRef = useRef(false)
     useEffect(() => {
@@ -97,6 +117,13 @@ export function MessageComposer({
                 entities: next.entities,
                 replyTo: replyTo ?? null,
             })
+        }
+        if (!editing && conversationId && next.text.trim().length > 0) {
+            const now = Date.now()
+            if (now - lastTypingRef.current >= TYPING_SEND_INTERVAL_MS) {
+                lastTypingRef.current = now
+                sendTyping(conversationId)
+            }
         }
     }
 
@@ -125,21 +152,24 @@ export function MessageComposer({
     const canSubmit =
         trimmed.text.length > 0 && (!editing || !sameValue(trimmed, trimValue(valueOf(editing))))
 
-    function submit() {
+    function submit(silent = false) {
         if (!canSubmit) {
             return
         }
+        setSilentMenuOpen(false)
         if (editing) {
             edit.mutate({ id: editing.id, content: trimmed.text, entities: trimmed.entities })
             onCancel()
             return
         }
+        lastTypingRef.current = 0
         send.mutate({
             ...(conversationId
                 ? { conversation_id: conversationId }
                 : { recipient_id: recipientId }),
             content: trimmed.text,
             ...(trimmed.entities.length > 0 ? { entities: trimmed.entities } : {}),
+            ...(silent ? { is_silent: true } : {}),
             reply_to_message_id: replyTo?.id ?? null,
         })
         // поле и черновик очищаются, форматирование сбрасывается
@@ -230,13 +260,58 @@ export function MessageComposer({
                         onClick={() => setEmojiOpen((open) => !open)}
                     />
                 </div>
-                <IconButton
-                    icon={editing ? 'check' : 'send'}
-                    aria-label={editing ? 'Сохранить' : 'Отправить'}
-                    className={styles.send}
-                    disabled={!canSubmit}
-                    onClick={submit}
-                />
+                <div ref={sendWrapRef} className={styles.sendWrap}>
+                    {silentMenuOpen && !editing && canSubmit && (
+                        <div
+                            role="menu"
+                            aria-label="Способ отправки"
+                            className={styles.silentMenu}
+                        >
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className={styles.silentItem}
+                                onClick={() => submit(true)}
+                            >
+                                <Icon name="notif-off" size={16} color="currentColor" />
+                                <span>Отправить без звука</span>
+                            </button>
+                        </div>
+                    )}
+                    <IconButton
+                        icon={editing ? 'check' : 'send'}
+                        aria-label={editing ? 'Сохранить' : 'Отправить'}
+                        className={styles.send}
+                        disabled={!canSubmit}
+                        onClick={() => {
+                            if (suppressClickRef.current) {
+                                suppressClickRef.current = false
+                                return
+                            }
+                            submit(false)
+                        }}
+                        onContextMenu={(event) => {
+                            if (editing || !canSubmit) {
+                                return
+                            }
+                            event.preventDefault()
+                            setSilentMenuOpen((open) => !open)
+                        }}
+                        onPointerDown={(event) => {
+                            if (editing || !canSubmit || event.pointerType !== 'touch') {
+                                return
+                            }
+                            clearSendLongPress()
+                            sendPressTimerRef.current = setTimeout(() => {
+                                sendPressTimerRef.current = null
+                                suppressClickRef.current = true
+                                setSilentMenuOpen(true)
+                            }, SEND_LONG_PRESS_MS)
+                        }}
+                        onPointerUp={clearSendLongPress}
+                        onPointerCancel={clearSendLongPress}
+                    />
+                </div>
             </div>
         </div>
     )

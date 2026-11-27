@@ -20,9 +20,14 @@ interface Props {
     hasOlder: boolean
     loadingOlder: boolean
     loadOlder: () => void
+    // двунаправленная пагинация после перехода по цитате/закрепу к старому сообщению (around)
+    hasNewer?: boolean
+    loadingNewer?: boolean
+    loadNewer?: () => void
+    onReturnToLatest?: () => void
     // первое непрочитанное на момент открытия чата: над ним разделитель
     firstUnreadId: string | null
-    // догружает старую историю, пока сообщение не найдено; false - его нет или оно скрыто
+    // загружает окно истории вокруг сообщения (around); false - его нет или оно скрыто
     findMessage: (id: string) => Promise<boolean>
     // самое свежее сообщение, которое пользователь увидел на экране
     onSeen: (id: string) => void
@@ -32,6 +37,8 @@ interface Props {
     pins: PinnedMessage[]
     onPin: (message: Message) => void
     onShowReaders?: (message: Message) => void
+    onToggleReaction?: (message: Message, emoji: string, active: boolean) => void
+    onShowReactions?: (message: Message, initialEmoji?: string) => void
     // переход к сообщению снаружи (плашка закрепов); n отличает повторный переход к тому же сообщению
     jumpRequest: { id: string; n: number } | null
     onForward: (message: Message) => void
@@ -64,6 +71,10 @@ export function MessageList({
     hasOlder,
     loadingOlder,
     loadOlder,
+    hasNewer = false,
+    loadingNewer = false,
+    loadNewer,
+    onReturnToLatest,
     firstUnreadId,
     findMessage,
     onSeen,
@@ -73,12 +84,15 @@ export function MessageList({
     pins,
     onPin,
     onShowReaders,
+    onToggleReaction,
+    onShowReactions,
     jumpRequest,
     onForward,
     selected,
     onToggleSelect,
 }: Props) {
     const sentinelRef = useRef<HTMLDivElement>(null)
+    const newerSentinelRef = useRef<HTMLDivElement>(null)
     const scrollerRef = useRef<HTMLDivElement>(null)
     const dividerRef = useRef<HTMLParagraphElement>(null)
     const scrolledToUnreadRef = useRef(false)
@@ -124,6 +138,30 @@ export function MessageList({
         observer.observe(node)
         return () => observer.disconnect()
     }, [hasOlder, loadingOlder, loadOlder, messages.length])
+
+    // более свежие сообщения подгружаются, когда после прыжка к старому сообщению прокрутили вниз
+    useEffect(() => {
+        const node = newerSentinelRef.current
+        if (
+            !node ||
+            !hasNewer ||
+            loadingNewer ||
+            !loadNewer ||
+            typeof IntersectionObserver === 'undefined'
+        ) {
+            return
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    loadNewer()
+                }
+            },
+            { rootMargin: '200px' },
+        )
+        observer.observe(node)
+        return () => observer.disconnect()
+    }, [hasNewer, loadingNewer, loadNewer, messages.length])
 
     // при открытии чата с непрочитанными история встаёт на разделитель, а не в самый низ;
     // до отрисовки, чтобы наблюдатель ниже не успел «увидеть» нижние сообщения
@@ -186,7 +224,10 @@ export function MessageList({
     }
 
     function scrollToBottom() {
-        scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+        if (hasNewer && onReturnToLatest) {
+            onReturnToLatest()
+        }
+        scrollerRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' })
     }
 
     async function jumpTo(id: string) {
@@ -224,6 +265,9 @@ export function MessageList({
                 aria-live="polite"
                 onScroll={onScroll}
             >
+                {/* в column-reverse первые элементы стоят внизу ленты: догрузка более новых страниц */}
+                {hasNewer && <div ref={newerSentinelRef} className={styles.sentinel} />}
+                {loadingNewer && <p className={styles.day}>Загружаем…</p>}
                 {messages.map((message, index) => {
                     const older = messages[index + 1]
                     const own = message.sender_id === myId
@@ -292,6 +336,8 @@ export function MessageList({
                                         onShowReaders={
                                             isGroup && own && read ? onShowReaders : undefined
                                         }
+                                        onToggleReaction={onToggleReaction}
+                                        onShowReactions={onShowReactions}
                                         selecting={selected !== null}
                                         selected={!!selected?.includes(message.id)}
                                         onToggleSelect={onToggleSelect}
@@ -320,10 +366,10 @@ export function MessageList({
                 {hasOlder && <div ref={sentinelRef} className={styles.sentinel} />}
             </div>
 
-            {awayFromBottom && (
+            {(awayFromBottom || hasNewer) && (
                 <IconButton
                     icon="arrow-right"
-                    aria-label="Вниз"
+                    aria-label={hasNewer ? 'К последним сообщениям' : 'Вниз'}
                     className={styles.down}
                     onClick={scrollToBottom}
                 />

@@ -30,6 +30,8 @@ type PinRepository interface {
 	MakePersonal(ctx context.Context, q DBTX, messageID, owner uuid.UUID) (bool, error)
 	// DeleteForMessage снимает все закрепы сообщения; возвращает их владельцев (nil - общий)
 	DeleteForMessage(ctx context.Context, q DBTX, messageID uuid.UUID) ([]*uuid.UUID, error)
+	// DeleteOwnForConversation удаляет личные закрепы участника в чате (при очистке истории)
+	DeleteOwnForConversation(ctx context.Context, q DBTX, convID, userID uuid.UUID) (int64, error)
 }
 
 type pinRepository struct{}
@@ -131,4 +133,12 @@ func (r *pinRepository) DeleteForMessage(ctx context.Context, q DBTX, messageID 
 		owners = append(owners, owner)
 	}
 	return owners, rows.Err()
+}
+
+func (r *pinRepository) DeleteOwnForConversation(ctx context.Context, q DBTX, convID, userID uuid.UUID) (int64, error) {
+	ct, err := q.Exec(ctx, `DELETE FROM pinned_messages WHERE conversation_id = $1 AND owner_id = $2`, convID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("delete own pins for conversation: %w", err)
+	}
+	return ct.RowsAffected(), nil
 }

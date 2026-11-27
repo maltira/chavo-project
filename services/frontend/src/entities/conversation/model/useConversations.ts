@@ -112,6 +112,18 @@ export function applyConversationEvent(
 
     // событие архивного чата меняет архив, остальные - основной список
     const chatId = (event.data as { conversation_id?: string } | undefined)?.conversation_id
+    if (event.type === 'conversation.history.cleared' && chatId) {
+        queryClient.setQueryData<ConversationSummary>(
+            conversationKey(chatId),
+            (chat) =>
+                chat && {
+                    ...chat,
+                    last_message: null,
+                    last_message_read: false,
+                    unread_count: 0,
+                },
+        )
+    }
     const inArchive = !!archived?.some((c) => c.id === chatId)
     const key = inArchive ? archivedConversationsKey : conversationsKey
     const update = applyToConversations(inArchive ? archived : main, event, myId)

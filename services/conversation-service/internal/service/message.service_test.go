@@ -81,10 +81,11 @@ func setup(t *testing.T) *env {
 		noInvites:       map[uuid.UUID]bool{},
 		hideForward:     map[uuid.UUID]bool{},
 	}
+	pr := repository.NewPinRepository()
 	return &env{
 		pool:   pool,
-		msgs:   service.NewMessageService(db, cr, mr, repository.NewPinRepository(), or, users, cipher, zap.NewNop()),
-		convs:  service.NewConversationService(db, cr, or, cipher),
+		msgs:   service.NewMessageService(db, cr, mr, pr, repository.NewReactionRepository(), or, users, cipher, zap.NewNop()),
+		convs:  service.NewConversationService(db, cr, pr, or, cipher),
 		groups: service.NewGroupService(db, cr, or, users, repository.NewBanRepository(), repository.NewAvatarHistoryRepository(), cipher, mr),
 		joins:  service.NewJoinService(db, cr, repository.NewJoinRequestRepository(), or, repository.NewBanRepository(), cipher, mr),
 		users:  users,

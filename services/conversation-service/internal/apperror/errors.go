@@ -37,6 +37,7 @@ var (
 	ErrSlugTaken             = errors.New("chat link code is taken")
 	ErrPinLimit              = errors.New("too many pinned chats")
 	ErrMessagePinLimit       = errors.New("too many pinned messages")
+	ErrReactionLimit         = errors.New("reaction limit reached")
 )
 
 func HTTPCode(err error) int {
@@ -62,6 +63,7 @@ func HTTPCode(err error) int {
 		errors.Is(err, ErrSlugTaken),
 		errors.Is(err, ErrPinLimit),
 		errors.Is(err, ErrMessagePinLimit),
+		errors.Is(err, ErrReactionLimit),
 		errors.Is(err, ErrMessageDeleted):
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidUUID),
@@ -131,6 +133,8 @@ func Reason(err error) string {
 		return "PIN_LIMIT"
 	case errors.Is(err, ErrMessagePinLimit):
 		return "MESSAGE_PIN_LIMIT"
+	case errors.Is(err, ErrReactionLimit):
+		return "REACTION_LIMIT"
 	case errors.Is(err, mute.ErrUnknownDuration):
 		return "MUTE_DURATION_INVALID"
 	default:
@@ -202,6 +206,8 @@ func UserMessage(err error) string {
 		return "Можно закрепить не больше 5 чатов"
 	case errors.Is(err, ErrMessagePinLimit):
 		return "Можно закрепить не больше 10 сообщений"
+	case errors.Is(err, ErrReactionLimit):
+		return "Достигнут лимит реакций на сообщение"
 	case errors.Is(err, mute.ErrUnknownDuration):
 		return "Неизвестный срок отключения звука"
 	case errors.Is(err, ErrUserServiceError):

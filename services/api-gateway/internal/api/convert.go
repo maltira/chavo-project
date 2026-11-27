@@ -179,6 +179,30 @@ type messageJSON struct {
 	ForwardedFromUserID *string `json:"forwarded_from_user_id"`
 	// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
 	Entities []entityJSON `json:"entities"`
+	// отправлено без звука
+	IsSilent bool `json:"is_silent"`
+	// агрегированные реакции сообщения
+	Reactions []reactionJSON `json:"reactions"`
+}
+
+type reactionJSON struct {
+	Emoji   string   `json:"emoji"`
+	Count   int32    `json:"count"`
+	Me      bool     `json:"me"`
+	UserIDs []string `json:"user_ids"`
+}
+
+func toReactions(in []*conversationv1.MessageReaction) []reactionJSON {
+	out := make([]reactionJSON, len(in))
+	for i, r := range in {
+		out[i] = reactionJSON{
+			Emoji:   r.GetEmoji(),
+			Count:   r.GetCount(),
+			Me:      r.GetMe(),
+			UserIDs: nonNil(r.GetUserIds()),
+		}
+	}
+	return out
 }
 
 type entityJSON struct {
@@ -224,6 +248,8 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		IsForwarded:         m.GetIsForwarded(),
 		ForwardedFromUserID: m.ForwardedFromUserId,
 		Entities:            toEntities(m.GetEntities()),
+		IsSilent:            m.GetIsSilent(),
+		Reactions:           toReactions(m.GetReactions()),
 	}
 }
 

@@ -49,11 +49,12 @@ func start(t *testing.T) clients {
 	users := allowAllUsers{}
 	log := zap.NewNop()
 
+	pr := repository.NewPinRepository()
 	impl := grpcserver.New(
-		service.NewConversationService(db, cr, or, cipher),
+		service.NewConversationService(db, cr, pr, or, cipher),
 		service.NewGroupService(db, cr, or, users, br, repository.NewAvatarHistoryRepository(), cipher, mr),
 		service.NewJoinService(db, cr, jr, or, br, cipher, mr),
-		service.NewMessageService(db, cr, mr, repository.NewPinRepository(), or, users, cipher, log),
+		service.NewMessageService(db, cr, mr, pr, repository.NewReactionRepository(), or, users, cipher, log),
 	)
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))

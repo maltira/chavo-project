@@ -9,9 +9,17 @@ import {
     isMuted,
     moveReadCursor,
     useGroupCard,
+    useTypingStore,
 } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
-import { applyMessageEvent, applyPinsEvent, messagesKey, useDrafts } from '@/entities/message'
+import {
+    applyMessageEvent,
+    applyPinsEvent,
+    clearMessagesCache,
+    messagesKey,
+    pinsKey,
+    useDrafts,
+} from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
@@ -121,8 +129,28 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             )
             break
         }
+        case 'conversation.typing': {
+            const typing = (event.data ?? {}) as { conversation_id?: string; user_id?: string }
+            const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
+            if (typing.conversation_id && typing.user_id && typing.user_id !== myId) {
+                useTypingStore.getState().markTyping(typing.conversation_id, typing.user_id)
+            }
+            break
+        }
         default: {
             const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
+            // при получении сообщения сразу снимаем индикатор набора у его автора
+            if (event.type === 'message.created') {
+                const created = (event.data ?? {}) as {
+                    conversation_id?: string
+                    sender_id?: string
+                }
+                if (created.conversation_id && created.sender_id) {
+                    useTypingStore
+                        .getState()
+                        .clearTyping(created.conversation_id, created.sender_id)
+                }
+            }
             // удалённый чат (группа или личный, в том числе «только у меня» с другого устройства):
             // его история в кеше больше не нужна и не должна снова показаться
             const deletedId =
@@ -131,7 +159,15 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             if (deletedId) {
                 queryClient.removeQueries({ queryKey: messagesKey(deletedId) })
             }
-            applyMessageEvent(queryClient, event)
+            // очистка истории чата (с этой или другой вкладки): сам чат остаётся, история и закрепы чистятся
+            const clearedId =
+                event.type === 'conversation.history.cleared' &&
+                (event.data as { conversation_id?: string } | undefined)?.conversation_id
+            if (clearedId) {
+                clearMessagesCache(queryClient, clearedId)
+                void queryClient.invalidateQueries({ queryKey: pinsKey(clearedId) })
+            }
+            applyMessageEvent(queryClient, event, myId)
             applyPinsEvent(queryClient, event)
             applyConversationEvent(queryClient, event, myId)
             applyGroupEvent(event, queryClient, myId)
@@ -248,6 +284,7 @@ export function RealtimeBridge() {
             if (reason === 'account_deleted') {
                 useDrafts.getState().clearAll()
             }
+            useTypingStore.getState().clearAll()
             const notice = sessionEndedNotice(reason)
             if (notice) {
                 notify(notice)

@@ -152,7 +152,22 @@ func toMessage(m *models.Message) *conversationv1.Message {
 		IsForwarded:         m.IsForwarded,
 		ForwardedFromUserId: optStr(m.ForwardedFromUserID),
 		Entities:            toEntities(m.Entities),
+		IsSilent:            m.IsSilent,
+		Reactions:           toReactions(m.Reactions),
 	}
+}
+
+func toReactions(in []models.ReactionSummary) []*conversationv1.MessageReaction {
+	out := make([]*conversationv1.MessageReaction, len(in))
+	for i, r := range in {
+		out[i] = &conversationv1.MessageReaction{
+			Emoji:   r.Emoji,
+			Count:   int32(r.Count),
+			Me:      r.Me,
+			UserIds: strs(r.UserIDs),
+		}
+	}
+	return out
 }
 
 func toEntities(in []models.Entity) []*conversationv1.MessageEntity {

@@ -1,7 +1,13 @@
 import { QueryClient } from '@tanstack/react-query'
 import type { InfiniteData } from '@tanstack/react-query'
 
-import { addMessage, applyMessageEvent, messagesKey, replaceMessage } from './cache'
+import {
+    addMessage,
+    applyMessageEvent,
+    clearMessagesCache,
+    messagesKey,
+    replaceMessage,
+} from './cache'
 import type { Message, MessagesPage } from './types'
 
 const msg = (id: string, extra: Partial<Message> = {}): Message => ({
@@ -133,5 +139,74 @@ describe('message cache', () => {
             data: { conversation_id: 'c1', message_id: 'm2', content: 'просто' },
         })
         expect(first().entities).toEqual([])
+    })
+
+    it('clears cached history on clearMessagesCache', () => {
+        const { client, ids } = setup([msg('m2'), msg('m1')])
+        clearMessagesCache(client, 'c1')
+        expect(ids()).toEqual([])
+    })
+
+    it('does not prepend live messages into a detached around window', () => {
+        const client = new QueryClient()
+        client.setQueryData<InfiniteData<MessagesPage>>(messagesKey('c1'), {
+            pages: [{ items: [msg('old')], limit: 50, next_before: null, has_newer: true }],
+            pageParams: [{ kind: 'around', id: 'old' }],
+        })
+        addMessage(client, msg('live'))
+        const items = client.getQueryData<InfiniteData<MessagesPage>>(messagesKey('c1'))!.pages[0]!
+            .items
+        expect(items.map((m) => m.id)).toEqual(['old'])
+    })
+
+    it('updates message reactions from message.reaction.updated preserving viewer state', () => {
+        const { client } = setup([
+            msg('m1', {
+                reactions: [{ emoji: '🔥', count: 1, me: true, user_ids: ['me'] }],
+            }),
+        ])
+        // другой участник добавляет 👍 - моё состояние по 🔥 сохраняется
+        applyMessageEvent(
+            client,
+            {
+                type: 'message.reaction.updated',
+                data: {
+                    conversation_id: 'c1',
+                    message_id: 'm1',
+                    user_id: 'peer',
+                    emoji: '👍',
+                    added: true,
+                    reactions: [
+                        { emoji: '🔥', count: 1, user_ids: ['me'] },
+                        { emoji: '👍', count: 1, user_ids: ['peer'] },
+                    ],
+                },
+            },
+            'me',
+        )
+        const first = () =>
+            client.getQueryData<InfiniteData<MessagesPage>>(messagesKey('c1'))!.pages[0]!.items[0]!
+        expect(first().reactions).toEqual([
+            { emoji: '🔥', count: 1, me: true, user_ids: ['me'] },
+            { emoji: '👍', count: 1, me: false, user_ids: ['peer'] },
+        ])
+
+        // сам пользователь снял 🔥 с другой вкладки
+        applyMessageEvent(
+            client,
+            {
+                type: 'message.reaction.updated',
+                data: {
+                    conversation_id: 'c1',
+                    message_id: 'm1',
+                    user_id: 'me',
+                    emoji: '🔥',
+                    added: false,
+                    reactions: [{ emoji: '👍', count: 1, user_ids: ['peer'] }],
+                },
+            },
+            'me',
+        )
+        expect(first().reactions).toEqual([{ emoji: '👍', count: 1, me: false, user_ids: ['peer'] }])
     })
 })

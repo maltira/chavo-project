@@ -110,6 +110,11 @@ export function deleteConversation(id: string, forEveryone = false): Promise<voi
     )
 }
 
+// очистка истории чата только для себя: сам чат и его настройки остаются в списке
+export function clearHistory(id: string): Promise<void> {
+    return request<void>(`/conversations/${encodeURIComponent(id)}/clear`, { method: 'POST' })
+}
+
 export interface CreateGroupInput {
     name: string
     description?: string

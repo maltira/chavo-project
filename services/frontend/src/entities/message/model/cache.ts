@@ -3,11 +3,14 @@ import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 import type { ServerEvent } from '@/shared/api'
 import type { MessageEntity } from '@/shared/lib'
 
-import type { Message, MessagesPage } from './types'
+import { MESSAGES_PAGE } from '../api/messages'
+import type { MessagesCursor } from '../api/messages'
+import type { Message, MessageReaction, MessagesPage } from './types'
 
 export const messagesKey = (conversationId: string) => ['messages', conversationId] as const
 
-type Pages = InfiniteData<MessagesPage, string | undefined>
+export type MessagesPageParam = string | MessagesCursor | undefined
+type Pages = InfiniteData<MessagesPage, MessagesPageParam>
 
 // правка загруженной истории; если история чата ещё не открывалась, кеша нет и менять нечего
 function updatePages(
@@ -23,7 +26,36 @@ function updatePages(
 const mapMessages = (pages: MessagesPage[], fn: (m: Message) => Message) =>
     pages.map((page) => ({ ...page, items: page.items.map(fn) }))
 
-// новое сообщение - в начало первой страницы (свежие сверху); повтор по id не добавляется
+// очистка кеша истории после ClearHistory (без удаления чата)
+export function clearMessagesCache(queryClient: QueryClient, conversationId: string) {
+    queryClient.setQueryData<Pages>(messagesKey(conversationId), (data) =>
+        data
+            ? {
+                  pages: [
+                      {
+                          items: [],
+                          limit: MESSAGES_PAGE,
+                          next_before: null,
+                          next_after: null,
+                          has_older: false,
+                          has_newer: false,
+                      },
+                  ],
+                  pageParams: [undefined],
+              }
+            : data,
+    )
+}
+
+// проверка, открыт ли чат в старом окне истории (не у нижнего края)
+export function hasUnloadedNewerMessages(queryClient: QueryClient, conversationId: string): boolean {
+    const data = queryClient.getQueryData<Pages>(messagesKey(conversationId))
+    return !!data?.pages[0]?.has_newer
+}
+
+// новое сообщение - в начало первой страницы (свежие сверху); повтор по id не добавляется.
+// если открыт фрагмент старой истории (has_newer), живые сообщения не смешиваем с ним - пользователь
+// увидит их при возврате к последним сообщениям
 export function addMessage(queryClient: QueryClient, message: Message) {
     updatePages(queryClient, message.conversation_id, (pages) => {
         // уже есть (своё сообщение после ответа сервера): данные обновляются, ключ строки остаётся прежним
@@ -33,7 +65,10 @@ export function addMessage(queryClient: QueryClient, message: Message) {
             )
         }
         const [first, ...rest] = pages
-        return first ? [{ ...first, items: [message, ...first.items] }, ...rest] : pages
+        if (!first || first.has_newer) {
+            return pages
+        }
+        return [{ ...first, items: [message, ...first.items] }, ...rest]
     })
 }
 
@@ -71,10 +106,17 @@ export function patchMessage(
     )
 }
 
+interface ReactionEventSummary {
+    emoji: string
+    count: number
+    user_ids: string[]
+}
+
 interface MessageEventData {
     conversation_id?: string
     message_id?: string
     sender_id?: string
+    user_id?: string
     reply_to_message_id?: string | null
     content?: string | null
     created_at?: string
@@ -85,10 +127,18 @@ interface MessageEventData {
     is_forwarded?: boolean
     forwarded_from_user_id?: string | null
     entities?: MessageEntity[]
+    is_silent?: boolean
+    emoji?: string
+    added?: boolean
+    reactions?: ReactionEventSummary[]
 }
 
 // события сообщений дописывают историю открытых чатов
-export function applyMessageEvent(queryClient: QueryClient, event: ServerEvent) {
+export function applyMessageEvent(
+    queryClient: QueryClient,
+    event: ServerEvent,
+    myId?: string,
+) {
     const data = (event.data ?? {}) as MessageEventData
     const conversationId = data.conversation_id
     const id = data.message_id
@@ -115,6 +165,8 @@ export function applyMessageEvent(queryClient: QueryClient, event: ServerEvent) 
                     is_forwarded: data.is_forwarded ?? false,
                     forwarded_from_user_id: data.forwarded_from_user_id ?? null,
                     entities: data.entities ?? [],
+                    is_silent: data.is_silent ?? false,
+                    reactions: [],
                 })
             }
             break
@@ -128,7 +180,38 @@ export function applyMessageEvent(queryClient: QueryClient, event: ServerEvent) 
             })
             break
         case 'message.deleted':
-            patchMessage(queryClient, conversationId, id, { content: null, is_deleted: true })
+            patchMessage(queryClient, conversationId, id, {
+                content: null,
+                is_deleted: true,
+                reactions: [],
+            })
+            break
+        case 'message.reaction.updated':
+            updatePages(queryClient, conversationId, (pages) =>
+                mapMessages(pages, (m) => {
+                    if (m.id !== id) {
+                        return m
+                    }
+                    const prevByEmoji = new Map((m.reactions ?? []).map((r) => [r.emoji, r]))
+                    const nextReactions: MessageReaction[] = (data.reactions ?? []).map((r) => {
+                        let me: boolean
+                        if (myId && data.user_id === myId && r.emoji === data.emoji) {
+                            me = !!data.added
+                        } else if (prevByEmoji.has(r.emoji)) {
+                            me = prevByEmoji.get(r.emoji)!.me
+                        } else {
+                            me = !!myId && r.user_ids.includes(myId)
+                        }
+                        return {
+                            emoji: r.emoji,
+                            count: r.count,
+                            me,
+                            user_ids: r.user_ids,
+                        }
+                    })
+                    return { ...m, reactions: nextReactions }
+                }),
+            )
             break
     }
 }

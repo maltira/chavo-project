@@ -37,6 +37,8 @@ type MessageCreatedPayload struct {
 	ForwardedFromUserID *uuid.UUID `json:"forwarded_from_user_id,omitempty"`
 	// форматирование текста
 	Entities []models.Entity `json:"entities,omitempty"`
+	// отправлено без звука
+	IsSilent bool `json:"is_silent,omitempty"`
 }
 
 type MessageUpdatedPayload struct {
@@ -132,6 +134,32 @@ type ChatSettingsUpdatedPayload struct {
 type PinsChangedPayload struct {
 	ConversationID uuid.UUID   `json:"conversation_id"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
+}
+
+// HistoryClearedPayload - очистка истории чата у одного участника; MemberIDs - только он сам
+type HistoryClearedPayload struct {
+	ConversationID uuid.UUID   `json:"conversation_id"`
+	UserID         uuid.UUID   `json:"user_id"`
+	ClearedAt      time.Time   `json:"cleared_at"`
+	MemberIDs      []uuid.UUID `json:"member_ids"`
+}
+
+// ReactionEventSummary - общая сводка по одной реакции без привязки к зрителю
+type ReactionEventSummary struct {
+	Emoji   string      `json:"emoji"`
+	Count   int         `json:"count"`
+	UserIDs []uuid.UUID `json:"user_ids"`
+}
+
+// MessageReactionUpdatedPayload - изменение реакций на сообщении
+type MessageReactionUpdatedPayload struct {
+	ConversationID uuid.UUID              `json:"conversation_id"`
+	MessageID      uuid.UUID              `json:"message_id"`
+	UserID         uuid.UUID              `json:"user_id"`
+	Emoji          string                 `json:"emoji"`
+	Added          bool                   `json:"added"`
+	Reactions      []ReactionEventSummary `json:"reactions"`
+	MemberIDs      []uuid.UUID            `json:"member_ids"`
 }
 
 // AccountDeletedPayload - удаление аккаунта в auth-service

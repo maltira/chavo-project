@@ -562,8 +562,53 @@ func (f *fakeConversations) SendMessage(_ context.Context, req *conversationv1.S
 	}
 	return &conversationv1.SendMessageResponse{Message: &conversationv1.Message{
 		Id: uuid.NewString(), ConversationId: req.GetConversationId(), Content: &req.Content, CreatedAt: timestamppb.Now(),
-		Entities: req.GetEntities(),
+		Entities: req.GetEntities(), IsSilent: req.GetIsSilent(),
 	}}, nil
+}
+
+func (f *fakeConversations) ClearHistory(_ context.Context, req *conversationv1.ClearHistoryRequest) (*conversationv1.ClearHistoryResponse, error) {
+	if req.GetConversationId() == "" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.ClearHistoryResponse{}, nil
+}
+
+func (f *fakeConversations) ListMessages(_ context.Context, req *conversationv1.ListMessagesRequest) (*conversationv1.ListMessagesResponse, error) {
+	id := uuid.NewString()
+	content := "msg"
+	hasOlder := req.Before != nil || req.Around != nil
+	hasNewer := req.After != nil || req.Around != nil
+	var nextBefore, nextAfter *string
+	if hasOlder {
+		nextBefore = &id
+	}
+	if hasNewer {
+		nextAfter = &id
+	}
+	return &conversationv1.ListMessagesResponse{
+		Items:      []*conversationv1.Message{{Id: id, ConversationId: req.GetConversationId(), Content: &content, CreatedAt: timestamppb.Now()}},
+		Limit:      50,
+		NextBefore: nextBefore,
+		NextAfter:  nextAfter,
+		HasOlder:   hasOlder,
+		HasNewer:   hasNewer,
+	}, nil
+}
+
+func (f *fakeConversations) AddReaction(_ context.Context, req *conversationv1.AddReactionRequest) (*conversationv1.AddReactionResponse, error) {
+	if req.GetEmoji() == "" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.AddReactionResponse{Reactions: []*conversationv1.MessageReaction{
+		{Emoji: req.GetEmoji(), Count: 1, Me: true, UserIds: []string{"me"}},
+	}}, nil
+}
+
+func (f *fakeConversations) RemoveReaction(_ context.Context, req *conversationv1.RemoveReactionRequest) (*conversationv1.RemoveReactionResponse, error) {
+	if req.GetEmoji() == "" {
+		return nil, grpcx.Error(codes.InvalidArgument, "", "Некорректные входные данные")
+	}
+	return &conversationv1.RemoveReactionResponse{Reactions: []*conversationv1.MessageReaction{}}, nil
 }
 
 // EditMessage отвечает присланной разметкой, как будто сервис её принял
@@ -1335,5 +1380,51 @@ func TestMessageEntitiesPassThrough(t *testing.T) {
 	w = e.do(http.MethodPatch, "/api/messages/"+uuid.NewString(), tok, `{"content":"новый","entities":[{"type":"italic","offset":0,"length":5}]}`)
 	if list, _ := decode(t, w)["entities"].([]any); w.Code != http.StatusOK || len(list) != 1 {
 		t.Fatalf("edit: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestStage2Endpoints(t *testing.T) {
+	e := newEnv(t)
+	_, tok := e.login(t, true)
+	convID := uuid.NewString()
+	msgID := uuid.NewString()
+
+	// around + has_older/has_newer
+	w := e.do(http.MethodGet, "/api/messages?conversation_id="+convID+"&around="+msgID, tok, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("list around: %d %s", w.Code, w.Body.String())
+	}
+	body := decode(t, w)
+	if body["has_older"] != true || body["has_newer"] != true || body["next_before"] == nil || body["next_after"] == nil {
+		t.Fatalf("around payload: %v", body)
+	}
+
+	// тихая отправка
+	w = e.do(http.MethodPost, "/api/messages", tok, `{"conversation_id":"`+convID+`","content":"тихо","is_silent":true}`)
+	if w.Code != http.StatusCreated || decode(t, w)["is_silent"] != true {
+		t.Fatalf("silent send: %d %s", w.Code, w.Body.String())
+	}
+
+	// очистка истории
+	w = e.do(http.MethodPost, "/api/conversations/"+convID+"/clear", tok, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("clear history: %d %s", w.Code, w.Body.String())
+	}
+
+	// реакции: добавить и снять (query и JSON body)
+	w = e.do(http.MethodPost, "/api/messages/"+msgID+"/reactions", tok, `{"emoji":"🔥"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("add reaction: %d %s", w.Code, w.Body.String())
+	}
+	if list, _ := decode(t, w)["reactions"].([]any); len(list) != 1 || list[0].(map[string]any)["emoji"] != "🔥" {
+		t.Fatalf("reactions: %s", w.Body.String())
+	}
+	w = e.do(http.MethodDelete, "/api/messages/"+msgID+"/reactions?emoji=%F0%9F%94%A5", tok, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("remove reaction query: %d %s", w.Code, w.Body.String())
+	}
+	w = e.do(http.MethodDelete, "/api/messages/"+msgID+"/reactions", tok, `{"emoji":"🔥"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("remove reaction body: %d %s", w.Code, w.Body.String())
 	}
 }

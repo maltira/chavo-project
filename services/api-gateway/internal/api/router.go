@@ -16,6 +16,7 @@ import (
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/linkpreview"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/media"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/middleware"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
@@ -45,6 +46,8 @@ type Deps struct {
 	Limits  Limits
 	// Media - хранилище загруженных файлов (nil - без загрузки аватарок и без /media)
 	Media media.Store
+	// Previews - загрузчик OpenGraph-превью ссылок (nil - превью отключены)
+	Previews *linkpreview.Fetcher
 	// TrustedProxies — IP или CIDR; пусто = не доверять никому.
 	TrustedProxies []string
 	Log            *zap.Logger
@@ -65,6 +68,7 @@ type Handler struct {
 	health        []HealthCheck
 	proxies       proxies
 	media         media.Store
+	previews      *linkpreview.Fetcher
 	log           *zap.Logger
 }
 
@@ -96,7 +100,7 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	}
 	h := &Handler{
 		auth: d.Auth, users: d.Users, conversations: d.Conversations,
-		profiles: d.Profiles, health: d.Health, proxies: px, media: d.Media, log: d.Log,
+		profiles: d.Profiles, health: d.Health, proxies: px, media: d.Media, previews: d.Previews, log: d.Log,
 	}
 
 	r := gin.New()
@@ -225,11 +229,13 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/bans/:user_id", h.unban)
 	conv.POST("/:id/read", h.markRead)
 	conv.GET("/:id/messages/:message_id/readers", h.listReaders)
+	conv.GET("/:id/mentions/unread", h.listUnreadMentions)
 	conv.GET("/:id/pins", h.listPins)
 	conv.POST("/:id/pins", h.pinMessage)
 	conv.DELETE("/:id/pins/:message_id", h.unpinMessage)
 
 	p.GET("/invites/:token", h.inviteInfo)
+	p.GET("/link-preview", h.getLinkPreview)
 
 	msg := p.Group("/messages")
 	msg.GET("", h.listMessages)

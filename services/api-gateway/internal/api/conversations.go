@@ -310,6 +310,18 @@ func (h *Handler) listReaders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user_ids": ids})
 }
 
+func (h *Handler) listUnreadMentions(c *gin.Context) {
+	resp, err := h.conversations.ListUnreadMentions(c.Request.Context(), &conversationv1.ListUnreadMentionsRequest{
+		ConversationId: c.Param("id"),
+		Limit:          queryInt(c, "limit"),
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message_ids": nonNil(resp.GetMessageIds())})
+}
+
 // muteChat: тело {duration} - срок из каталога (GET /api/customization)
 func (h *Handler) muteChat(c *gin.Context) {
 	var body struct {

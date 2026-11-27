@@ -24,6 +24,7 @@ import (
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/auth"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/events"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/hub"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/linkpreview"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/media"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/presence"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/profile"
@@ -185,6 +186,7 @@ func New() (*App, error) {
 		Limits:         limits,
 		WS:             wsHandler.Handle,
 		Media:          store,
+		Previews:       linkpreview.NewFetcher(linkpreview.NewRedisCache(rdb), log),
 		TrustedProxies: cfg.TrustedProxies,
 		Log:            log,
 	})

@@ -39,6 +39,8 @@ type MessageCreatedPayload struct {
 	Entities []models.Entity `json:"entities,omitempty"`
 	// отправлено без звука
 	IsSilent bool `json:"is_silent,omitempty"`
+	// превью ссылки (OpenGraph), если есть
+	LinkPreview *models.LinkPreview `json:"link_preview,omitempty"`
 }
 
 type MessageUpdatedPayload struct {
@@ -51,6 +53,8 @@ type MessageUpdatedPayload struct {
 	Content        *string     `json:"content,omitempty"`
 	// новое форматирование целиком; пусто - без форматирования
 	Entities []models.Entity `json:"entities"`
+	// новое превью целиком; null - превью убрано
+	LinkPreview *models.LinkPreview `json:"link_preview"`
 }
 
 type MessageDeletedPayload struct {

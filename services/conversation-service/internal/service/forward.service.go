@@ -170,13 +170,18 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		}
 		rec := &repository.MessageRecord{
 			ConversationID: convID, SenderID: userID, ContentEnc: enc,
-			IsForwarded: !hideAuthor, Entities: src.rec.Entities,
+			IsForwarded: !hideAuthor, Entities: src.rec.Entities, LinkPreview: src.rec.LinkPreview,
 		}
 		if !hideAuthor {
 			rec.ForwardedFromUserID = src.origin
 		}
 		if err = s.msgs.Create(ctx, tx, rec); err != nil {
 			return nil, err
+		}
+		if mentioned := extractMentionUserIDs(rec.Entities); len(mentioned) > 0 {
+			if err = s.msgs.ReplaceMentions(ctx, tx, rec.ID, convID, rec.CreatedAt, mentioned); err != nil {
+				return nil, err
+			}
 		}
 		if err = s.convs.TouchLastMessage(ctx, tx, convID, rec.CreatedAt); err != nil {
 			return nil, err
@@ -192,6 +197,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 			IsForwarded:         rec.IsForwarded,
 			ForwardedFromUserID: rec.ForwardedFromUserID,
 			Entities:            rec.Entities,
+			LinkPreview:         rec.LinkPreview,
 		}); err != nil {
 			return nil, err
 		}
@@ -199,7 +205,7 @@ func (s *messageService) forwardInto(ctx context.Context, tx repository.DBTX, us
 		res.Messages = append(res.Messages, models.Message{
 			ID: rec.ID, ConversationID: convID, SenderID: userID, Content: &content, Kind: models.MessageUser,
 			CreatedAt: rec.CreatedAt, IsForwarded: rec.IsForwarded, ForwardedFromUserID: rec.ForwardedFromUserID,
-			Entities: rec.Entities,
+			Entities: rec.Entities, LinkPreview: rec.LinkPreview,
 		})
 	}
 	return res, nil

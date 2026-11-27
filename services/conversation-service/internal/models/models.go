@@ -98,6 +98,17 @@ type Message struct {
 	IsSilent bool `json:"is_silent"`
 	// Reactions - агрегированные реакции на сообщение
 	Reactions []ReactionSummary `json:"reactions"`
+	// LinkPreview - превью ссылки (OpenGraph), если есть
+	LinkPreview *LinkPreview `json:"link_preview,omitempty"`
+}
+
+// LinkPreview - карточка OpenGraph-превью ссылки, привязанная к сообщению
+type LinkPreview struct {
+	URL         string  `json:"url"`
+	Title       *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
+	ImageURL    *string `json:"image_url,omitempty"`
+	SiteName    *string `json:"site_name,omitempty"`
 }
 
 // ReactionSummary - агрегированная реакция на сообщение для конкретного зрителя
@@ -117,16 +128,27 @@ type MessagePage struct {
 
 // виды форматирования текста
 const (
-	EntityBold      = "bold"
-	EntityItalic    = "italic"
-	EntityUnderline = "underline"
+	EntityBold          = "bold"
+	EntityItalic        = "italic"
+	EntityUnderline     = "underline"
+	EntityStrikethrough = "strikethrough"
+	EntityCode          = "code"
+	EntityPre           = "pre"
+	EntitySpoiler       = "spoiler"
+	EntityBlockquote    = "blockquote"
+	EntityTextLink      = "text_link"
+	EntityURL           = "url"
+	EntityMention       = "mention"
 )
 
 // Entity - форматированный фрагмент текста; Offset и Length в единицах UTF-16 (как индексы строки JS)
 type Entity struct {
-	Type   string `json:"type"`
-	Offset int    `json:"offset"`
-	Length int    `json:"length"`
+	Type     string  `json:"type"`
+	Offset   int     `json:"offset"`
+	Length   int     `json:"length"`
+	URL      *string `json:"url,omitempty"`
+	UserID   *string `json:"user_id,omitempty"`
+	Language *string `json:"language,omitempty"`
 }
 
 // Закреп сообщения: для всех участников или только для себя (личный чат)
@@ -156,8 +178,9 @@ type ConversationSummary struct {
 	Conversation
 	MyRole      string     `json:"my_role"`
 	PeerID      *uuid.UUID `json:"peer_id"`
-	LastMessage *Message   `json:"last_message"`
-	UnreadCount int        `json:"unread_count"`
+	LastMessage         *Message `json:"last_message"`
+	UnreadCount         int      `json:"unread_count"`
+	UnreadMentionsCount int      `json:"unread_mentions_count"`
 	// LastMessageRead - последнее сообщение прочитал кто-то кроме его автора
 	LastMessageRead bool `json:"last_message_read"`
 	MembersCount    int  `json:"members_count"`

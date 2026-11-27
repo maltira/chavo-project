@@ -1,13 +1,71 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/linkpreview"
 )
+
+const inlinePreviewTimeout = 1500 * time.Millisecond
+
+func (h *Handler) resolveLinkPreview(ctx context.Context, content string, entities []entityJSON, disabled bool) *conversationv1.LinkPreview {
+	if disabled || h.previews == nil {
+		return nil
+	}
+	var textLinks []string
+	for _, e := range entities {
+		if e.Type == "text_link" && e.URL != nil && *e.URL != "" {
+			textLinks = append(textLinks, *e.URL)
+		}
+	}
+	target := linkpreview.ExtractFirstURL(content, textLinks)
+	if target == "" {
+		return nil
+	}
+	pCtx, cancel := context.WithTimeout(ctx, inlinePreviewTimeout)
+	defer cancel()
+	p, err := h.previews.Get(pCtx, target)
+	if err != nil || p == nil {
+		return nil
+	}
+	return &conversationv1.LinkPreview{
+		Url:         p.URL,
+		Title:       p.Title,
+		Description: p.Description,
+		ImageUrl:    p.ImageURL,
+		SiteName:    p.SiteName,
+	}
+}
+
+func (h *Handler) getLinkPreview(c *gin.Context) {
+	rawURL := c.Query("url")
+	if rawURL == "" {
+		httpx.Abort(c, http.StatusBadRequest, "Укажите URL", "")
+		return
+	}
+	if h.previews == nil {
+		c.JSON(http.StatusOK, gin.H{"preview": nil})
+		return
+	}
+	p, err := h.previews.Get(c.Request.Context(), rawURL)
+	if err != nil {
+		if errors.Is(err, linkpreview.ErrInvalidURL) {
+			httpx.Abort(c, http.StatusBadRequest, "Некорректная ссылка", "")
+			return
+		}
+		// недоступный или заблокированный хост - просто без превью
+		c.JSON(http.StatusOK, gin.H{"preview": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"preview": p})
+}
 
 func (h *Handler) listMessages(c *gin.Context) {
 	resp, err := h.conversations.ListMessages(c.Request.Context(), &conversationv1.ListMessagesRequest{
@@ -37,21 +95,22 @@ func (h *Handler) listMessages(c *gin.Context) {
 
 func (h *Handler) sendMessage(c *gin.Context) {
 	var body struct {
-		ConversationID   *string `json:"conversation_id"`
-		RecipientID      *string `json:"recipient_id"`
-		Content          string  `json:"content"`
-		ReplyToMessageID *string `json:"reply_to_message_id"`
-		// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
-		Entities []entityJSON `json:"entities"`
-		IsSilent bool         `json:"is_silent"`
+		ConversationID     *string      `json:"conversation_id"`
+		RecipientID        *string      `json:"recipient_id"`
+		Content            string       `json:"content"`
+		ReplyToMessageID   *string      `json:"reply_to_message_id"`
+		Entities           []entityJSON `json:"entities"`
+		IsSilent           bool         `json:"is_silent"`
+		DisableLinkPreview bool         `json:"disable_link_preview"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
+	preview := h.resolveLinkPreview(c.Request.Context(), body.Content, body.Entities, body.DisableLinkPreview)
 	resp, err := h.conversations.SendMessage(c.Request.Context(), &conversationv1.SendMessageRequest{
 		ConversationId: body.ConversationID, RecipientId: body.RecipientID,
 		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID,
-		Entities: fromEntities(body.Entities), IsSilent: body.IsSilent,
+		Entities: fromEntities(body.Entities), IsSilent: body.IsSilent, LinkPreview: preview,
 	})
 	if err != nil {
 		h.fail(c, err)
@@ -104,13 +163,15 @@ func (h *Handler) editMessage(c *gin.Context) {
 	var body struct {
 		Content string `json:"content"`
 		// новое форматирование целиком; нет - без форматирования
-		Entities []entityJSON `json:"entities"`
+		Entities           []entityJSON `json:"entities"`
+		DisableLinkPreview bool         `json:"disable_link_preview"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
+	preview := h.resolveLinkPreview(c.Request.Context(), body.Content, body.Entities, body.DisableLinkPreview)
 	resp, err := h.conversations.EditMessage(c.Request.Context(), &conversationv1.EditMessageRequest{
-		MessageId: c.Param("message_id"), Content: body.Content, Entities: fromEntities(body.Entities),
+		MessageId: c.Param("message_id"), Content: body.Content, Entities: fromEntities(body.Entities), LinkPreview: preview,
 	})
 	if err != nil {
 		h.fail(c, err)

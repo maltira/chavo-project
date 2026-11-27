@@ -154,6 +154,33 @@ func toMessage(m *models.Message) *conversationv1.Message {
 		Entities:            toEntities(m.Entities),
 		IsSilent:            m.IsSilent,
 		Reactions:           toReactions(m.Reactions),
+		LinkPreview:         toLinkPreview(m.LinkPreview),
+	}
+}
+
+func toLinkPreview(lp *models.LinkPreview) *conversationv1.LinkPreview {
+	if lp == nil {
+		return nil
+	}
+	return &conversationv1.LinkPreview{
+		Url:         lp.URL,
+		Title:       lp.Title,
+		Description: lp.Description,
+		ImageUrl:    lp.ImageURL,
+		SiteName:    lp.SiteName,
+	}
+}
+
+func fromLinkPreview(lp *conversationv1.LinkPreview) *models.LinkPreview {
+	if lp == nil {
+		return nil
+	}
+	return &models.LinkPreview{
+		URL:         lp.GetUrl(),
+		Title:       lp.Title,
+		Description: lp.Description,
+		ImageURL:    lp.ImageUrl,
+		SiteName:    lp.SiteName,
 	}
 }
 
@@ -173,7 +200,14 @@ func toReactions(in []models.ReactionSummary) []*conversationv1.MessageReaction 
 func toEntities(in []models.Entity) []*conversationv1.MessageEntity {
 	out := make([]*conversationv1.MessageEntity, len(in))
 	for i, e := range in {
-		out[i] = &conversationv1.MessageEntity{Type: e.Type, Offset: int32(e.Offset), Length: int32(e.Length)}
+		out[i] = &conversationv1.MessageEntity{
+			Type:     e.Type,
+			Offset:   int32(e.Offset),
+			Length:   int32(e.Length),
+			Url:      e.URL,
+			UserId:   e.UserID,
+			Language: e.Language,
+		}
 	}
 	return out
 }
@@ -181,18 +215,26 @@ func toEntities(in []models.Entity) []*conversationv1.MessageEntity {
 func fromEntities(in []*conversationv1.MessageEntity) []models.Entity {
 	out := make([]models.Entity, len(in))
 	for i, e := range in {
-		out[i] = models.Entity{Type: e.GetType(), Offset: int(e.GetOffset()), Length: int(e.GetLength())}
+		out[i] = models.Entity{
+			Type:     e.GetType(),
+			Offset:   int(e.GetOffset()),
+			Length:   int(e.GetLength()),
+			URL:      e.Url,
+			UserID:   e.UserId,
+			Language: e.Language,
+		}
 	}
 	return out
 }
 
 func toSummary(s *models.ConversationSummary) *conversationv1.ConversationSummary {
 	return &conversationv1.ConversationSummary{
-		Conversation:    toConversation(&s.Conversation),
-		MyRole:          s.MyRole,
-		PeerId:          optStr(s.PeerID),
-		LastMessage:     toMessage(s.LastMessage),
-		UnreadCount:     int32(s.UnreadCount),
+		Conversation:        toConversation(&s.Conversation),
+		MyRole:              s.MyRole,
+		PeerId:              optStr(s.PeerID),
+		LastMessage:         toMessage(s.LastMessage),
+		UnreadCount:         int32(s.UnreadCount),
+		UnreadMentionsCount: int32(s.UnreadMentionsCount),
 		LastMessageRead: s.LastMessageRead,
 		MembersCount:    int32(s.MembersCount),
 		InviteCode:      s.InviteCode,

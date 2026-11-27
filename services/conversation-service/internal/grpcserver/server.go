@@ -427,6 +427,7 @@ func (s *Server) SendMessage(ctx context.Context, req *conversationv1.SendMessag
 		ReplyToMessageID: reply,
 		Entities:         fromEntities(req.GetEntities()),
 		IsSilent:         req.GetIsSilent(),
+		LinkPreview:      fromLinkPreview(req.GetLinkPreview()),
 	})
 	if err != nil {
 		return nil, err
@@ -511,7 +512,7 @@ func (s *Server) EditMessage(ctx context.Context, req *conversationv1.EditMessag
 	if err != nil {
 		return nil, err
 	}
-	msg, err := s.msgs.Edit(ctx, user, msgID, req.GetContent(), fromEntities(req.GetEntities()))
+	msg, err := s.msgs.Edit(ctx, user, msgID, req.GetContent(), fromEntities(req.GetEntities()), fromLinkPreview(req.GetLinkPreview()))
 	if err != nil {
 		return nil, err
 	}
@@ -928,4 +929,21 @@ func (s *Server) DeleteGroupAvatar(ctx context.Context, req *conversationv1.Dele
 		return nil, err
 	}
 	return &conversationv1.DeleteGroupAvatarResponse{RemovedUrl: &removed}, nil
+}
+
+func (s *Server) ListUnreadMentions(ctx context.Context, req *conversationv1.ListUnreadMentionsRequest) (*conversationv1.ListUnreadMentionsResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	limit, _ := page(req.GetLimit(), 0, 50, 100)
+	ids, err := s.msgs.ListUnreadMentions(ctx, user, convID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.ListUnreadMentionsResponse{MessageIds: strs(ids)}, nil
 }

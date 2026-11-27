@@ -27,6 +27,8 @@ type SendMessageInput struct {
 	Entities []models.Entity
 	// IsSilent - отправить без звука (без уведомления и звука у получателей)
 	IsSilent bool
+	// LinkPreview - OpenGraph-превью ссылки, сформированное шлюзом
+	LinkPreview *models.LinkPreview
 }
 
 // ListMessagesQuery - параметры постраничного чтения истории; задаётся не более одного курсора
@@ -41,14 +43,16 @@ type MessageService interface {
 	Send(ctx context.Context, senderID uuid.UUID, in SendMessageInput) (*models.Message, error)
 	List(ctx context.Context, userID, convID uuid.UUID, before *uuid.UUID, limit int) ([]models.Message, error)
 	ListPage(ctx context.Context, userID, convID uuid.UUID, q ListMessagesQuery) (*models.MessagePage, error)
-	// Edit заменяет текст и форматирование целиком
-	Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error)
+	// Edit заменяет текст, форматирование и (опционально) превью ссылки целиком
+	Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity, linkPreview ...*models.LinkPreview) (*models.Message, error)
 	Get(ctx context.Context, userID, messageID uuid.UUID) (*models.Message, error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) error
 	DeleteBatch(ctx context.Context, userID uuid.UUID, messageIDs []uuid.UUID) error
 	MarkRead(ctx context.Context, userID, convID, messageID uuid.UUID) error
 	Forward(ctx context.Context, userID uuid.UUID, in ForwardInput) ([]ForwardResult, error)
 	Readers(ctx context.Context, userID, convID, messageID uuid.UUID) ([]uuid.UUID, error)
+	// ListUnreadMentions возвращает id непрочитанных сообщений с упоминанием userID
+	ListUnreadMentions(ctx context.Context, userID, convID uuid.UUID, limit int) ([]uuid.UUID, error)
 
 	// закреплённые сообщения: scope all - для всех (в группе только админы), me - только для себя (личный чат);
 	// закреп удалённого сообщения снимается вместе с ним. В личном чате UnpinMessage all снимает и мой личный
@@ -131,6 +135,7 @@ func recordToModel(c *crypto.Cipher, rec *repository.MessageRecord) (*models.Mes
 		ForwardedFromUserID: rec.ForwardedFromUserID,
 		Entities:            rec.Entities,
 		IsSilent:            rec.IsSilent,
+		LinkPreview:         rec.LinkPreview,
 	}
 	if m.Kind == "" {
 		m.Kind = models.MessageUser
@@ -158,6 +163,11 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 	if err != nil {
 		return nil, err
 	}
+	linkPreview, err := validateLinkPreview(in.LinkPreview)
+	if err != nil {
+		return nil, err
+	}
+	mentionedIDs := extractMentionUserIDs(entities)
 
 	// Сетевые проверки user-service выполняются до транзакции. Себе («Избранное») писать можно всегда:
 	// проверять существование и блокировки не с кем.
@@ -217,9 +227,15 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			ReplyToMessageID: in.ReplyToMessageID,
 			Entities:         entities,
 			IsSilent:         in.IsSilent,
+			LinkPreview:      linkPreview,
 		}
 		if err = s.msgs.Create(ctx, tx, rec); err != nil {
 			return err
+		}
+		if len(mentionedIDs) > 0 {
+			if err = s.msgs.ReplaceMentions(ctx, tx, rec.ID, convID, rec.CreatedAt, mentionedIDs); err != nil {
+				return err
+			}
 		}
 		if err = s.convs.TouchLastMessage(ctx, tx, convID, rec.CreatedAt); err != nil {
 			return err
@@ -240,6 +256,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 			Kind:             models.MessageUser,
 			Entities:         entities,
 			IsSilent:         in.IsSilent,
+			LinkPreview:      linkPreview,
 		}); err != nil {
 			return err
 		}
@@ -248,6 +265,7 @@ func (s *messageService) Send(ctx context.Context, senderID uuid.UUID, in SendMe
 		result = &models.Message{
 			ID: rec.ID, ConversationID: convID, SenderID: senderID, Content: &content, Kind: models.MessageUser,
 			ReplyToMessageID: in.ReplyToMessageID, CreatedAt: rec.CreatedAt, Entities: entities, IsSilent: in.IsSilent,
+			LinkPreview: linkPreview,
 		}
 		return nil
 	})
@@ -413,7 +431,7 @@ func (s *messageService) ListPage(ctx context.Context, userID, convID uuid.UUID,
 	return &models.MessagePage{Items: items, HasOlder: hasOlder, HasNewer: hasNewer}, nil
 }
 
-func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity) (*models.Message, error) {
+func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, content string, entities []models.Entity, linkPreviewIn ...*models.LinkPreview) (*models.Message, error) {
 	if err := validateContent(content); err != nil {
 		return nil, err
 	}
@@ -421,6 +439,15 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
+	var rawPreview *models.LinkPreview
+	if len(linkPreviewIn) > 0 {
+		rawPreview = linkPreviewIn[0]
+	}
+	linkPreview, err := validateLinkPreview(rawPreview)
+	if err != nil {
+		return nil, err
+	}
+	mentionedIDs := extractMentionUserIDs(entities)
 	enc, err := s.cipher.Encrypt([]byte(content))
 	if err != nil {
 		return nil, err
@@ -446,8 +473,11 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			return apperror.ErrMessageDeleted
 		}
 
-		updatedAt, err := s.msgs.Update(ctx, tx, messageID, enc, entities)
+		updatedAt, err := s.msgs.Update(ctx, tx, messageID, enc, entities, linkPreview)
 		if err != nil {
+			return err
+		}
+		if err = s.msgs.ReplaceMentions(ctx, tx, messageID, rec.ConversationID, rec.CreatedAt, mentionedIDs); err != nil {
 			return err
 		}
 		memberIDs, err := s.convs.MemberIDs(ctx, tx, rec.ConversationID)
@@ -462,6 +492,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 			MemberIDs:      memberIDs,
 			ContentEnc:     enc,
 			Entities:       entities,
+			LinkPreview:    linkPreview,
 		}); err != nil {
 			return err
 		}
@@ -473,7 +504,7 @@ func (s *messageService) Edit(ctx context.Context, userID, messageID uuid.UUID, 
 		result = &models.Message{
 			ID: rec.ID, ConversationID: rec.ConversationID, SenderID: rec.SenderID, Content: &content,
 			ReplyToMessageID: rec.ReplyToMessageID, IsEdited: true, CreatedAt: rec.CreatedAt, UpdatedAt: updatedAt,
-			Entities: entities, IsSilent: rec.IsSilent, Reactions: byMsg[messageID],
+			Entities: entities, IsSilent: rec.IsSilent, Reactions: byMsg[messageID], LinkPreview: linkPreview,
 		}
 		return nil
 	})
@@ -533,6 +564,9 @@ func (s *messageService) Delete(ctx context.Context, userID, messageID uuid.UUID
 			return err
 		}
 		if err = s.reactions.DeleteByMessage(ctx, tx, messageID); err != nil {
+			return err
+		}
+		if err = s.msgs.DeleteMentionsByMessage(ctx, tx, messageID); err != nil {
 			return err
 		}
 		// удалённое сообщение не остаётся закреплённым ни у кого
@@ -612,6 +646,9 @@ func (s *messageService) DeleteBatch(ctx context.Context, userID uuid.UUID, mess
 			if err = s.reactions.DeleteByMessage(ctx, tx, id); err != nil {
 				return err
 			}
+			if err = s.msgs.DeleteMentionsByMessage(ctx, tx, id); err != nil {
+				return err
+			}
 			owners, err := s.pins.DeleteForMessage(ctx, tx, id)
 			if err != nil {
 				return err
@@ -672,4 +709,15 @@ func (s *messageService) Readers(ctx context.Context, userID, convID, messageID 
 		return nil, apperror.ErrNotFound
 	}
 	return s.msgs.ListReaders(ctx, q, convID, messageID)
+}
+
+func (s *messageService) ListUnreadMentions(ctx context.Context, userID, convID uuid.UUID, limit int) ([]uuid.UUID, error) {
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	q := s.db.Q()
+	if _, err := s.convs.Access(ctx, q, convID, userID); err != nil {
+		return nil, err
+	}
+	return s.msgs.ListUnreadMentions(ctx, q, convID, userID, limit)
 }

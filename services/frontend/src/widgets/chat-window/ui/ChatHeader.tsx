@@ -31,13 +31,20 @@ export function ChatHeader({ chat, peerId, saved: savedDraft, onOpenInfo, action
     const presence = usePresence(isDirect ? peerUserId : null)
 
     const profile = peer.data
-    const name = isDirect ? (profile?.display_name ?? '') : (chat?.name ?? 'Группа')
-    const status = isDirect ? profile?.status : chat?.status
-    const online = isDirect && (presence?.online ?? profile?.online ?? false)
+    const isDeleted = isDirect && !!profile?.is_deleted
+    const name = isDirect
+        ? isDeleted
+            ? 'Удалённый аккаунт'
+            : (profile?.display_name ?? '')
+        : (chat?.name ?? 'Группа')
+    const status = isDeleted ? undefined : isDirect ? profile?.status : chat?.status
+    const online = !isDeleted && isDirect && (presence?.online ?? profile?.online ?? false)
 
     let subtitle = ''
     if (saved) {
         subtitle = 'Сообщения для себя'
+    } else if (isDeleted) {
+        subtitle = 'был(а) давно'
     } else if (isDirect) {
         subtitle = online
             ? 'в сети'
@@ -60,8 +67,14 @@ export function ChatHeader({ chat, peerId, saved: savedDraft, onOpenInfo, action
                     <SavedAvatar />
                 ) : (
                     <UserAvatar
-                        src={isDirect ? profile?.avatar_url : chat?.avatar_url}
-                        shape={isDirect ? profile?.avatar_shape : chat?.avatar_shape}
+                        src={isDeleted ? undefined : isDirect ? profile?.avatar_url : chat?.avatar_url}
+                        shape={
+                            isDeleted
+                                ? undefined
+                                : isDirect
+                                  ? profile?.avatar_shape
+                                  : chat?.avatar_shape
+                        }
                         online={online}
                     />
                 )}

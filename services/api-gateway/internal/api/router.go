@@ -152,6 +152,12 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	authed.POST("/auth/change-password", h.changePassword)
 	authed.GET("/auth/sessions", h.listSessions)
 	authed.DELETE("/auth/sessions/:session_id", h.terminateSession)
+	authed.GET("/auth/2fa", h.getTwoFactor)
+	authed.POST("/auth/2fa/totp/setup", h.setupTOTP)
+	authed.POST("/auth/2fa/totp/confirm", h.confirmTOTP)
+	authed.POST("/auth/2fa/method", h.switchTwoFactorMethod)
+	authed.POST("/auth/2fa/backup-codes/regenerate", h.regenerateBackupCodes)
+	authed.DELETE("/auth/account", h.deleteAccount)
 	authed.POST("/users", h.createProfile)
 	authed.GET("/users/me", h.getMe)
 

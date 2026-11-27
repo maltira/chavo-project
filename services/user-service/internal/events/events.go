@@ -16,6 +16,10 @@ const (
 	TopicPresenceEvents = "presence-events"
 	TypeUserOnline      = "user.online"
 	TypeUserOffline     = "user.offline"
+
+	// публикует auth-service
+	TopicAuthEvents    = "auth-events"
+	TypeAccountDeleted = "user.account_deleted"
 )
 
 type Event[T any] struct {
@@ -44,4 +48,9 @@ type PresencePayload struct {
 	UserID  uuid.UUID `json:"user_id"`
 	At      time.Time `json:"at"`
 	Visible bool      `json:"visible"`
+}
+
+// AccountDeletedPayload - удаление аккаунта в auth-service
+type AccountDeletedPayload struct {
+	UserID uuid.UUID `json:"user_id"`
 }

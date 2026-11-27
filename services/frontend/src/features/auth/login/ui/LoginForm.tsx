@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link } from 'react-router'
 
+import type { TwoFactorMethod } from '@/entities/session'
 import { errorMessage } from '@/shared/api'
 import { ROUTES } from '@/shared/config'
 import { notify } from '@/shared/lib'
@@ -19,7 +20,11 @@ const ERRORS: Record<string, string> = {
 }
 
 interface Props {
-    onSuccess: (challenge: { challengeId: string; email: string }) => void
+    onSuccess: (challenge: {
+        challengeId: string
+        email: string
+        method: TwoFactorMethod
+    }) => void
 }
 
 export function LoginForm({ onSuccess }: Props) {
@@ -47,7 +52,11 @@ export function LoginForm({ onSuccess }: Props) {
                 description: errorMessage(error, ERRORS),
             }),
         onSuccess: (data, values) =>
-            onSuccess({ challengeId: data.challenge_id, email: values.email }),
+            onSuccess({
+                challengeId: data.challenge_id,
+                email: values.email,
+                method: data.method ?? 'email',
+            }),
     })
 
     return (

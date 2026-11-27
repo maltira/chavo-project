@@ -69,10 +69,11 @@ func New() (*App, error) {
 	verRepo := repository.NewVerificationRepository(pool)
 	resetRepo := repository.NewPasswordResetRepository(pool)
 	tokenRepo := repository.NewTokenRepository(pool)
+	backupRepo := repository.NewBackupCodeRepository(pool)
 
-	otpSvc := service.NewOtpService(rdb, userRepo, mail, log)
+	otpSvc := service.NewOtpService(rdb, userRepo, backupRepo, cfg.TOTPEncryptionKey, mail, log)
 	tokenSvc := service.NewTokenService(tokenRepo, rdb, producer, cfg, log)
-	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, otpSvc, pool, rdb, producer, mail, cfg, log)
+	authSvc := service.NewAuthService(userRepo, verRepo, resetRepo, tokenRepo, backupRepo, otpSvc, pool, rdb, producer, mail, cfg, log)
 
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
 	authv1.RegisterAuthServiceServer(server, grpcserver.New(authSvc, otpSvc, tokenSvc))

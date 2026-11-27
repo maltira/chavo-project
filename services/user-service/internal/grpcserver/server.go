@@ -90,26 +90,47 @@ func ts(t time.Time) *timestamppb.Timestamp { return timestamppb.New(t) }
 // profilesToProto: онлайн и last_seen_at видны другим только при show_online_status; self видит всё своё.
 // Тому, кого владелец заблокировал, не отдаются аватар, фигура за аватаром, статус, онлайн и last_seen_at (имя, username и bio остаются).
 func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []models.Profile) ([]*userv1.Profile, error) {
-	ids := make([]uuid.UUID, len(items))
+	ids := make([]uuid.UUID, 0, len(items))
 	for i := range items {
-		ids[i] = items[i].UserID
+		if items[i].DeletedAt == nil {
+			ids = append(ids, items[i].UserID)
+		}
 	}
-	visible, err := s.settings.ShowOnlineStatus(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	online, err := s.presence.Online(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	blockedBy, err := s.blocks.BlockedBy(ctx, viewer, ids)
-	if err != nil {
-		return nil, err
+	var (
+		visible   map[uuid.UUID]bool
+		online    map[uuid.UUID]bool
+		blockedBy map[uuid.UUID]bool
+		err       error
+	)
+	if len(ids) > 0 {
+		visible, err = s.settings.ShowOnlineStatus(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		online, err = s.presence.Online(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		blockedBy, err = s.blocks.BlockedBy(ctx, viewer, ids)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	res := make([]*userv1.Profile, len(items))
 	for i := range items {
 		p := &items[i]
+		if p.DeletedAt != nil {
+			res[i] = &userv1.Profile{
+				UserId:      p.UserID.String(),
+				Username:    "",
+				DisplayName: "Удалённый аккаунт",
+				CreatedAt:   ts(p.CreatedAt),
+				UpdatedAt:   ts(p.UpdatedAt),
+				IsDeleted:   true,
+			}
+			continue
+		}
 		hidden := p.UserID != viewer && blockedBy[p.UserID]
 		show := p.UserID == viewer || (visible[p.UserID] && !hidden)
 		out := &userv1.Profile{
@@ -211,7 +232,7 @@ func (s *Server) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) 
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.profiles.FindByID(ctx, id)
+	p, err := s.profiles.FindByIDIncludeDeleted(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -371,6 +392,11 @@ func (s *Server) MessagingAllowed(ctx context.Context, req *userv1.MessagingAllo
 	}
 	recipient, err := parseID(req.GetRecipientId())
 	if err != nil {
+		return nil, err
+	}
+	if p, err := s.profiles.FindByIDIncludeDeleted(ctx, recipient); err == nil && p.DeletedAt != nil {
+		return &userv1.MessagingAllowedResponse{Allowed: false}, nil
+	} else if err != nil && !errors.Is(err, apperror.ErrNotFound) {
 		return nil, err
 	}
 	bySender, byRecipient, err := s.blocks.GetBlockStatus(ctx, sender, recipient)

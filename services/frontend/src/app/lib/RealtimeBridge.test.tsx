@@ -140,6 +140,20 @@ describe('RealtimeBridge', () => {
         )
     })
 
+    it('signs out and notifies when the account is deleted from another session', () => {
+        const { client, socket } = mount()
+        client.setQueryData(['me'], { username: 'me' })
+        socket().onmessage?.({
+            data: JSON.stringify({ type: 'user.account_deleted', data: { user_id: 'me' } }),
+        })
+        socket().onclose?.({ code: 4001 })
+        expect(useSession.getState().status).toBe('guest')
+        expect(client.getQueryData(['me'])).toBeUndefined()
+        expect(useNotifications.getState().items).toEqual(
+            expect.arrayContaining([expect.objectContaining({ title: 'Аккаунт удалён' })]),
+        )
+    })
+
     it('does not claim an expired session when the server just refused it', () => {
         const { socket } = mount()
         socket().onclose?.({ code: 4401 })

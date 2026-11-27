@@ -110,6 +110,27 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
         )
     }
 
+    if (profile.is_deleted) {
+        return (
+            <Modal
+                key="deleted-profile"
+                open={open}
+                onClose={onClose}
+                aria-label="Удалённый аккаунт"
+            >
+                <div className={styles.head}>
+                    <span className={styles.avatarWrap}>
+                        <UserAvatar size={96} />
+                    </span>
+                    <div className={styles.names}>
+                        <h2 className={styles.name}>Удалённый аккаунт</h2>
+                        <span className={styles.muted}>был(а) давно</span>
+                    </div>
+                </div>
+            </Modal>
+        )
+    }
+
     const online = !isMe && (presence?.online ?? profile.online)
     const subtitle = isMe
         ? `@${profile.username}`

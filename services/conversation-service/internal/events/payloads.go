@@ -133,3 +133,8 @@ type PinsChangedPayload struct {
 	ConversationID uuid.UUID   `json:"conversation_id"`
 	MemberIDs      []uuid.UUID `json:"member_ids"`
 }
+
+// AccountDeletedPayload - удаление аккаунта в auth-service
+type AccountDeletedPayload struct {
+	UserID uuid.UUID `json:"user_id"`
+}

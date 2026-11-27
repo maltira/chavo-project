@@ -22,6 +22,8 @@ type ProfileRepository interface {
 	Update(ctx context.Context, userID uuid.UUID, updates map[string]any) error
 	GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error)
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
+	FindByIDIncludeDeleted(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
+	DeleteAccount(ctx context.Context, userID uuid.UUID) error
 	UsernameExists(ctx context.Context, username string) (bool, error)
 	UpdateLastSeenAt(ctx context.Context, userID uuid.UUID, lastSeen time.Time) error
 	LastSeenAt(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
@@ -118,7 +120,7 @@ func (r *profileRepository) Update(ctx context.Context, userID uuid.UUID, update
 
 // profileColumns и profileJoins - общие для чтения профиля со статусом и фигурой; истёкший статус не читается
 const (
-	profileColumns = `p.user_id, p.username, p.display_name, p.bio, p.avatar_url, p.last_seen_at, p.created_at, p.updated_at,
+	profileColumns = `p.user_id, p.username, p.display_name, p.bio, p.avatar_url, p.last_seen_at, p.created_at, p.updated_at, p.deleted_at,
 		s.icon, s.text, s.background, s.foreground, s.expires_at, sh.shape, sh.color`
 	profileJoins = `LEFT JOIN user_statuses s ON s.user_id = p.user_id AND (s.expires_at IS NULL OR s.expires_at > NOW())
 		LEFT JOIN user_avatar_shapes sh ON sh.user_id = p.user_id`
@@ -133,7 +135,7 @@ func scanProfile(row pgx.Row) (*models.Profile, error) {
 	)
 	if err := row.Scan(
 		&p.UserID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL,
-		&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 		&stIcon, &stText, &stBg, &stFg, &stExpires, &shShape, &shColor,
 	); err != nil {
 		return nil, err
@@ -186,6 +188,59 @@ func (r *profileRepository) FindByID(ctx context.Context, userID uuid.UUID) (*mo
 		return nil, fmt.Errorf("find profile by id: %w", err)
 	}
 	return p, nil
+}
+
+func (r *profileRepository) FindByIDIncludeDeleted(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {
+	p, err := scanProfile(r.pool.QueryRow(ctx,
+		`SELECT `+profileColumns+`
+		 FROM profiles p `+profileJoins+`
+		 WHERE p.user_id = $1`,
+		userID,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.ErrNotFound
+		}
+		return nil, fmt.Errorf("find profile by id include deleted: %w", err)
+	}
+	return p, nil
+}
+
+// DeleteAccount помечает профиль удалённым и очищает все связанные данные; операция идемпотентна
+func (r *profileRepository) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete account tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE profiles
+		 SET deleted_at = NOW(), display_name = 'Удалённый аккаунт', bio = NULL, avatar_url = NULL, updated_at = NOW()
+		 WHERE user_id = $1 AND deleted_at IS NULL`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("soft delete profile: %w", err)
+	}
+	for _, stmt := range []struct {
+		name string
+		sql  string
+	}{
+		{"profile_avatars", `DELETE FROM profile_avatars WHERE user_id = $1`},
+		{"user_statuses", `DELETE FROM user_statuses WHERE user_id = $1`},
+		{"user_avatar_shapes", `DELETE FROM user_avatar_shapes WHERE user_id = $1`},
+		{"user_blocks", `DELETE FROM user_blocks WHERE user_id = $1 OR blocked_user_id = $1`},
+		{"user_settings", `DELETE FROM user_settings WHERE user_id = $1`},
+	} {
+		if _, err := tx.Exec(ctx, stmt.sql, userID); err != nil {
+			return fmt.Errorf("cleanup %s: %w", stmt.name, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete account tx: %w", err)
+	}
+	return nil
 }
 
 func (r *profileRepository) UsernameExists(ctx context.Context, username string) (bool, error) {

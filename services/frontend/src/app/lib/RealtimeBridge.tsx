@@ -11,7 +11,7 @@ import {
     useGroupCard,
 } from '@/entities/conversation'
 import type { ConversationSummary } from '@/entities/conversation'
-import { applyMessageEvent, applyPinsEvent, messagesKey } from '@/entities/message'
+import { applyMessageEvent, applyPinsEvent, messagesKey, useDrafts } from '@/entities/message'
 import { useSession } from '@/entities/session'
 import { blockedKey, blockStatusKey, presenceKey, userKey } from '@/entities/user'
 import type { Presence, Profile } from '@/entities/user'
@@ -120,6 +120,13 @@ export function sessionEndedNotice(reason: string | undefined): Notice | null {
                 title: 'Пароль сброшен',
                 description: 'Все сеансы завершены, войдите с новым паролем',
             }
+        case 'account_deleted':
+            return {
+                id: 'account-deleted',
+                icon: 'trash',
+                title: 'Аккаунт удалён',
+                description: 'Ваш аккаунт был удалён навсегда',
+            }
         case 'unauthorized':
             // сервер не принял сеанс (истёк или не нашёлся): причину точно не знаем, не гадаем
             return {
@@ -197,6 +204,9 @@ export function RealtimeBridge() {
             }
             ended = true
             clearTimeout(revokeTimer)
+            if (reason === 'account_deleted') {
+                useDrafts.getState().clearAll()
+            }
             const notice = sessionEndedNotice(reason)
             if (notice) {
                 notify(notice)
@@ -207,8 +217,11 @@ export function RealtimeBridge() {
 
         const socket = connectSocket({
             onEvent: (event) => {
-                if (event.type === 'session.revoked') {
-                    revokeReason = (event.data as { reason?: string } | undefined)?.reason
+                if (event.type === 'session.revoked' || event.type === 'user.account_deleted') {
+                    revokeReason =
+                        event.type === 'user.account_deleted'
+                            ? 'account_deleted'
+                            : (event.data as { reason?: string } | undefined)?.reason
                     clearTimeout(revokeTimer)
                     revokeTimer = setTimeout(() => {
                         endSession(revokeReason)

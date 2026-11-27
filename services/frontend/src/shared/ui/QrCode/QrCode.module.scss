@@ -1,0 +1,14 @@
+.qr {
+    display: block;
+    border-radius: $radius-md;
+    background-color: #ffffff;
+}
+
+.fallback {
+    @include type(tag-regular);
+
+    margin: 0;
+    padding: 16px;
+    color: alpha(var(--color-text), 0.6);
+    text-align: center;
+}

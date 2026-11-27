@@ -84,6 +84,8 @@ type GroupService interface {
 	SelectAvatar(ctx context.Context, adminID, convID, photoID uuid.UUID) error
 	// DeleteAvatar убирает фото (nil - текущее) и возвращает его адрес
 	DeleteAvatar(ctx context.Context, adminID, convID uuid.UUID, photoID *uuid.UUID) (string, error)
+	// HandleAccountDeleted выводит удалённого пользователя из всех групп (передавая права админа или удаляя пустую группу)
+	HandleAccountDeleted(ctx context.Context, userID uuid.UUID) error
 }
 
 type groupService struct {
@@ -751,5 +753,86 @@ func (s *groupService) ClearAvatarShape(ctx context.Context, adminID, convID uui
 			return err
 		}
 		return s.convs.ClearAvatarShape(ctx, tx, convID)
+	})
+}
+
+func (s *groupService) HandleAccountDeleted(ctx context.Context, userID uuid.UUID) error {
+	if err := s.convs.DeletePendingJoinRequestsByUser(ctx, s.db.Q(), userID); err != nil {
+		return err
+	}
+	groupIDs, err := s.convs.UserGroupIDs(ctx, s.db.Q(), userID)
+	if err != nil {
+		return err
+	}
+	for _, convID := range groupIDs {
+		if err := s.leaveGroupOnAccountDeleted(ctx, convID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *groupService) leaveGroupOnAccountDeleted(ctx context.Context, convID, userID uuid.UUID) error {
+	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		conv, err := s.convs.Lock(ctx, tx, convID)
+		if err != nil {
+			if errors.Is(err, apperror.ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+		if conv.ConversationType != models.ConversationGroup {
+			return nil
+		}
+		role, err := s.convs.MemberRole(ctx, tx, convID, userID)
+		if err != nil {
+			if errors.Is(err, apperror.ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+
+		nextAdmin, hasOther, err := s.convs.OldestOtherMember(ctx, tx, convID, userID)
+		if err != nil {
+			return err
+		}
+		if !hasOther {
+			return s.convs.Delete(ctx, tx, convID)
+		}
+
+		var promoted *uuid.UUID
+		if role == models.RoleAdmin {
+			admins, err := s.convs.CountAdmins(ctx, tx, convID)
+			if err != nil {
+				return err
+			}
+			if admins <= 1 {
+				if _, err := s.convs.SetMemberRole(ctx, tx, convID, nextAdmin, models.RoleAdmin); err != nil {
+					return err
+				}
+				promoted = &nextAdmin
+			}
+		}
+
+		if _, err := s.convs.RemoveMember(ctx, tx, convID, userID); err != nil {
+			return err
+		}
+		if err := s.system.post(ctx, tx, convID, userID, userID, models.SystemLeft); err != nil {
+			return err
+		}
+		remaining, err := s.convs.MemberIDs(ctx, tx, convID)
+		if err != nil {
+			return err
+		}
+		if promoted != nil {
+			if err := s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeConversationUpdated, events.ConversationUpdatedPayload{
+				ConversationID: convID, UpdatedBy: userID, Fields: []string{"member_role"}, TargetUserID: promoted, MemberIDs: remaining,
+			}); err != nil {
+				return err
+			}
+		}
+		return s.publish(ctx, tx, events.TopicConversationEvents, convID, events.TypeMemberRemoved, events.MemberRemovedPayload{
+			ConversationID: convID, UserID: userID, RemovedBy: userID, MemberIDs: remaining,
+		})
 	})
 }

@@ -14,7 +14,7 @@
     white-space: nowrap;
 
     &.muted {
-        background-color: var(--color-bg-tertiary);
+        background-color: var(--color-bg-muted);
         color: alpha(var(--color-text), 0.6);
     }
 }

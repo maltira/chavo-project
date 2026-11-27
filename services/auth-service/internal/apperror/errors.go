@@ -21,13 +21,17 @@ var (
 	ErrWrongPassword       = errors.New("wrong password")
 	ErrSamePassword        = errors.New("new password cannot be the same as old password")
 	ErrIncorrectData       = errors.New("incorrect data")
+	ErrTOTPNotPending      = errors.New("totp setup expired")
+	ErrTOTPNotEnabled      = errors.New("totp not enabled")
+	ErrTOTPAlreadyEnabled  = errors.New("totp already enabled")
+	ErrResendNotAllowed    = errors.New("resend not allowed for totp")
 )
 
 func HTTPCode(err error) int {
 	switch {
 	case errors.Is(err, ErrIncorrectData):
 		return http.StatusBadRequest
-	case errors.Is(err, ErrEmailExists):
+	case errors.Is(err, ErrEmailExists), errors.Is(err, ErrTOTPAlreadyEnabled):
 		return http.StatusConflict
 	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrWrongPassword):
 		return http.StatusUnauthorized
@@ -35,7 +39,9 @@ func HTTPCode(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, ErrInvalidOTP),
 		errors.Is(err, ErrOTPAttemptsExceeded), errors.Is(err, ErrInvalidChallenge),
-		errors.Is(err, ErrInvalidToken), errors.Is(err, ErrSamePassword):
+		errors.Is(err, ErrInvalidToken), errors.Is(err, ErrSamePassword),
+		errors.Is(err, ErrTOTPNotPending), errors.Is(err, ErrTOTPNotEnabled),
+		errors.Is(err, ErrResendNotAllowed):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrNotFound):
 		return http.StatusNotFound
@@ -76,6 +82,14 @@ func UserMessage(err error) string {
 		return "Указан неверный текущий пароль"
 	case errors.Is(err, ErrSamePassword):
 		return "Новый пароль не может совпадать с текущим"
+	case errors.Is(err, ErrTOTPNotPending):
+		return "Сеанс настройки аутентификатора истёк, начните заново"
+	case errors.Is(err, ErrTOTPNotEnabled):
+		return "Приложение-аутентификатор не подключено"
+	case errors.Is(err, ErrTOTPAlreadyEnabled):
+		return "Приложение-аутентификатор уже подключено"
+	case errors.Is(err, ErrResendNotAllowed):
+		return "Повторная отправка доступна только для кодов на почту"
 	default:
 		return "Внутренняя ошибка сервера"
 	}
@@ -102,6 +116,14 @@ func Reason(err error) string {
 		return "WRONG_PASSWORD"
 	case errors.Is(err, ErrSamePassword):
 		return "SAME_PASSWORD"
+	case errors.Is(err, ErrTOTPNotPending):
+		return "TOTP_SETUP_EXPIRED"
+	case errors.Is(err, ErrTOTPNotEnabled):
+		return "TOTP_NOT_ENABLED"
+	case errors.Is(err, ErrTOTPAlreadyEnabled):
+		return "TOTP_ALREADY_ENABLED"
+	case errors.Is(err, ErrResendNotAllowed):
+		return "RESEND_NOT_ALLOWED"
 	default:
 		return ""
 	}

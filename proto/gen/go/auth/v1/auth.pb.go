@@ -457,8 +457,10 @@ func (x *LoginRequest) GetPassword() string {
 }
 
 type LoginResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChallengeId   string                 `protobuf:"bytes,1,opt,name=challenge_id,json=challengeId,proto3" json:"challenge_id,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ChallengeId string                 `protobuf:"bytes,1,opt,name=challenge_id,json=challengeId,proto3" json:"challenge_id,omitempty"`
+	// email или totp
+	Method        string `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -496,6 +498,13 @@ func (*LoginResponse) Descriptor() ([]byte, []int) {
 func (x *LoginResponse) GetChallengeId() string {
 	if x != nil {
 		return x.ChallengeId
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetMethod() string {
+	if x != nil {
+		return x.Method
 	}
 	return ""
 }
@@ -1372,6 +1381,561 @@ func (x *ResolveSessionResponse) GetSessionId() string {
 	return ""
 }
 
+type GetTwoFactorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTwoFactorRequest) Reset() {
+	*x = GetTwoFactorRequest{}
+	mi := &file_auth_v1_auth_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTwoFactorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTwoFactorRequest) ProtoMessage() {}
+
+func (x *GetTwoFactorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTwoFactorRequest.ProtoReflect.Descriptor instead.
+func (*GetTwoFactorRequest) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{29}
+}
+
+type GetTwoFactorResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// email или totp
+	Method               string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	BackupCodesRemaining int32  `protobuf:"varint,2,opt,name=backup_codes_remaining,json=backupCodesRemaining,proto3" json:"backup_codes_remaining,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *GetTwoFactorResponse) Reset() {
+	*x = GetTwoFactorResponse{}
+	mi := &file_auth_v1_auth_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTwoFactorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTwoFactorResponse) ProtoMessage() {}
+
+func (x *GetTwoFactorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTwoFactorResponse.ProtoReflect.Descriptor instead.
+func (*GetTwoFactorResponse) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetTwoFactorResponse) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *GetTwoFactorResponse) GetBackupCodesRemaining() int32 {
+	if x != nil {
+		return x.BackupCodesRemaining
+	}
+	return 0
+}
+
+type SetupTOTPRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetupTOTPRequest) Reset() {
+	*x = SetupTOTPRequest{}
+	mi := &file_auth_v1_auth_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetupTOTPRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetupTOTPRequest) ProtoMessage() {}
+
+func (x *SetupTOTPRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetupTOTPRequest.ProtoReflect.Descriptor instead.
+func (*SetupTOTPRequest) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *SetupTOTPRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type SetupTOTPResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Secret        string                 `protobuf:"bytes,1,opt,name=secret,proto3" json:"secret,omitempty"`
+	OtpauthUrl    string                 `protobuf:"bytes,2,opt,name=otpauth_url,json=otpauthUrl,proto3" json:"otpauth_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetupTOTPResponse) Reset() {
+	*x = SetupTOTPResponse{}
+	mi := &file_auth_v1_auth_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetupTOTPResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetupTOTPResponse) ProtoMessage() {}
+
+func (x *SetupTOTPResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetupTOTPResponse.ProtoReflect.Descriptor instead.
+func (*SetupTOTPResponse) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *SetupTOTPResponse) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
+func (x *SetupTOTPResponse) GetOtpauthUrl() string {
+	if x != nil {
+		return x.OtpauthUrl
+	}
+	return ""
+}
+
+type ConfirmTOTPRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmTOTPRequest) Reset() {
+	*x = ConfirmTOTPRequest{}
+	mi := &file_auth_v1_auth_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmTOTPRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmTOTPRequest) ProtoMessage() {}
+
+func (x *ConfirmTOTPRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmTOTPRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmTOTPRequest) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ConfirmTOTPRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+type ConfirmTOTPResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BackupCodes   []string               `protobuf:"bytes,1,rep,name=backup_codes,json=backupCodes,proto3" json:"backup_codes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmTOTPResponse) Reset() {
+	*x = ConfirmTOTPResponse{}
+	mi := &file_auth_v1_auth_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmTOTPResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmTOTPResponse) ProtoMessage() {}
+
+func (x *ConfirmTOTPResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmTOTPResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmTOTPResponse) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ConfirmTOTPResponse) GetBackupCodes() []string {
+	if x != nil {
+		return x.BackupCodes
+	}
+	return nil
+}
+
+type SwitchTwoFactorMethodRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// email (переключение на totp идёт через SetupTOTP + ConfirmTOTP)
+	Method        string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Password      string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	Code          string `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwitchTwoFactorMethodRequest) Reset() {
+	*x = SwitchTwoFactorMethodRequest{}
+	mi := &file_auth_v1_auth_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchTwoFactorMethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchTwoFactorMethodRequest) ProtoMessage() {}
+
+func (x *SwitchTwoFactorMethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchTwoFactorMethodRequest.ProtoReflect.Descriptor instead.
+func (*SwitchTwoFactorMethodRequest) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SwitchTwoFactorMethodRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *SwitchTwoFactorMethodRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *SwitchTwoFactorMethodRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+type SwitchTwoFactorMethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwitchTwoFactorMethodResponse) Reset() {
+	*x = SwitchTwoFactorMethodResponse{}
+	mi := &file_auth_v1_auth_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchTwoFactorMethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchTwoFactorMethodResponse) ProtoMessage() {}
+
+func (x *SwitchTwoFactorMethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchTwoFactorMethodResponse.ProtoReflect.Descriptor instead.
+func (*SwitchTwoFactorMethodResponse) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{36}
+}
+
+type RegenerateBackupCodesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegenerateBackupCodesRequest) Reset() {
+	*x = RegenerateBackupCodesRequest{}
+	mi := &file_auth_v1_auth_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegenerateBackupCodesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegenerateBackupCodesRequest) ProtoMessage() {}
+
+func (x *RegenerateBackupCodesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegenerateBackupCodesRequest.ProtoReflect.Descriptor instead.
+func (*RegenerateBackupCodesRequest) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *RegenerateBackupCodesRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *RegenerateBackupCodesRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+type RegenerateBackupCodesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BackupCodes   []string               `protobuf:"bytes,1,rep,name=backup_codes,json=backupCodes,proto3" json:"backup_codes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegenerateBackupCodesResponse) Reset() {
+	*x = RegenerateBackupCodesResponse{}
+	mi := &file_auth_v1_auth_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegenerateBackupCodesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegenerateBackupCodesResponse) ProtoMessage() {}
+
+func (x *RegenerateBackupCodesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegenerateBackupCodesResponse.ProtoReflect.Descriptor instead.
+func (*RegenerateBackupCodesResponse) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *RegenerateBackupCodesResponse) GetBackupCodes() []string {
+	if x != nil {
+		return x.BackupCodes
+	}
+	return nil
+}
+
+type DeleteAccountRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Password string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	// требуется, если у пользователя включён метод totp (TOTP-код или резервный код)
+	Code          *string `protobuf:"bytes,2,opt,name=code,proto3,oneof" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAccountRequest) Reset() {
+	*x = DeleteAccountRequest{}
+	mi := &file_auth_v1_auth_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAccountRequest) ProtoMessage() {}
+
+func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAccountRequest.ProtoReflect.Descriptor instead.
+func (*DeleteAccountRequest) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *DeleteAccountRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *DeleteAccountRequest) GetCode() string {
+	if x != nil && x.Code != nil {
+		return *x.Code
+	}
+	return ""
+}
+
+type DeleteAccountResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAccountResponse) Reset() {
+	*x = DeleteAccountResponse{}
+	mi := &file_auth_v1_auth_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAccountResponse) ProtoMessage() {}
+
+func (x *DeleteAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_v1_auth_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAccountResponse.ProtoReflect.Descriptor instead.
+func (*DeleteAccountResponse) Descriptor() ([]byte, []int) {
+	return file_auth_v1_auth_proto_rawDescGZIP(), []int{40}
+}
+
 var File_auth_v1_auth_proto protoreflect.FileDescriptor
 
 const file_auth_v1_auth_proto_rawDesc = "" +
@@ -1413,9 +1977,10 @@ const file_auth_v1_auth_proto_rawDesc = "" +
 	"\x16VerifyRegisterResponse\"@\n" +
 	"\fLoginRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"2\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"J\n" +
 	"\rLoginResponse\x12!\n" +
-	"\fchallenge_id\x18\x01 \x01(\tR\vchallengeId\"v\n" +
+	"\fchallenge_id\x18\x01 \x01(\tR\vchallengeId\x12\x16\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\"v\n" +
 	"\x10VerifyOTPRequest\x12!\n" +
 	"\fchallenge_id\x18\x01 \x01(\tR\vchallengeId\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12+\n" +
@@ -1456,7 +2021,36 @@ const file_auth_v1_auth_proto_rawDesc = "" +
 	"\x16ResolveSessionResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId2\xf0\a\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"\x15\n" +
+	"\x13GetTwoFactorRequest\"d\n" +
+	"\x14GetTwoFactorResponse\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x124\n" +
+	"\x16backup_codes_remaining\x18\x02 \x01(\x05R\x14backupCodesRemaining\".\n" +
+	"\x10SetupTOTPRequest\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"L\n" +
+	"\x11SetupTOTPResponse\x12\x16\n" +
+	"\x06secret\x18\x01 \x01(\tR\x06secret\x12\x1f\n" +
+	"\votpauth_url\x18\x02 \x01(\tR\n" +
+	"otpauthUrl\"(\n" +
+	"\x12ConfirmTOTPRequest\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\"8\n" +
+	"\x13ConfirmTOTPResponse\x12!\n" +
+	"\fbackup_codes\x18\x01 \x03(\tR\vbackupCodes\"f\n" +
+	"\x1cSwitchTwoFactorMethodRequest\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x12\n" +
+	"\x04code\x18\x03 \x01(\tR\x04code\"\x1f\n" +
+	"\x1dSwitchTwoFactorMethodResponse\"N\n" +
+	"\x1cRegenerateBackupCodesRequest\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\"B\n" +
+	"\x1dRegenerateBackupCodesResponse\x12!\n" +
+	"\fbackup_codes\x18\x01 \x03(\tR\vbackupCodes\"T\n" +
+	"\x14DeleteAccountRequest\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x17\n" +
+	"\x04code\x18\x02 \x01(\tH\x00R\x04code\x88\x01\x01B\a\n" +
+	"\x05_code\"\x17\n" +
+	"\x15DeleteAccountResponse2\xeb\v\n" +
 	"\vAuthService\x12?\n" +
 	"\bRegister\x12\x18.auth.v1.RegisterRequest\x1a\x19.auth.v1.RegisterResponse\x12Q\n" +
 	"\x0eVerifyRegister\x12\x1e.auth.v1.VerifyRegisterRequest\x1a\x1f.auth.v1.VerifyRegisterResponse\x126\n" +
@@ -1470,7 +2064,13 @@ const file_auth_v1_auth_proto_rawDesc = "" +
 	"\x0eChangePassword\x12\x1e.auth.v1.ChangePasswordRequest\x1a\x1f.auth.v1.ChangePasswordResponse\x12K\n" +
 	"\fListSessions\x12\x1c.auth.v1.ListSessionsRequest\x1a\x1d.auth.v1.ListSessionsResponse\x12W\n" +
 	"\x10TerminateSession\x12 .auth.v1.TerminateSessionRequest\x1a!.auth.v1.TerminateSessionResponse\x12Q\n" +
-	"\x0eResolveSession\x12\x1e.auth.v1.ResolveSessionRequest\x1a\x1f.auth.v1.ResolveSessionResponseBFZDgithub.com/maltira/chavo-project-backend/proto/gen/go/auth/v1;authv1b\x06proto3"
+	"\x0eResolveSession\x12\x1e.auth.v1.ResolveSessionRequest\x1a\x1f.auth.v1.ResolveSessionResponse\x12K\n" +
+	"\fGetTwoFactor\x12\x1c.auth.v1.GetTwoFactorRequest\x1a\x1d.auth.v1.GetTwoFactorResponse\x12B\n" +
+	"\tSetupTOTP\x12\x19.auth.v1.SetupTOTPRequest\x1a\x1a.auth.v1.SetupTOTPResponse\x12H\n" +
+	"\vConfirmTOTP\x12\x1b.auth.v1.ConfirmTOTPRequest\x1a\x1c.auth.v1.ConfirmTOTPResponse\x12f\n" +
+	"\x15SwitchTwoFactorMethod\x12%.auth.v1.SwitchTwoFactorMethodRequest\x1a&.auth.v1.SwitchTwoFactorMethodResponse\x12f\n" +
+	"\x15RegenerateBackupCodes\x12%.auth.v1.RegenerateBackupCodesRequest\x1a&.auth.v1.RegenerateBackupCodesResponse\x12N\n" +
+	"\rDeleteAccount\x12\x1d.auth.v1.DeleteAccountRequest\x1a\x1e.auth.v1.DeleteAccountResponseBFZDgithub.com/maltira/chavo-project-backend/proto/gen/go/auth/v1;authv1b\x06proto3"
 
 var (
 	file_auth_v1_auth_proto_rawDescOnce sync.Once
@@ -1484,43 +2084,55 @@ func file_auth_v1_auth_proto_rawDescGZIP() []byte {
 	return file_auth_v1_auth_proto_rawDescData
 }
 
-var file_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_auth_v1_auth_proto_goTypes = []any{
-	(*ClientInfo)(nil),                   // 0: auth.v1.ClientInfo
-	(*TokenPair)(nil),                    // 1: auth.v1.TokenPair
-	(*Session)(nil),                      // 2: auth.v1.Session
-	(*RegisterRequest)(nil),              // 3: auth.v1.RegisterRequest
-	(*RegisterResponse)(nil),             // 4: auth.v1.RegisterResponse
-	(*VerifyRegisterRequest)(nil),        // 5: auth.v1.VerifyRegisterRequest
-	(*VerifyRegisterResponse)(nil),       // 6: auth.v1.VerifyRegisterResponse
-	(*LoginRequest)(nil),                 // 7: auth.v1.LoginRequest
-	(*LoginResponse)(nil),                // 8: auth.v1.LoginResponse
-	(*VerifyOTPRequest)(nil),             // 9: auth.v1.VerifyOTPRequest
-	(*VerifyOTPResponse)(nil),            // 10: auth.v1.VerifyOTPResponse
-	(*ResendOTPRequest)(nil),             // 11: auth.v1.ResendOTPRequest
-	(*ResendOTPResponse)(nil),            // 12: auth.v1.ResendOTPResponse
-	(*RefreshRequest)(nil),               // 13: auth.v1.RefreshRequest
-	(*RefreshResponse)(nil),              // 14: auth.v1.RefreshResponse
-	(*LogoutRequest)(nil),                // 15: auth.v1.LogoutRequest
-	(*LogoutResponse)(nil),               // 16: auth.v1.LogoutResponse
-	(*RequestPasswordResetRequest)(nil),  // 17: auth.v1.RequestPasswordResetRequest
-	(*RequestPasswordResetResponse)(nil), // 18: auth.v1.RequestPasswordResetResponse
-	(*ConfirmPasswordResetRequest)(nil),  // 19: auth.v1.ConfirmPasswordResetRequest
-	(*ConfirmPasswordResetResponse)(nil), // 20: auth.v1.ConfirmPasswordResetResponse
-	(*ChangePasswordRequest)(nil),        // 21: auth.v1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil),       // 22: auth.v1.ChangePasswordResponse
-	(*ListSessionsRequest)(nil),          // 23: auth.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),         // 24: auth.v1.ListSessionsResponse
-	(*TerminateSessionRequest)(nil),      // 25: auth.v1.TerminateSessionRequest
-	(*TerminateSessionResponse)(nil),     // 26: auth.v1.TerminateSessionResponse
-	(*ResolveSessionRequest)(nil),        // 27: auth.v1.ResolveSessionRequest
-	(*ResolveSessionResponse)(nil),       // 28: auth.v1.ResolveSessionResponse
-	(*timestamppb.Timestamp)(nil),        // 29: google.protobuf.Timestamp
+	(*ClientInfo)(nil),                    // 0: auth.v1.ClientInfo
+	(*TokenPair)(nil),                     // 1: auth.v1.TokenPair
+	(*Session)(nil),                       // 2: auth.v1.Session
+	(*RegisterRequest)(nil),               // 3: auth.v1.RegisterRequest
+	(*RegisterResponse)(nil),              // 4: auth.v1.RegisterResponse
+	(*VerifyRegisterRequest)(nil),         // 5: auth.v1.VerifyRegisterRequest
+	(*VerifyRegisterResponse)(nil),        // 6: auth.v1.VerifyRegisterResponse
+	(*LoginRequest)(nil),                  // 7: auth.v1.LoginRequest
+	(*LoginResponse)(nil),                 // 8: auth.v1.LoginResponse
+	(*VerifyOTPRequest)(nil),              // 9: auth.v1.VerifyOTPRequest
+	(*VerifyOTPResponse)(nil),             // 10: auth.v1.VerifyOTPResponse
+	(*ResendOTPRequest)(nil),              // 11: auth.v1.ResendOTPRequest
+	(*ResendOTPResponse)(nil),             // 12: auth.v1.ResendOTPResponse
+	(*RefreshRequest)(nil),                // 13: auth.v1.RefreshRequest
+	(*RefreshResponse)(nil),               // 14: auth.v1.RefreshResponse
+	(*LogoutRequest)(nil),                 // 15: auth.v1.LogoutRequest
+	(*LogoutResponse)(nil),                // 16: auth.v1.LogoutResponse
+	(*RequestPasswordResetRequest)(nil),   // 17: auth.v1.RequestPasswordResetRequest
+	(*RequestPasswordResetResponse)(nil),  // 18: auth.v1.RequestPasswordResetResponse
+	(*ConfirmPasswordResetRequest)(nil),   // 19: auth.v1.ConfirmPasswordResetRequest
+	(*ConfirmPasswordResetResponse)(nil),  // 20: auth.v1.ConfirmPasswordResetResponse
+	(*ChangePasswordRequest)(nil),         // 21: auth.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),        // 22: auth.v1.ChangePasswordResponse
+	(*ListSessionsRequest)(nil),           // 23: auth.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),          // 24: auth.v1.ListSessionsResponse
+	(*TerminateSessionRequest)(nil),       // 25: auth.v1.TerminateSessionRequest
+	(*TerminateSessionResponse)(nil),      // 26: auth.v1.TerminateSessionResponse
+	(*ResolveSessionRequest)(nil),         // 27: auth.v1.ResolveSessionRequest
+	(*ResolveSessionResponse)(nil),        // 28: auth.v1.ResolveSessionResponse
+	(*GetTwoFactorRequest)(nil),           // 29: auth.v1.GetTwoFactorRequest
+	(*GetTwoFactorResponse)(nil),          // 30: auth.v1.GetTwoFactorResponse
+	(*SetupTOTPRequest)(nil),              // 31: auth.v1.SetupTOTPRequest
+	(*SetupTOTPResponse)(nil),             // 32: auth.v1.SetupTOTPResponse
+	(*ConfirmTOTPRequest)(nil),            // 33: auth.v1.ConfirmTOTPRequest
+	(*ConfirmTOTPResponse)(nil),           // 34: auth.v1.ConfirmTOTPResponse
+	(*SwitchTwoFactorMethodRequest)(nil),  // 35: auth.v1.SwitchTwoFactorMethodRequest
+	(*SwitchTwoFactorMethodResponse)(nil), // 36: auth.v1.SwitchTwoFactorMethodResponse
+	(*RegenerateBackupCodesRequest)(nil),  // 37: auth.v1.RegenerateBackupCodesRequest
+	(*RegenerateBackupCodesResponse)(nil), // 38: auth.v1.RegenerateBackupCodesResponse
+	(*DeleteAccountRequest)(nil),          // 39: auth.v1.DeleteAccountRequest
+	(*DeleteAccountResponse)(nil),         // 40: auth.v1.DeleteAccountResponse
+	(*timestamppb.Timestamp)(nil),         // 41: google.protobuf.Timestamp
 }
 var file_auth_v1_auth_proto_depIdxs = []int32{
-	29, // 0: auth.v1.TokenPair.refresh_expires_at:type_name -> google.protobuf.Timestamp
-	29, // 1: auth.v1.Session.created_at:type_name -> google.protobuf.Timestamp
-	29, // 2: auth.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
+	41, // 0: auth.v1.TokenPair.refresh_expires_at:type_name -> google.protobuf.Timestamp
+	41, // 1: auth.v1.Session.created_at:type_name -> google.protobuf.Timestamp
+	41, // 2: auth.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
 	0,  // 3: auth.v1.VerifyOTPRequest.client:type_name -> auth.v1.ClientInfo
 	1,  // 4: auth.v1.VerifyOTPResponse.tokens:type_name -> auth.v1.TokenPair
 	0,  // 5: auth.v1.RefreshRequest.client:type_name -> auth.v1.ClientInfo
@@ -1539,21 +2151,33 @@ var file_auth_v1_auth_proto_depIdxs = []int32{
 	23, // 18: auth.v1.AuthService.ListSessions:input_type -> auth.v1.ListSessionsRequest
 	25, // 19: auth.v1.AuthService.TerminateSession:input_type -> auth.v1.TerminateSessionRequest
 	27, // 20: auth.v1.AuthService.ResolveSession:input_type -> auth.v1.ResolveSessionRequest
-	4,  // 21: auth.v1.AuthService.Register:output_type -> auth.v1.RegisterResponse
-	6,  // 22: auth.v1.AuthService.VerifyRegister:output_type -> auth.v1.VerifyRegisterResponse
-	8,  // 23: auth.v1.AuthService.Login:output_type -> auth.v1.LoginResponse
-	10, // 24: auth.v1.AuthService.VerifyOTP:output_type -> auth.v1.VerifyOTPResponse
-	12, // 25: auth.v1.AuthService.ResendOTP:output_type -> auth.v1.ResendOTPResponse
-	14, // 26: auth.v1.AuthService.Refresh:output_type -> auth.v1.RefreshResponse
-	16, // 27: auth.v1.AuthService.Logout:output_type -> auth.v1.LogoutResponse
-	18, // 28: auth.v1.AuthService.RequestPasswordReset:output_type -> auth.v1.RequestPasswordResetResponse
-	20, // 29: auth.v1.AuthService.ConfirmPasswordReset:output_type -> auth.v1.ConfirmPasswordResetResponse
-	22, // 30: auth.v1.AuthService.ChangePassword:output_type -> auth.v1.ChangePasswordResponse
-	24, // 31: auth.v1.AuthService.ListSessions:output_type -> auth.v1.ListSessionsResponse
-	26, // 32: auth.v1.AuthService.TerminateSession:output_type -> auth.v1.TerminateSessionResponse
-	28, // 33: auth.v1.AuthService.ResolveSession:output_type -> auth.v1.ResolveSessionResponse
-	21, // [21:34] is the sub-list for method output_type
-	8,  // [8:21] is the sub-list for method input_type
+	29, // 21: auth.v1.AuthService.GetTwoFactor:input_type -> auth.v1.GetTwoFactorRequest
+	31, // 22: auth.v1.AuthService.SetupTOTP:input_type -> auth.v1.SetupTOTPRequest
+	33, // 23: auth.v1.AuthService.ConfirmTOTP:input_type -> auth.v1.ConfirmTOTPRequest
+	35, // 24: auth.v1.AuthService.SwitchTwoFactorMethod:input_type -> auth.v1.SwitchTwoFactorMethodRequest
+	37, // 25: auth.v1.AuthService.RegenerateBackupCodes:input_type -> auth.v1.RegenerateBackupCodesRequest
+	39, // 26: auth.v1.AuthService.DeleteAccount:input_type -> auth.v1.DeleteAccountRequest
+	4,  // 27: auth.v1.AuthService.Register:output_type -> auth.v1.RegisterResponse
+	6,  // 28: auth.v1.AuthService.VerifyRegister:output_type -> auth.v1.VerifyRegisterResponse
+	8,  // 29: auth.v1.AuthService.Login:output_type -> auth.v1.LoginResponse
+	10, // 30: auth.v1.AuthService.VerifyOTP:output_type -> auth.v1.VerifyOTPResponse
+	12, // 31: auth.v1.AuthService.ResendOTP:output_type -> auth.v1.ResendOTPResponse
+	14, // 32: auth.v1.AuthService.Refresh:output_type -> auth.v1.RefreshResponse
+	16, // 33: auth.v1.AuthService.Logout:output_type -> auth.v1.LogoutResponse
+	18, // 34: auth.v1.AuthService.RequestPasswordReset:output_type -> auth.v1.RequestPasswordResetResponse
+	20, // 35: auth.v1.AuthService.ConfirmPasswordReset:output_type -> auth.v1.ConfirmPasswordResetResponse
+	22, // 36: auth.v1.AuthService.ChangePassword:output_type -> auth.v1.ChangePasswordResponse
+	24, // 37: auth.v1.AuthService.ListSessions:output_type -> auth.v1.ListSessionsResponse
+	26, // 38: auth.v1.AuthService.TerminateSession:output_type -> auth.v1.TerminateSessionResponse
+	28, // 39: auth.v1.AuthService.ResolveSession:output_type -> auth.v1.ResolveSessionResponse
+	30, // 40: auth.v1.AuthService.GetTwoFactor:output_type -> auth.v1.GetTwoFactorResponse
+	32, // 41: auth.v1.AuthService.SetupTOTP:output_type -> auth.v1.SetupTOTPResponse
+	34, // 42: auth.v1.AuthService.ConfirmTOTP:output_type -> auth.v1.ConfirmTOTPResponse
+	36, // 43: auth.v1.AuthService.SwitchTwoFactorMethod:output_type -> auth.v1.SwitchTwoFactorMethodResponse
+	38, // 44: auth.v1.AuthService.RegenerateBackupCodes:output_type -> auth.v1.RegenerateBackupCodesResponse
+	40, // 45: auth.v1.AuthService.DeleteAccount:output_type -> auth.v1.DeleteAccountResponse
+	27, // [27:46] is the sub-list for method output_type
+	8,  // [8:27] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1565,13 +2189,14 @@ func file_auth_v1_auth_proto_init() {
 		return
 	}
 	file_auth_v1_auth_proto_msgTypes[2].OneofWrappers = []any{}
+	file_auth_v1_auth_proto_msgTypes[39].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_auth_v1_auth_proto_rawDesc), len(file_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"os"
 	"strings"
@@ -14,6 +16,7 @@ type Config struct {
 	RedisURL    string
 
 	JWTSecret            string
+	TOTPEncryptionKey    []byte
 	AccessTokenDuration  time.Duration
 	RefreshTokenDuration time.Duration
 	VerificationTTL      time.Duration
@@ -60,6 +63,18 @@ func Load() (*Config, error) {
 	}
 	if cfg.RedisURL == "" {
 		return nil, errors.New("REDIS_URL is required")
+	}
+
+	// ключ шифрования TOTP-секретов: явный TOTP_ENCRYPTION_KEY (base64, 32 байта) или производный от JWT_SECRET
+	if raw := os.Getenv("TOTP_ENCRYPTION_KEY"); raw != "" {
+		key, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(key) != 32 {
+			return nil, errors.New("TOTP_ENCRYPTION_KEY must be base64-encoded 32 bytes")
+		}
+		cfg.TOTPEncryptionKey = key
+	} else {
+		sum := sha256.Sum256([]byte("chavo-totp-v1:" + cfg.JWTSecret))
+		cfg.TOTPEncryptionKey = sum[:]
 	}
 
 	return cfg, nil

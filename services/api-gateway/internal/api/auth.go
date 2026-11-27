@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authv1 "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1"
+	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
 )
 
@@ -56,7 +57,15 @@ func (h *Handler) login(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"challenge_id": resp.GetChallengeId(), "message": "OTP-код отправлен на вашу почту"})
+	method := resp.GetMethod()
+	if method == "" {
+		method = "email"
+	}
+	msg := "OTP-код отправлен на вашу почту"
+	if method == "totp" {
+		msg = "Введите код из приложения-аутентификатора"
+	}
+	c.JSON(http.StatusOK, gin.H{"challenge_id": resp.GetChallengeId(), "method": method, "message": msg})
 }
 
 func (h *Handler) verifyOTP(c *gin.Context) {
@@ -187,4 +196,119 @@ func (h *Handler) terminateSession(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, httpx.MessageBody{Message: "Сессия завершена"})
+}
+
+func (h *Handler) getTwoFactor(c *gin.Context) {
+	resp, err := h.auth.GetTwoFactor(c.Request.Context(), &authv1.GetTwoFactorRequest{})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"method":                 resp.GetMethod(),
+		"backup_codes_remaining": resp.GetBackupCodesRemaining(),
+	})
+}
+
+func (h *Handler) setupTOTP(c *gin.Context) {
+	var body struct {
+		Password string `json:"password"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.auth.SetupTOTP(c.Request.Context(), &authv1.SetupTOTPRequest{Password: body.Password})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"secret":      resp.GetSecret(),
+		"otpauth_url": resp.GetOtpauthUrl(),
+	})
+}
+
+func (h *Handler) confirmTOTP(c *gin.Context) {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.auth.ConfirmTOTP(c.Request.Context(), &authv1.ConfirmTOTPRequest{Code: body.Code})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"backup_codes": nonNil(resp.GetBackupCodes())})
+}
+
+func (h *Handler) switchTwoFactorMethod(c *gin.Context) {
+	var body struct {
+		Method   string `json:"method"`
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	if _, err := h.auth.SwitchTwoFactorMethod(c.Request.Context(), &authv1.SwitchTwoFactorMethodRequest{
+		Method: body.Method, Password: body.Password, Code: body.Code,
+	}); err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, httpx.MessageBody{Message: "Способ подтверждения входа изменён"})
+}
+
+func (h *Handler) regenerateBackupCodes(c *gin.Context) {
+	var body struct {
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	resp, err := h.auth.RegenerateBackupCodes(c.Request.Context(), &authv1.RegenerateBackupCodesRequest{
+		Password: body.Password, Code: body.Code,
+	})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"backup_codes": nonNil(resp.GetBackupCodes())})
+}
+
+func (h *Handler) deleteAccount(c *gin.Context) {
+	var body struct {
+		Password string  `json:"password"`
+		Code     *string `json:"code"`
+	}
+	if !httpx.BindJSON(c, &body) {
+		return
+	}
+	uid := userID(c)
+	// собираем адреса аватарок заранее, чтобы удалить файлы из MinIO после подтверждения удаления аккаунта
+	var avatarURLs []string
+	if h.media != nil && h.users != nil && uid != "" {
+		if list, err := h.users.ListAvatars(c.Request.Context(), &userv1.ListAvatarsRequest{UserId: uid}); err == nil {
+			for _, item := range list.GetItems() {
+				avatarURLs = append(avatarURLs, item.GetAvatarUrl())
+			}
+		}
+	}
+	if _, err := h.auth.DeleteAccount(c.Request.Context(), &authv1.DeleteAccountRequest{
+		Password: body.Password, Code: body.Code,
+	}); err != nil {
+		h.fail(c, err)
+		return
+	}
+	h.clearRefreshCookie(c)
+	if h.profiles != nil && uid != "" {
+		_ = h.profiles.Deleted(c.Request.Context(), uid)
+	}
+	for _, u := range avatarURLs {
+		h.dropAvatar(u)
+	}
+	c.JSON(http.StatusOK, httpx.MessageBody{Message: "Аккаунт удалён"})
 }

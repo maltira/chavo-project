@@ -19,7 +19,8 @@ import (
 const (
 	minPasswordLength = 8
 	maxPasswordLength = 24
-	otpCodeLength     = 6
+	minCodeLength     = 6
+	maxCodeLength     = 16
 )
 
 type Server struct {
@@ -86,15 +87,16 @@ func (s *Server) Login(ctx context.Context, req *authv1.LoginRequest) (*authv1.L
 	if !validEmail(req.GetEmail()) || !validPassword(req.GetPassword(), false) {
 		return nil, apperror.ErrIncorrectData
 	}
-	challengeID, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword())
+	challengeID, method, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
 		return nil, err
 	}
-	return &authv1.LoginResponse{ChallengeId: challengeID}, nil
+	return &authv1.LoginResponse{ChallengeId: challengeID, Method: method}, nil
 }
 
 func (s *Server) VerifyOTP(ctx context.Context, req *authv1.VerifyOTPRequest) (*authv1.VerifyOTPResponse, error) {
-	if req.GetChallengeId() == "" || utf8.RuneCountInString(req.GetCode()) != otpCodeLength {
+	codeLen := utf8.RuneCountInString(req.GetCode())
+	if req.GetChallengeId() == "" || codeLen < minCodeLength || codeLen > maxCodeLength {
 		return nil, apperror.ErrIncorrectData
 	}
 	userID, err := s.otp.VerifyChallenge(ctx, req.GetChallengeId(), req.GetCode())
@@ -216,4 +218,89 @@ func (s *Server) ResolveSession(ctx context.Context, req *authv1.ResolveSessionR
 		return nil, err
 	}
 	return &authv1.ResolveSessionResponse{UserId: userID.String(), SessionId: sessionID.String()}, nil
+}
+
+func (s *Server) GetTwoFactor(ctx context.Context, _ *authv1.GetTwoFactorRequest) (*authv1.GetTwoFactorResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	method, remaining, err := s.auth.GetTwoFactor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &authv1.GetTwoFactorResponse{Method: method, BackupCodesRemaining: int32(remaining)}, nil
+}
+
+func (s *Server) SetupTOTP(ctx context.Context, req *authv1.SetupTOTPRequest) (*authv1.SetupTOTPResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetPassword() == "" {
+		return nil, apperror.ErrIncorrectData
+	}
+	secret, otpauthURL, err := s.auth.SetupTOTP(ctx, userID, req.GetPassword())
+	if err != nil {
+		return nil, err
+	}
+	return &authv1.SetupTOTPResponse{Secret: secret, OtpauthUrl: otpauthURL}, nil
+}
+
+func (s *Server) ConfirmTOTP(ctx context.Context, req *authv1.ConfirmTOTPRequest) (*authv1.ConfirmTOTPResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetCode() == "" {
+		return nil, apperror.ErrIncorrectData
+	}
+	codes, err := s.auth.ConfirmTOTP(ctx, userID, req.GetCode())
+	if err != nil {
+		return nil, err
+	}
+	return &authv1.ConfirmTOTPResponse{BackupCodes: codes}, nil
+}
+
+func (s *Server) SwitchTwoFactorMethod(ctx context.Context, req *authv1.SwitchTwoFactorMethodRequest) (*authv1.SwitchTwoFactorMethodResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetMethod() == "" || req.GetPassword() == "" || req.GetCode() == "" {
+		return nil, apperror.ErrIncorrectData
+	}
+	if err = s.auth.SwitchTwoFactorMethod(ctx, userID, req.GetMethod(), req.GetPassword(), req.GetCode()); err != nil {
+		return nil, err
+	}
+	return &authv1.SwitchTwoFactorMethodResponse{}, nil
+}
+
+func (s *Server) RegenerateBackupCodes(ctx context.Context, req *authv1.RegenerateBackupCodesRequest) (*authv1.RegenerateBackupCodesResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetPassword() == "" || req.GetCode() == "" {
+		return nil, apperror.ErrIncorrectData
+	}
+	codes, err := s.auth.RegenerateBackupCodes(ctx, userID, req.GetPassword(), req.GetCode())
+	if err != nil {
+		return nil, err
+	}
+	return &authv1.RegenerateBackupCodesResponse{BackupCodes: codes}, nil
+}
+
+func (s *Server) DeleteAccount(ctx context.Context, req *authv1.DeleteAccountRequest) (*authv1.DeleteAccountResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetPassword() == "" {
+		return nil, apperror.ErrIncorrectData
+	}
+	if err = s.auth.DeleteAccount(ctx, userID, req.GetPassword(), req.Code); err != nil {
+		return nil, err
+	}
+	return &authv1.DeleteAccountResponse{}, nil
 }

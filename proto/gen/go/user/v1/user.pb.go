@@ -39,7 +39,9 @@ type Profile struct {
 	// Не задан — статуса нет, он истёк или скрыт от заблокированного.
 	Status *v1.Status `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
 	// не задана - фигуры нет или она скрыта от заблокированного
-	AvatarShape   *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	AvatarShape *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
+	// аккаунт удалён: показывается как «Удалённый аккаунт» без username и фото
+	IsDeleted     bool `protobuf:"varint,12,opt,name=is_deleted,json=isDeleted,proto3" json:"is_deleted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -149,6 +151,13 @@ func (x *Profile) GetAvatarShape() *v11.AvatarShape {
 		return x.AvatarShape
 	}
 	return nil
+}
+
+func (x *Profile) GetIsDeleted() bool {
+	if x != nil {
+		return x.IsDeleted
+	}
+	return false
 }
 
 type AvatarPhoto struct {
@@ -2767,7 +2776,7 @@ var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\xea\x03\n" +
+	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\x89\x04\n" +
 	"\aProfile\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
@@ -2784,7 +2793,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12)\n" +
 	"\x06status\x18\n" +
 	" \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
-	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShapeB\x06\n" +
+	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x1d\n" +
+	"\n" +
+	"is_deleted\x18\f \x01(\bR\tisDeletedB\x06\n" +
 	"\x04_bioB\r\n" +
 	"\v_avatar_url\"\x96\x01\n" +
 	"\vAvatarPhoto\x12\x0e\n" +

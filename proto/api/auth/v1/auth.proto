@@ -23,6 +23,16 @@ service AuthService {
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
   // ResolveSession проверяет refresh-токен без ротации (WS-handshake в Gateway)
   rpc ResolveSession(ResolveSessionRequest) returns (ResolveSessionResponse);
+
+  // Двухфакторная аутентификация (обязательная: email или totp)
+  rpc GetTwoFactor(GetTwoFactorRequest) returns (GetTwoFactorResponse);
+  rpc SetupTOTP(SetupTOTPRequest) returns (SetupTOTPResponse);
+  rpc ConfirmTOTP(ConfirmTOTPRequest) returns (ConfirmTOTPResponse);
+  rpc SwitchTwoFactorMethod(SwitchTwoFactorMethodRequest) returns (SwitchTwoFactorMethodResponse);
+  rpc RegenerateBackupCodes(RegenerateBackupCodesRequest) returns (RegenerateBackupCodesResponse);
+
+  // Необратимое удаление аккаунта
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
 }
 
 // ClientInfo — данные клиента, которые Gateway берёт из HTTP-запроса
@@ -66,6 +76,8 @@ message LoginRequest {
 }
 message LoginResponse {
   string challenge_id = 1;
+  // email или totp
+  string method = 2;
 }
 
 message VerifyOTPRequest {
@@ -129,3 +141,48 @@ message ResolveSessionResponse {
   string user_id = 1;
   string session_id = 2;
 }
+
+message GetTwoFactorRequest {}
+message GetTwoFactorResponse {
+  // email или totp
+  string method = 1;
+  int32 backup_codes_remaining = 2;
+}
+
+message SetupTOTPRequest {
+  string password = 1;
+}
+message SetupTOTPResponse {
+  string secret = 1;
+  string otpauth_url = 2;
+}
+
+message ConfirmTOTPRequest {
+  string code = 1;
+}
+message ConfirmTOTPResponse {
+  repeated string backup_codes = 1;
+}
+
+message SwitchTwoFactorMethodRequest {
+  // email (переключение на totp идёт через SetupTOTP + ConfirmTOTP)
+  string method = 1;
+  string password = 2;
+  string code = 3;
+}
+message SwitchTwoFactorMethodResponse {}
+
+message RegenerateBackupCodesRequest {
+  string password = 1;
+  string code = 2;
+}
+message RegenerateBackupCodesResponse {
+  repeated string backup_codes = 1;
+}
+
+message DeleteAccountRequest {
+  string password = 1;
+  // требуется, если у пользователя включён метод totp (TOTP-код или резервный код)
+  optional string code = 2;
+}
+message DeleteAccountResponse {}

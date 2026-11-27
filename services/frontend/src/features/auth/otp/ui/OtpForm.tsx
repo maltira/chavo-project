@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, KeyboardEvent } from 'react'
 
 import { useSession } from '@/entities/session'
+import type { TwoFactorMethod } from '@/entities/session'
 import { ApiError, errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
-import { Button, InputCode, TextLink } from '@/shared/ui'
+import { Button, Field, Input, InputCode, TextLink } from '@/shared/ui'
 
 import { resendOtp, verifyOtp } from '../api/otp'
 import styles from './OtpForm.module.scss'
@@ -24,14 +25,18 @@ const EXPIRED = ['INVALID_CHALLENGE', 'OTP_ATTEMPTS_EXCEEDED']
 interface Props {
     challengeId: string
     email: string
+    method?: TwoFactorMethod
     // код истёк или попытки закончились: вернуть на ввод пароля, причину не раскрываем
     onExpired: () => void
 }
 
-export function OtpForm({ challengeId, email, onExpired }: Props) {
+export function OtpForm({ challengeId, email, method = 'email', onExpired }: Props) {
     const signIn = useSession((state) => state.signIn)
+    const isTotp = method === 'totp'
+    const [useBackup, setUseBackup] = useState(false)
+    const [backupCode, setBackupCode] = useState('')
     const [digits, setDigits] = useState<string[]>(() => Array(CODE_LENGTH).fill(''))
-    const [cooldown, setCooldown] = useState(RESEND_COOLDOWN)
+    const [cooldown, setCooldown] = useState(isTotp ? 0 : RESEND_COOLDOWN)
     const inputs = useRef<(HTMLInputElement | null)[]>([])
 
     const verify = useMutation({
@@ -80,8 +85,10 @@ export function OtpForm({ challengeId, email, onExpired }: Props) {
         return () => clearTimeout(timer)
     }, [cooldown])
 
-    const code = digits.join('')
-    const complete = code.length === CODE_LENGTH
+    const code = useBackup ? backupCode.trim() : digits.join('')
+    const complete = useBackup
+        ? backupCode.replace(/[\s-]/g, '').length >= 8
+        : digits.join('').length === CODE_LENGTH
     const invalid = verify.isError
 
     function setDigit(index: number, value: string) {
@@ -124,29 +131,63 @@ export function OtpForm({ challengeId, email, onExpired }: Props) {
             }}
         >
             <header className={styles.header}>
-                <h1 className={styles.title}>Подтверждение почты</h1>
+                <h1 className={styles.title}>
+                    {!isTotp
+                        ? 'Подтверждение почты'
+                        : useBackup
+                          ? 'Резервный код'
+                          : 'Код из приложения'}
+                </h1>
                 <p className={styles.text}>
-                    Код подтверждения отправлен на <strong className={styles.email}>{email}</strong>
+                    {!isTotp ? (
+                        <>
+                            Код подтверждения отправлен на{' '}
+                            <strong className={styles.email}>{email}</strong>
+                        </>
+                    ) : useBackup ? (
+                        'Введите один из одноразовых резервных кодов'
+                    ) : (
+                        'Введите 6-значный код из приложения-аутентификатора'
+                    )}
                 </p>
             </header>
 
-            <div className={styles.code} onPaste={onPaste}>
-                {digits.map((digit, index) => (
-                    <InputCode
-                        key={index}
-                        ref={(element) => {
-                            inputs.current[index] = element
-                        }}
-                        aria-label={`Цифра ${index + 1} из ${CODE_LENGTH}`}
-                        aria-invalid={invalid ? true : undefined}
-                        autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                        value={digit}
-                        autoFocus={index === 0}
-                        onChange={(event) => setDigit(index, event.target.value)}
-                        onKeyDown={(event) => onKeyDown(index, event)}
-                    />
-                ))}
-            </div>
+            {isTotp && useBackup ? (
+                <Field label="Резервный код">
+                    {(props) => (
+                        <Input
+                            {...props}
+                            autoFocus
+                            autoComplete="off"
+                            placeholder="XXXX-XXXX"
+                            aria-invalid={invalid ? true : undefined}
+                            value={backupCode}
+                            onChange={(event) => {
+                                verify.reset()
+                                setBackupCode(event.target.value.toUpperCase())
+                            }}
+                        />
+                    )}
+                </Field>
+            ) : (
+                <div className={styles.code} onPaste={onPaste}>
+                    {digits.map((digit, index) => (
+                        <InputCode
+                            key={index}
+                            ref={(element) => {
+                                inputs.current[index] = element
+                            }}
+                            aria-label={`Цифра ${index + 1} из ${CODE_LENGTH}`}
+                            aria-invalid={invalid ? true : undefined}
+                            autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                            value={digit}
+                            autoFocus={index === 0}
+                            onChange={(event) => setDigit(index, event.target.value)}
+                            onKeyDown={(event) => onKeyDown(index, event)}
+                        />
+                    ))}
+                </div>
+            )}
 
             <div className={styles.actions}>
                 <Button
@@ -156,16 +197,30 @@ export function OtpForm({ challengeId, email, onExpired }: Props) {
                 >
                     Продолжить
                 </Button>
-                <p className={styles.resend}>
-                    <span className={styles.muted}>Код не пришёл?</span>{' '}
-                    <TextLink
-                        as="button"
-                        disabled={cooldown > 0 || resend.isPending}
-                        onClick={() => resend.mutate({ challenge_id: challengeId })}
-                    >
-                        {cooldown > 0 ? `${cooldown} с` : 'Отправить снова'}
-                    </TextLink>
-                </p>
+                {isTotp ? (
+                    <p className={styles.resend}>
+                        <TextLink
+                            as="button"
+                            onClick={() => {
+                                verify.reset()
+                                setUseBackup((v) => !v)
+                            }}
+                        >
+                            {useBackup ? 'Ввести код из приложения' : 'Использовать резервный код'}
+                        </TextLink>
+                    </p>
+                ) : (
+                    <p className={styles.resend}>
+                        <span className={styles.muted}>Код не пришёл?</span>{' '}
+                        <TextLink
+                            as="button"
+                            disabled={cooldown > 0 || resend.isPending}
+                            onClick={() => resend.mutate({ challenge_id: challengeId })}
+                        >
+                            {cooldown > 0 ? `${cooldown} с` : 'Отправить снова'}
+                        </TextLink>
+                    </p>
+                )}
             </div>
         </form>
     )

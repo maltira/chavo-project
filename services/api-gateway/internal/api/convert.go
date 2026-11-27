@@ -59,6 +59,7 @@ type profileJSON struct {
 	// Status = null, если статуса нет, он истёк или скрыт от заблокированного.
 	Status      *statusJSON      `json:"status"`
 	AvatarShape *avatarShapeJSON `json:"avatar_shape"`
+	IsDeleted   bool             `json:"is_deleted,omitempty"`
 }
 
 func toProfile(p *userv1.Profile) profileJSON {
@@ -74,6 +75,7 @@ func toProfile(p *userv1.Profile) profileJSON {
 		UpdatedAt:   p.GetUpdatedAt().AsTime(),
 		Status:      toStatus(p.GetStatus()),
 		AvatarShape: toAvatarShape(p.GetAvatarShape()),
+		IsDeleted:   p.GetIsDeleted(),
 	}
 }
 

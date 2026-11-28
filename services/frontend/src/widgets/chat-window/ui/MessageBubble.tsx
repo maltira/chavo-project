@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
+import {
+    MAX_DISTINCT_REACTIONS_PER_MSG,
+    MAX_USER_REACTIONS_PER_MSG,
+} from '@/entities/message'
 import type { Message } from '@/entities/message'
 import { useFavoriteEmojis, useProfileCard, UserAvatar, useUser } from '@/entities/user'
 import { cn, copyRich, formatTime, notify, useDismiss } from '@/shared/lib'
@@ -66,12 +71,21 @@ function AuthorAvatar({ userId }: { userId: string | null }) {
     )
 }
 
-// высота панели действий с полосой быстрых реакций и отступом от сообщения
-const ACTIONS_SPACE = 124
+// отступ всплывающего меню от краёв окна
+const MENU_EDGE = 8
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 // задержка долгого нажатия на тач-экране, мс
 const LONG_PRESS_MS = 450
 const LONG_PRESS_MOVE = 10
+
+interface MenuAnchor {
+    x: number
+    y: number
+    align: 'start' | 'end'
+}
+
+// одновременно может быть открыто только одно меню действий с сообщением
+let closeActiveMenu: (() => void) | null = null
 
 function AuthorName({ userId, className }: { userId: string; className?: string }) {
     const user = useUser(userId)
@@ -129,16 +143,32 @@ export function MessageBubble({
     selected,
     onToggleSelect,
 }: Props) {
-    const [open, setOpen] = useState(false)
+    const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null)
+    const [placedMenu, setPlacedMenu] = useState<{ x: number; y: number } | null>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
     const favorites = useFavoriteEmojis(pickerOpen)
+    const openProfile = useProfileCard((state) => state.open)
 
-    const [above, setAbove] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const bodyRef = useRef<HTMLDivElement>(null)
+    const menuRef = useRef<HTMLDivElement>(null)
     const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(
         null,
     )
+
+    const open = menuAnchor !== null
+
+    const closeSelf = useCallback(() => {
+        setMenuAnchor(null)
+        setPickerOpen(false)
+    }, [])
+
+    function closeMenu() {
+        if (closeActiveMenu === closeSelf) {
+            closeActiveMenu = null
+        }
+        closeSelf()
+    }
 
     function clearLongPress() {
         if (longPressRef.current) {
@@ -147,51 +177,79 @@ export function MessageBubble({
         }
     }
 
-    useEffect(() => clearLongPress, [])
+    useEffect(
+        () => () => {
+            clearLongPress()
+            if (closeActiveMenu === closeSelf) {
+                closeActiveMenu = null
+            }
+        },
+        [closeSelf],
+    )
 
-    useDismiss(open, rootRef, () => {
-        const inside = rootRef.current?.contains(document.activeElement)
-        setOpen(false)
-        setPickerOpen(false)
+    useDismiss(open, menuRef, () => {
+        const activeEl = document.activeElement
+        const inside =
+            menuRef.current?.contains(activeEl) || rootRef.current?.contains(activeEl)
+        closeMenu()
         if (inside) {
             bodyRef.current?.focus()
         }
     })
 
+    // подгоняем позицию меню в пределы экрана после замера реальных размеров
+    useLayoutEffect(() => {
+        const node = menuRef.current
+        if (!menuAnchor || !node) {
+            setPlacedMenu(null)
+            return
+        }
+        const width = node.offsetWidth
+        const height = node.offsetHeight
+        const rawLeft = menuAnchor.align === 'end' ? menuAnchor.x - width : menuAnchor.x
+        const x = Math.max(MENU_EDGE, Math.min(rawLeft, window.innerWidth - width - MENU_EDGE))
+        const y = Math.max(MENU_EDGE, Math.min(menuAnchor.y, window.innerHeight - height - MENU_EDGE))
+        setPlacedMenu({ x, y })
+    }, [menuAnchor, pickerOpen])
+
     const deleted = message.is_deleted
     const interactive = !deleted && !message.pending
     const reactions = message.reactions ?? []
+    const hasReactions = !deleted && reactions.length > 0
+    const myReactionsCount = reactions.reduce((sum, r) => sum + (r.me ? 1 : 0), 0)
+    // когда достигнут лимит уникальных или своих реакций на сообщение - скрываем селектор эмодзи
+    const canAddReaction =
+        reactions.length < MAX_DISTINCT_REACTIONS_PER_MSG &&
+        myReactionsCount < MAX_USER_REACTIONS_PER_MSG
 
-    function computeAbove() {
-        const row = rootRef.current
-        const log = row?.closest('[role="log"]')
-        if (row && log) {
-            const space = log.getBoundingClientRect().bottom - row.getBoundingClientRect().bottom
-            setAbove(space < ACTIONS_SPACE)
+    function openMenuAt(x: number, y: number) {
+        if (closeActiveMenu && closeActiveMenu !== closeSelf) {
+            closeActiveMenu()
         }
+        closeActiveMenu = closeSelf
+        setPickerOpen(false)
+        setMenuAnchor({ x, y, align: mine ? 'end' : 'start' })
     }
 
-    function openMenu() {
-        if (!open) {
-            computeAbove()
+    function openMenuNearBubble() {
+        const rect = bodyRef.current?.getBoundingClientRect()
+        if (rect) {
+            openMenuAt(mine ? rect.right : rect.left, rect.bottom + 6)
+        } else {
+            openMenuAt(MENU_EDGE, MENU_EDGE)
         }
-        setPickerOpen(false)
-        setOpen(true)
     }
 
     function toggle() {
-        if (!open) {
-            computeAbove()
-            setPickerOpen(false)
-        } else {
-            setPickerOpen(false)
+        if (open) {
+            closeMenu()
+            return
         }
-        setOpen((value) => !value)
+        openMenuNearBubble()
     }
 
     function act(action: () => void) {
-        setOpen(false)
-        setPickerOpen(false)
+        closeMenu()
         action()
     }
 
@@ -289,7 +347,11 @@ export function MessageBubble({
                     aria-expanded={open}
                     tabIndex={-1}
                     className={cn(styles.menuTrigger, open && styles.menuTriggerOpen)}
-                    onMouseDown={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => {
+                        if (open) {
+                            event.stopPropagation()
+                        }
+                    }}
                     onClick={toggle}
                 />
             )}
@@ -302,6 +364,43 @@ export function MessageBubble({
                         deleted && styles.deleted,
                         highlighted && styles.highlighted,
                     )}
+                    onContextMenu={(event) => {
+                        if (!interactive || selecting) {
+                            return
+                        }
+                        event.preventDefault()
+                        openMenuAt(event.clientX, event.clientY)
+                    }}
+                    onPointerDown={(event) => {
+                        if (!interactive || selecting || event.pointerType !== 'touch') {
+                            return
+                        }
+                        clearLongPress()
+                        const x = event.clientX
+                        const y = event.clientY
+                        longPressRef.current = {
+                            x,
+                            y,
+                            timer: setTimeout(() => {
+                                longPressRef.current = null
+                                openMenuAt(x, y)
+                            }, LONG_PRESS_MS),
+                        }
+                    }}
+                    onPointerMove={(event) => {
+                        const lp = longPressRef.current
+                        if (!lp) {
+                            return
+                        }
+                        if (
+                            Math.hypot(event.clientX - lp.x, event.clientY - lp.y) >
+                            LONG_PRESS_MOVE
+                        ) {
+                            clearLongPress()
+                        }
+                    }}
+                    onPointerUp={clearLongPress}
+                    onPointerCancel={clearLongPress}
                 >
                     {/* имя автора - внутри пузыря, над цитатой и текстом */}
                     {showAuthor && (
@@ -330,6 +429,7 @@ export function MessageBubble({
                                             <RichText
                                                 text={replyTo.content ?? ''}
                                                 entities={replyTo.entities}
+                                                interactive={false}
                                             />
                                         )}
                                     </span>
@@ -341,17 +441,10 @@ export function MessageBubble({
                     )}
                     <div
                         ref={bodyRef}
-                        className={styles.body}
+                        className={cn(styles.body, hasReactions && styles.bodyWithReactions)}
                         tabIndex={interactive && !selecting ? 0 : undefined}
                         aria-haspopup={interactive && !selecting ? 'menu' : undefined}
                         aria-expanded={interactive && !selecting ? open : undefined}
-                        onContextMenu={(event) => {
-                            if (!interactive || selecting) {
-                                return
-                            }
-                            event.preventDefault()
-                            toggle()
-                        }}
                         onKeyDown={(event) => {
                             if (!interactive || selecting) {
                                 return
@@ -366,36 +459,6 @@ export function MessageBubble({
                                 toggle()
                             }
                         }}
-                        onPointerDown={(event) => {
-                            if (!interactive || selecting || event.pointerType !== 'touch') {
-                                return
-                            }
-                            clearLongPress()
-                            const x = event.clientX
-                            const y = event.clientY
-                            longPressRef.current = {
-                                x,
-                                y,
-                                timer: setTimeout(() => {
-                                    longPressRef.current = null
-                                    openMenu()
-                                }, LONG_PRESS_MS),
-                            }
-                        }}
-                        onPointerMove={(event) => {
-                            const lp = longPressRef.current
-                            if (!lp) {
-                                return
-                            }
-                            if (
-                                Math.hypot(event.clientX - lp.x, event.clientY - lp.y) >
-                                LONG_PRESS_MOVE
-                            ) {
-                                clearLongPress()
-                            }
-                        }}
-                        onPointerUp={clearLongPress}
-                        onPointerCancel={clearLongPress}
                     >
                         <span className={styles.text}>
                             {deleted ? (
@@ -404,157 +467,245 @@ export function MessageBubble({
                                 <RichText
                                     text={message.content ?? ''}
                                     entities={message.entities}
+                                    onMentionClick={openProfile}
                                 />
                             )}
-                            {/* невидимая копия занимает место в конце последней строки:
-                                если не помещается, время уходит на новую строку */}
-                            <span className={styles.metaSpace} aria-hidden="true">
-                                {metaContent}
-                            </span>
+                            {!hasReactions && (
+                                /* невидимая копия занимает место в конце последней строки:
+                                   если не помещается, время уходит на новую строку */
+                                <span className={styles.metaSpace} aria-hidden="true">
+                                    {metaContent}
+                                </span>
+                            )}
                         </span>
-                        <span className={styles.meta}>{metaContent}</span>
+                        {!hasReactions && <span className={styles.meta}>{metaContent}</span>}
                     </div>
+                    {!deleted && message.link_preview && (
+                        <a
+                            href={message.link_preview.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.linkPreview}
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <div className={styles.linkPreviewBody}>
+                                {message.link_preview.site_name && (
+                                    <span className={styles.linkPreviewSite}>
+                                        {message.link_preview.site_name}
+                                    </span>
+                                )}
+                                {message.link_preview.title && (
+                                    <span className={styles.linkPreviewTitle}>
+                                        {message.link_preview.title}
+                                    </span>
+                                )}
+                                {message.link_preview.description && (
+                                    <span className={styles.linkPreviewDesc}>
+                                        {message.link_preview.description}
+                                    </span>
+                                )}
+                            </div>
+                            {message.link_preview.image_url && (
+                                <img
+                                    src={message.link_preview.image_url}
+                                    alt=""
+                                    className={styles.linkPreviewImg}
+                                    loading="lazy"
+                                />
+                            )}
+                        </a>
+                    )}
+                    {hasReactions && (
+                        <div className={styles.reactionsFooter}>
+                            <div className={styles.reactions} aria-label="Реакции">
+                                {reactions.map((r) => (
+                                    <button
+                                        key={r.emoji}
+                                        type="button"
+                                        disabled={!interactive || selecting || !onToggleReaction}
+                                        aria-pressed={r.me}
+                                        aria-label={`Реакция ${r.emoji}: ${r.count}`}
+                                        title="Нажмите, чтобы поставить или снять; ПКМ — кто отреагировал"
+                                        className={cn(
+                                            styles.reactionPill,
+                                            r.me && styles.reactionMine,
+                                        )}
+                                        onClick={() => {
+                                            if (
+                                                !r.me &&
+                                                myReactionsCount >= MAX_USER_REACTIONS_PER_MSG
+                                            ) {
+                                                return
+                                            }
+                                            onToggleReaction?.(message, r.emoji, !r.me)
+                                        }}
+                                        onContextMenu={(event) => {
+                                            if (!onShowReactions) {
+                                                return
+                                            }
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                            onShowReactions(message, r.emoji)
+                                        }}
+                                    >
+                                        <span className={styles.reactionEmoji}>{r.emoji}</span>
+                                        <span className={styles.reactionCount}>{r.count}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <span className={styles.metaInline}>{metaContent}</span>
+                        </div>
+                    )}
                 </div>
 
-                {!deleted && reactions.length > 0 && (
-                    <div className={styles.reactions} aria-label="Реакции">
-                        {reactions.map((r) => (
-                            <button
-                                key={r.emoji}
-                                type="button"
-                                disabled={!interactive || selecting || !onToggleReaction}
-                                aria-pressed={r.me}
-                                aria-label={`Реакция ${r.emoji}: ${r.count}`}
-                                title="Нажмите, чтобы поставить или снять; ПКМ — кто отреагировал"
-                                className={cn(styles.reactionPill, r.me && styles.reactionMine)}
-                                onClick={() => onToggleReaction?.(message, r.emoji, !r.me)}
-                                onContextMenu={(event) => {
-                                    if (!onShowReactions) {
-                                        return
-                                    }
-                                    event.preventDefault()
-                                    onShowReactions(message, r.emoji)
-                                }}
-                            >
-                                <span className={styles.reactionEmoji}>{r.emoji}</span>
-                                <span className={styles.reactionCount}>{r.count}</span>
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                {open && (
-                    <div
-                        role="menu"
-                        aria-label="Действия с сообщением"
-                        className={cn(
-                            styles.actionsWrap,
-                            mine && styles.actionsMine,
-                            above && styles.actionsAbove,
-                        )}
-                    >
-                        {onToggleReaction && (
-                            <div className={styles.quickReactions} aria-label="Быстрые реакции">
-                                {QUICK_REACTIONS.map((emoji) => {
-                                    const active = reactions.some((r) => r.emoji === emoji && r.me)
-                                    return (
+                {open &&
+                    createPortal(
+                        <div
+                            ref={menuRef}
+                            role="menu"
+                            aria-label="Действия с сообщением"
+                            className={cn(styles.actionsWrap, mine && styles.actionsMine)}
+                            style={{
+                                left: (placedMenu ?? menuAnchor).x,
+                                top: (placedMenu ?? menuAnchor).y,
+                            }}
+                            onContextMenu={(event) => event.preventDefault()}
+                        >
+                            {onToggleReaction && canAddReaction && (
+                                <div className={styles.quickReactions} aria-label="Быстрые реакции">
+                                    {QUICK_REACTIONS.map((emoji) => {
+                                        const active = reactions.some(
+                                            (r) => r.emoji === emoji && r.me,
+                                        )
+                                        return (
+                                            <button
+                                                key={emoji}
+                                                type="button"
+                                                className={cn(
+                                                    styles.quickEmoji,
+                                                    active && styles.quickEmojiActive,
+                                                )}
+                                                aria-label={`Реакция ${emoji}`}
+                                                aria-pressed={active}
+                                                onClick={() => pickReaction(emoji)}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        )
+                                    })}
+                                    <IconButton
+                                        icon="add"
+                                        size={28}
+                                        aria-label="Выбрать реакцию"
+                                        aria-expanded={pickerOpen}
+                                        isActive={pickerOpen}
+                                        onClick={() => setPickerOpen((v) => !v)}
+                                    />
+                                </div>
+                            )}
+                            {pickerOpen && onToggleReaction && canAddReaction ? (
+                                <div className={styles.reactionPicker}>
+                                    <EmojiPicker
+                                        onPick={(emoji) => pickReaction(emoji)}
+                                        favorites={favorites.list}
+                                        onToggleFavorite={favorites.toggle}
+                                    />
+                                </div>
+                            ) : (
+                                <div className={styles.actions}>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.actionItem}
+                                        onClick={() => act(() => onReply(message))}
+                                    >
+                                        <Icon name="reply" size={18} color="currentColor" />
+                                        <span>Ответить</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.actionItem}
+                                        onClick={() => act(() => onForward(message))}
+                                    >
+                                        <Icon name="forward" size={18} color="currentColor" />
+                                        <span>Переслать</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.actionItem}
+                                        onClick={() => act(copy)}
+                                    >
+                                        <Icon name="copy" size={18} color="currentColor" />
+                                        <span>Копировать</span>
+                                    </button>
+                                    {pinned !== null && (
                                         <button
-                                            key={emoji}
                                             type="button"
-                                            className={cn(
-                                                styles.quickEmoji,
-                                                active && styles.quickEmojiActive,
-                                            )}
-                                            aria-label={`Реакция ${emoji}`}
-                                            aria-pressed={active}
-                                            onClick={() => pickReaction(emoji)}
+                                            role="menuitem"
+                                            className={styles.actionItem}
+                                            onClick={() => act(() => onPin(message))}
                                         >
-                                            {emoji}
+                                            <Icon name="pinned" size={18} color="currentColor" />
+                                            <span>{pinned ? 'Открепить' : 'Закрепить'}</span>
                                         </button>
-                                    )
-                                })}
-                                <IconButton
-                                    icon="add"
-                                    size={28}
-                                    aria-label="Выбрать реакцию"
-                                    aria-expanded={pickerOpen}
-                                    isActive={pickerOpen}
-                                    onClick={() => setPickerOpen((v) => !v)}
-                                />
-                            </div>
-                        )}
-                        {pickerOpen && onToggleReaction && (
-                            <div className={styles.reactionPicker}>
-                                <EmojiPicker
-                                    onPick={(emoji) => pickReaction(emoji)}
-                                    favorites={favorites.list}
-                                    onToggleFavorite={favorites.toggle}
-                                />
-                            </div>
-                        )}
-                        <div className={styles.actions}>
-                            <IconButton
-                                role="menuitem"
-                                icon="reply"
-                                aria-label="Ответить"
-                                onClick={() => act(() => onReply(message))}
-                            />
-                            <IconButton
-                                role="menuitem"
-                                icon="forward"
-                                aria-label="Переслать"
-                                onClick={() => act(() => onForward(message))}
-                            />
-                            <IconButton
-                                role="menuitem"
-                                icon="copy"
-                                aria-label="Копировать"
-                                onClick={() => act(copy)}
-                            />
-                            {pinned !== null && (
-                                <IconButton
-                                    role="menuitem"
-                                    icon="pinned"
-                                    aria-label={pinned ? 'Открепить' : 'Закрепить'}
-                                    onClick={() => act(() => onPin(message))}
-                                />
+                                    )}
+                                    {onShowReactions && reactions.length > 0 && (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={styles.actionItem}
+                                            onClick={() => act(() => onShowReactions(message))}
+                                        >
+                                            <Icon name="heart" size={18} color="currentColor" />
+                                            <span>Реакции</span>
+                                        </button>
+                                    )}
+                                    {onShowReaders && (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={styles.actionItem}
+                                            onClick={() => act(() => onShowReaders(message))}
+                                        >
+                                            <Icon name="check-double" size={18} color="currentColor" />
+                                            <span>Кто прочитал</span>
+                                        </button>
+                                    )}
+                                    {canEdit && (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className={styles.actionItem}
+                                            onClick={() => act(() => onEdit(message))}
+                                        >
+                                            <Icon name="edit" size={18} color="currentColor" />
+                                            <span>Изменить</span>
+                                        </button>
+                                    )}
+                                    {canDelete && (
+                                        <>
+                                            <div className={styles.actionDivider} role="separator" />
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className={cn(
+                                                    styles.actionItem,
+                                                    styles.actionDanger,
+                                                )}
+                                                onClick={() => act(() => onDelete(message))}
+                                            >
+                                                <Icon name="trash" size={18} color="currentColor" />
+                                                <span>Удалить</span>
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             )}
-                            {onShowReactions && reactions.length > 0 && (
-                                <IconButton
-                                    role="menuitem"
-                                    icon="heart"
-                                    aria-label="Кто отреагировал"
-                                    onClick={() => act(() => onShowReactions(message))}
-                                />
-                            )}
-                            {onShowReaders && (
-                                <IconButton
-                                    role="menuitem"
-                                    icon="check-double"
-                                    aria-label="Кто прочитал"
-                                    onClick={() => act(() => onShowReaders(message))}
-                                />
-                            )}
-                            {canEdit && (
-                                <IconButton
-                                    role="menuitem"
-                                    icon="edit"
-                                    aria-label="Изменить"
-                                    onClick={() => act(() => onEdit(message))}
-                                />
-                            )}
-                            {canDelete && (
-                                <IconButton
-                                    role="menuitem"
-                                    icon="trash"
-                                    aria-label="Удалить"
-                                    className={styles.danger}
-                                    onClick={() => act(() => onDelete(message))}
-                                />
-                            )}
-                        </div>
-                    </div>
-                )}
+                        </div>,
+                        document.body,
+                    )}
             </div>
 
             {!mine && interactive && !selecting && (
@@ -566,7 +717,11 @@ export function MessageBubble({
                     aria-expanded={open}
                     tabIndex={-1}
                     className={cn(styles.menuTrigger, open && styles.menuTriggerOpen)}
-                    onMouseDown={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => {
+                        if (open) {
+                            event.stopPropagation()
+                        }
+                    }}
                     onClick={toggle}
                 />
             )}

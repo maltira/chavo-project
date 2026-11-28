@@ -21,6 +21,7 @@ type ProfileRepository interface {
 	// Update меняет перечисленные колонки; nil записывается как NULL (например, убранная аватарка)
 	Update(ctx context.Context, userID uuid.UUID, updates map[string]any) error
 	GetAllBySearch(ctx context.Context, query string, limit, offset int) ([]models.Profile, error)
+	SearchByIDs(ctx context.Context, userIDs []uuid.UUID, query string, limit int) ([]models.Profile, error)
 	FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
 	FindByIDIncludeDeleted(ctx context.Context, userID uuid.UUID) (*models.Profile, error)
 	DeleteAccount(ctx context.Context, userID uuid.UUID) error
@@ -172,6 +173,63 @@ func (r *profileRepository) GetAllBySearch(ctx context.Context, query string, li
 		profiles = append(profiles, *p)
 	}
 	return profiles, nil
+}
+
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
+func (r *profileRepository) SearchByIDs(ctx context.Context, userIDs []uuid.UUID, query string, limit int) ([]models.Profile, error) {
+	if len(userIDs) == 0 || limit <= 0 {
+		return []models.Profile{}, nil
+	}
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if query == "" {
+		rows, err = r.pool.Query(ctx,
+			`SELECT `+profileColumns+`
+			 FROM profiles p `+profileJoins+`
+			 WHERE p.user_id = ANY($1) AND p.deleted_at IS NULL
+			 ORDER BY p.username ASC
+			 LIMIT $2`,
+			userIDs, limit,
+		)
+	} else {
+		esc := escapeLike(query)
+		contains := "%" + esc + "%"
+		prefix := esc + "%"
+		rows, err = r.pool.Query(ctx,
+			`SELECT `+profileColumns+`
+			 FROM profiles p `+profileJoins+`
+			 WHERE p.user_id = ANY($1) AND p.deleted_at IS NULL
+			   AND (p.username ILIKE $2 ESCAPE '\' OR p.display_name ILIKE $2 ESCAPE '\')
+			 ORDER BY
+			   CASE WHEN LOWER(p.username) = LOWER($3) THEN 0
+			        WHEN p.username ILIKE $4 ESCAPE '\' THEN 1
+			        WHEN p.display_name ILIKE $4 ESCAPE '\' THEN 2
+			        ELSE 3 END,
+			   p.username ASC
+			 LIMIT $5`,
+			userIDs, contains, query, prefix, limit,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("search profiles by ids: %w", err)
+	}
+	defer rows.Close()
+
+	profiles := make([]models.Profile, 0)
+	for rows.Next() {
+		p, err := scanProfile(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan profile row: %w", err)
+		}
+		profiles = append(profiles, *p)
+	}
+	return profiles, rows.Err()
 }
 
 func (r *profileRepository) FindByID(ctx context.Context, userID uuid.UUID) (*models.Profile, error) {

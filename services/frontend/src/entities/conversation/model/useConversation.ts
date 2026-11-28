@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 
-import { getConversation, getMembers } from '../api/conversations'
+import { getConversation, getMembers, listUnreadMentions } from '../api/conversations'
 import type { Member } from '../api/conversations'
 import { findInLists } from './useConversations'
 
 export const conversationKey = (id: string) => ['conversation', id] as const
 export const membersKey = (id: string) => ['members', id] as const
+export const unreadMentionsKey = (id: string) => ['unread-mentions', id] as const
 
 // карточка чата; пока загружается, берётся строка из списка - окно открывается без ожидания
 export function useConversation(id: string, enabled = true) {
@@ -25,6 +26,15 @@ export function useMembers(id: string | null | undefined) {
         queryKey: membersKey(id ?? ''),
         queryFn: () => getMembers(id!),
         enabled: !!id,
+    })
+}
+
+// непрочитанные упоминания меня в чате (для кнопки @)
+export function useUnreadMentions(id: string | null | undefined, enabled = true) {
+    return useQuery({
+        queryKey: unreadMentionsKey(id ?? ''),
+        queryFn: () => listUnreadMentions(id!),
+        enabled: !!id && enabled,
     })
 }
 

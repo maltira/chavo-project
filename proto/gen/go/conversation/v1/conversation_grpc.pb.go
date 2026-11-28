@@ -64,6 +64,7 @@ const (
 	ConversationService_UnpinMessage_FullMethodName          = "/conversation.v1.ConversationService/UnpinMessage"
 	ConversationService_AddReaction_FullMethodName           = "/conversation.v1.ConversationService/AddReaction"
 	ConversationService_RemoveReaction_FullMethodName        = "/conversation.v1.ConversationService/RemoveReaction"
+	ConversationService_ListUnreadMentions_FullMethodName    = "/conversation.v1.ConversationService/ListUnreadMentions"
 )
 
 // ConversationServiceClient is the client API for ConversationService service.
@@ -133,6 +134,8 @@ type ConversationServiceClient interface {
 	// реакции на сообщения: добавить или снять свою реакцию; ответ - актуальные реакции сообщения
 	AddReaction(ctx context.Context, in *AddReactionRequest, opts ...grpc.CallOption) (*AddReactionResponse, error)
 	RemoveReaction(ctx context.Context, in *RemoveReactionRequest, opts ...grpc.CallOption) (*RemoveReactionResponse, error)
+	// непрочитанные упоминания пользователя в чате (в хронологическом порядке)
+	ListUnreadMentions(ctx context.Context, in *ListUnreadMentionsRequest, opts ...grpc.CallOption) (*ListUnreadMentionsResponse, error)
 }
 
 type conversationServiceClient struct {
@@ -593,6 +596,16 @@ func (c *conversationServiceClient) RemoveReaction(ctx context.Context, in *Remo
 	return out, nil
 }
 
+func (c *conversationServiceClient) ListUnreadMentions(ctx context.Context, in *ListUnreadMentionsRequest, opts ...grpc.CallOption) (*ListUnreadMentionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUnreadMentionsResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ListUnreadMentions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConversationServiceServer is the server API for ConversationService service.
 // All implementations must embed UnimplementedConversationServiceServer
 // for forward compatibility.
@@ -660,6 +673,8 @@ type ConversationServiceServer interface {
 	// реакции на сообщения: добавить или снять свою реакцию; ответ - актуальные реакции сообщения
 	AddReaction(context.Context, *AddReactionRequest) (*AddReactionResponse, error)
 	RemoveReaction(context.Context, *RemoveReactionRequest) (*RemoveReactionResponse, error)
+	// непрочитанные упоминания пользователя в чате (в хронологическом порядке)
+	ListUnreadMentions(context.Context, *ListUnreadMentionsRequest) (*ListUnreadMentionsResponse, error)
 	mustEmbedUnimplementedConversationServiceServer()
 }
 
@@ -804,6 +819,9 @@ func (UnimplementedConversationServiceServer) AddReaction(context.Context, *AddR
 }
 func (UnimplementedConversationServiceServer) RemoveReaction(context.Context, *RemoveReactionRequest) (*RemoveReactionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveReaction not implemented")
+}
+func (UnimplementedConversationServiceServer) ListUnreadMentions(context.Context, *ListUnreadMentionsRequest) (*ListUnreadMentionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUnreadMentions not implemented")
 }
 func (UnimplementedConversationServiceServer) mustEmbedUnimplementedConversationServiceServer() {}
 func (UnimplementedConversationServiceServer) testEmbeddedByValue()                             {}
@@ -1636,6 +1654,24 @@ func _ConversationService_RemoveReaction_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConversationService_ListUnreadMentions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUnreadMentionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ListUnreadMentions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ListUnreadMentions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ListUnreadMentions(ctx, req.(*ListUnreadMentionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConversationService_ServiceDesc is the grpc.ServiceDesc for ConversationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1822,6 +1858,10 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveReaction",
 			Handler:    _ConversationService_RemoveReaction_Handler,
+		},
+		{
+			MethodName: "ListUnreadMentions",
+			Handler:    _ConversationService_ListUnreadMentions_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

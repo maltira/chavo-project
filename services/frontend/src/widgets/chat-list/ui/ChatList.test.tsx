@@ -88,6 +88,20 @@ describe('ChatList', () => {
         expect(screen.getByText('Вы: Привет всем')).toBeInTheDocument()
     })
 
+    it('masks spoiler last message as "спойлер"', () => {
+        renderList([
+            {
+                ...base,
+                last_message: {
+                    ...base.last_message!,
+                    content: 'секретный текст',
+                    entities: [{ type: 'spoiler', offset: 0, length: 15 }],
+                },
+            },
+        ])
+        expect(screen.getByText('Вы: спойлер')).toBeInTheDocument()
+    })
+
     it('shows the unread counter, capped at 99+', () => {
         renderList([
             {

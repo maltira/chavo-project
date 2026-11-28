@@ -1,6 +1,6 @@
 import { request } from '@/shared/api'
 
-import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
+import type { AvatarShape, Profile, Status } from '@/entities/user/@x/conversation'
 
 import type { ChatSettings, ConversationSummary } from '../model/types'
 
@@ -77,6 +77,24 @@ export async function getMembers(id: string): Promise<Member[]> {
     return page.items
 }
 
+// серверный поиск участников группы по username/display_name среди всего состава (до 5000 человек)
+export async function searchMembers(
+    id: string,
+    query: string,
+    limit = 6,
+    excludeMe = true,
+): Promise<Profile[]> {
+    const params = new URLSearchParams({
+        q: query,
+        limit: String(limit),
+        ...(excludeMe ? { exclude_me: 'true' } : {}),
+    })
+    const res = await request<{ items: Profile[] }>(
+        `/conversations/${encodeURIComponent(id)}/members/search?${params}`,
+    )
+    return res.items
+}
+
 // открытая группа в поиске (закрытые сервер не отдаёт)
 export interface PublicGroup {
     id: string
@@ -113,6 +131,14 @@ export function deleteConversation(id: string, forEveryone = false): Promise<voi
 // очистка истории чата только для себя: сам чат и его настройки остаются в списке
 export function clearHistory(id: string): Promise<void> {
     return request<void>(`/conversations/${encodeURIComponent(id)}/clear`, { method: 'POST' })
+}
+
+// id непрочитанных сообщений, в которых упомянут текущий пользователь
+export async function listUnreadMentions(id: string): Promise<string[]> {
+    const res = await request<{ message_ids: string[] }>(
+        `/conversations/${encodeURIComponent(id)}/mentions/unread`,
+    )
+    return res.message_ids
 }
 
 export interface CreateGroupInput {

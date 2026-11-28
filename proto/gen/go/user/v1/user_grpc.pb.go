@@ -829,6 +829,7 @@ const (
 	UserInternalService_PresenceVisible_FullMethodName      = "/user.v1.UserInternalService/PresenceVisible"
 	UserInternalService_BlockedIDs_FullMethodName           = "/user.v1.UserInternalService/BlockedIDs"
 	UserInternalService_ForwardAuthorsHidden_FullMethodName = "/user.v1.UserInternalService/ForwardAuthorsHidden"
+	UserInternalService_SearchProfilesByIDs_FullMethodName  = "/user.v1.UserInternalService/SearchProfilesByIDs"
 )
 
 // UserInternalServiceClient is the client API for UserInternalService service.
@@ -846,6 +847,8 @@ type UserInternalServiceClient interface {
 	BlockedIDs(ctx context.Context, in *BlockedIDsRequest, opts ...grpc.CallOption) (*BlockedIDsResponse, error)
 	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
 	ForwardAuthorsHidden(ctx context.Context, in *ForwardAuthorsHiddenRequest, opts ...grpc.CallOption) (*ForwardAuthorsHiddenResponse, error)
+	// SearchProfilesByIDs - поиск профилей среди заданного набора пользователей (упоминания в больших группах).
+	SearchProfilesByIDs(ctx context.Context, in *SearchProfilesByIDsRequest, opts ...grpc.CallOption) (*SearchProfilesByIDsResponse, error)
 }
 
 type userInternalServiceClient struct {
@@ -916,6 +919,16 @@ func (c *userInternalServiceClient) ForwardAuthorsHidden(ctx context.Context, in
 	return out, nil
 }
 
+func (c *userInternalServiceClient) SearchProfilesByIDs(ctx context.Context, in *SearchProfilesByIDsRequest, opts ...grpc.CallOption) (*SearchProfilesByIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchProfilesByIDsResponse)
+	err := c.cc.Invoke(ctx, UserInternalService_SearchProfilesByIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserInternalServiceServer is the server API for UserInternalService service.
 // All implementations must embed UnimplementedUserInternalServiceServer
 // for forward compatibility.
@@ -931,6 +944,8 @@ type UserInternalServiceServer interface {
 	BlockedIDs(context.Context, *BlockedIDsRequest) (*BlockedIDsResponse, error)
 	// ForwardAuthorsHidden - кто из пользователей скрывает имя в пересланных сообщениях (hide_forward_author).
 	ForwardAuthorsHidden(context.Context, *ForwardAuthorsHiddenRequest) (*ForwardAuthorsHiddenResponse, error)
+	// SearchProfilesByIDs - поиск профилей среди заданного набора пользователей (упоминания в больших группах).
+	SearchProfilesByIDs(context.Context, *SearchProfilesByIDsRequest) (*SearchProfilesByIDsResponse, error)
 	mustEmbedUnimplementedUserInternalServiceServer()
 }
 
@@ -958,6 +973,9 @@ func (UnimplementedUserInternalServiceServer) BlockedIDs(context.Context, *Block
 }
 func (UnimplementedUserInternalServiceServer) ForwardAuthorsHidden(context.Context, *ForwardAuthorsHiddenRequest) (*ForwardAuthorsHiddenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ForwardAuthorsHidden not implemented")
+}
+func (UnimplementedUserInternalServiceServer) SearchProfilesByIDs(context.Context, *SearchProfilesByIDsRequest) (*SearchProfilesByIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchProfilesByIDs not implemented")
 }
 func (UnimplementedUserInternalServiceServer) mustEmbedUnimplementedUserInternalServiceServer() {}
 func (UnimplementedUserInternalServiceServer) testEmbeddedByValue()                             {}
@@ -1088,6 +1106,24 @@ func _UserInternalService_ForwardAuthorsHidden_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserInternalService_SearchProfilesByIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchProfilesByIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserInternalServiceServer).SearchProfilesByIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserInternalService_SearchProfilesByIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserInternalServiceServer).SearchProfilesByIDs(ctx, req.(*SearchProfilesByIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserInternalService_ServiceDesc is the grpc.ServiceDesc for UserInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1118,6 +1154,10 @@ var UserInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForwardAuthorsHidden",
 			Handler:    _UserInternalService_ForwardAuthorsHidden_Handler,
+		},
+		{
+			MethodName: "SearchProfilesByIDs",
+			Handler:    _UserInternalService_SearchProfilesByIDs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

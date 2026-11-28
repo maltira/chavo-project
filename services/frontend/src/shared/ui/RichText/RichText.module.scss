@@ -12,3 +12,180 @@
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
 }
+
+.strikethrough {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background-color: alpha(var(--color-text), 0.1);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.9em;
+}
+
+.pre {
+    display: block;
+    margin: 4px 0;
+    padding: 8px 10px;
+    overflow-x: auto;
+    border-radius: $radius-md;
+    background-color: alpha(var(--color-bg-primary), 0.65);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.88em;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.preBlock {
+    display: block;
+    margin: 4px 0;
+    overflow: hidden;
+    border: 1px solid alpha(var(--color-text), 0.12);
+    border-radius: $radius-md;
+    background-color: alpha(var(--color-bg-primary), 0.65);
+}
+
+.preHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    border-bottom: 1px solid alpha(var(--color-text), 0.08);
+    background-color: alpha(var(--color-text), 0.05);
+}
+
+.preLang {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: alpha(var(--color-text), 0.72);
+}
+
+.preCopy {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: alpha(var(--color-text), 0.68);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition:
+        color $transition-fast,
+        background-color $transition-fast;
+
+    &:hover {
+        color: var(--color-text);
+        background-color: alpha(var(--color-text), 0.08);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 1px;
+    }
+}
+
+.preCode {
+    display: block;
+    padding: 8px 10px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.88em;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.blockquote {
+    display: block;
+    margin: 4px 0;
+    padding: 4px 10px;
+    border-left: 3px solid var(--color-accent);
+    border-radius: 0 6px 6px 0;
+    background-color: alpha(var(--color-accent), 0.08);
+}
+
+.link {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    word-break: break-word;
+
+    &:hover {
+        opacity: 0.85;
+    }
+}
+
+.mention {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-accent);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 1px;
+        border-radius: 3px;
+    }
+}
+
+.spoiler {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    padding: 0 5px;
+    margin: 0 1px;
+    border-radius: 6px;
+    vertical-align: baseline;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.32s ease;
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 1px;
+    }
+}
+
+.spoilerText {
+    position: relative;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+// выступает на 6px за границы слова, чтобы частицы мягко разлетались при клике
+.spoilerCanvas {
+    position: absolute;
+    inset: -6px;
+    width: calc(100% + 12px);
+    height: calc(100% + 12px);
+    z-index: 2;
+    display: block;
+    pointer-events: none;
+}
+
+.spoilerRevealed {
+    background-color: alpha(var(--color-text), 0.06);
+    cursor: text;
+    user-select: text;
+
+    & .spoilerText {
+        opacity: 1;
+    }
+}

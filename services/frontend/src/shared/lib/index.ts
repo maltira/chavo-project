@@ -33,19 +33,37 @@ export {
 export type { CropState, LoadedImage } from './image'
 export type { SettleResult } from './settle'
 export {
+    CODE_LANGUAGES,
+    codeLanguageLabel,
     copyRich,
     ENTITY_TYPES,
+    extractFirstUrl,
+    extractUrls,
+    findLinkInRange,
+    findPreLanguageInRange,
     fromHtml,
     hasFormat,
+    isSafeHttpUrl,
+    maskSpoilers,
     normalizeEntities,
     render as renderRich,
+    replaceRangeWithMention,
     sameValue,
     selectionOffsets,
     serialize as serializeRich,
+    setLink,
+    setPre,
     setSelectionOffsets,
     toggleFormat,
     toHtml,
     toSegments,
     trimValue,
+    withAutoLinks,
 } from './richText'
-export type { EntityType, MessageEntity, RichValue, Segment } from './richText'
+export type {
+    EntityType,
+    MessageEntity,
+    RichValue,
+    Segment,
+    ToggleableFormat,
+} from './richText'

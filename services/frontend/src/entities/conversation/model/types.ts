@@ -24,6 +24,7 @@ export interface ConversationSummary extends Conversation {
     peer_id: string | null
     last_message: Message | null
     unread_count: number
+    unread_mentions_count?: number
     // последнее сообщение прочитал кто-то кроме его автора
     last_message_read: boolean
     members_count: number

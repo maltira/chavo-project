@@ -224,27 +224,22 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
             }
         >
             {isMe && editing ? (
-                <ProfileEditForm profile={profile} onDone={() => setEditing(false)} />
+                <ProfileEditForm
+                    profile={profile}
+                    onDone={() => setEditing(false)}
+                    onPickShape={() => setPickingShape(true)}
+                />
             ) : (
                 <>
                     <div className={styles.head}>
                         <span className={styles.avatarWrap}>
-                            {profile.avatar_url || isMe ? (
-                                // аватар - кнопка: с фото открывает его на весь экран, у своего без фото -
-                                // выбор фигуры за ним
+                            {profile.avatar_url ? (
+                                // аватар с фото открывается на весь экран
                                 <button
                                     type="button"
                                     className={styles.avatarButton}
-                                    aria-label={
-                                        profile.avatar_url
-                                            ? 'Открыть фото'
-                                            : 'Изменить фигуру за аватаром'
-                                    }
-                                    onClick={() =>
-                                        profile.avatar_url
-                                            ? setViewing(true)
-                                            : setPickingShape(true)
-                                    }
+                                    aria-label="Открыть фото"
+                                    onClick={() => setViewing(true)}
                                 >
                                     <UserAvatar
                                         src={profile.avatar_url}
@@ -258,17 +253,6 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
                                     shape={profile.avatar_shape}
                                     size={96}
                                 />
-                            )}
-                            {/* у своего аватара с фото выбор фигуры - отдельная кнопка рядом */}
-                            {isMe && profile.avatar_url && (
-                                <button
-                                    type="button"
-                                    className={styles.shapeButton}
-                                    aria-label="Изменить фигуру за аватаром"
-                                    onClick={() => setPickingShape(true)}
-                                >
-                                    <Icon name="pallete" size={16} color="inherit" />
-                                </button>
                             )}
                         </span>
                         {viewing && profile.avatar_url && (

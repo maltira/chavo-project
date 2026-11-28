@@ -541,6 +541,35 @@ func (s *Server) ForwardAuthorsHidden(ctx context.Context, req *userv1.ForwardAu
 	return &userv1.ForwardAuthorsHiddenResponse{HiddenUserIds: out}, nil
 }
 
+// SearchProfilesByIDs - поиск профилей среди заданного списка user_ids (для упоминаний в группах)
+func (s *Server) SearchProfilesByIDs(ctx context.Context, req *userv1.SearchProfilesByIDsRequest) (*userv1.SearchProfilesByIDsResponse, error) {
+	ids := make([]uuid.UUID, 0, len(req.GetUserIds()))
+	for _, raw := range req.GetUserIds() {
+		id, err := parseID(raw)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	var viewer uuid.UUID
+	if req.ViewerId != nil && *req.ViewerId != "" {
+		id, err := parseID(*req.ViewerId)
+		if err != nil {
+			return nil, err
+		}
+		viewer = id
+	}
+	items, err := s.profiles.SearchByIDs(ctx, ids, req.GetQuery(), clamp(req.GetLimit(), 6, 20))
+	if err != nil {
+		return nil, err
+	}
+	out, err := s.profilesToProto(ctx, viewer, items)
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.SearchProfilesByIDsResponse{Profiles: out}, nil
+}
+
 func (s *Server) SetStatus(ctx context.Context, req *userv1.SetStatusRequest) (*userv1.SetStatusResponse, error) {
 	userID, err := currentUser(ctx)
 	if err != nil {

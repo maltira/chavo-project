@@ -8,6 +8,7 @@ import {
     conversationsKey,
     isMuted,
     moveReadCursor,
+    unreadMentionsKey,
     useGroupCard,
     useTypingStore,
 } from '@/entities/conversation'
@@ -119,14 +120,16 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
                 reader_id?: string
                 message_id?: string
             }
+            const myId = queryClient.getQueryData<Profile | null>(['me'])?.user_id
             if (read.conversation_id && read.reader_id && read.message_id) {
                 moveReadCursor(queryClient, read.conversation_id, read.reader_id, read.message_id)
+                if (read.reader_id === myId) {
+                    void queryClient.invalidateQueries({
+                        queryKey: unreadMentionsKey(read.conversation_id),
+                    })
+                }
             }
-            applyConversationEvent(
-                queryClient,
-                event,
-                queryClient.getQueryData<Profile | null>(['me'])?.user_id,
-            )
+            applyConversationEvent(queryClient, event, myId)
             break
         }
         case 'conversation.typing': {
@@ -144,11 +147,29 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
                 const created = (event.data ?? {}) as {
                     conversation_id?: string
                     sender_id?: string
+                    entities?: { type?: string; user_id?: string }[]
                 }
                 if (created.conversation_id && created.sender_id) {
                     useTypingStore
                         .getState()
                         .clearTyping(created.conversation_id, created.sender_id)
+                }
+                if (
+                    created.conversation_id &&
+                    myId &&
+                    created.sender_id !== myId &&
+                    created.entities?.some((e) => e.type === 'mention' && e.user_id === myId)
+                ) {
+                    void queryClient.invalidateQueries({
+                        queryKey: unreadMentionsKey(created.conversation_id),
+                    })
+                }
+            }
+            if (event.type === 'message.updated' || event.type === 'message.deleted') {
+                const convId = (event.data as { conversation_id?: string } | undefined)
+                    ?.conversation_id
+                if (convId) {
+                    void queryClient.invalidateQueries({ queryKey: unreadMentionsKey(convId) })
                 }
             }
             // удалённый чат (группа или личный, в том числе «только у меня» с другого устройства):
@@ -166,6 +187,7 @@ export function applyEvent(event: ServerEvent, queryClient: QueryClient) {
             if (clearedId) {
                 clearMessagesCache(queryClient, clearedId)
                 void queryClient.invalidateQueries({ queryKey: pinsKey(clearedId) })
+                void queryClient.invalidateQueries({ queryKey: unreadMentionsKey(clearedId) })
             }
             applyMessageEvent(queryClient, event, myId)
             applyPinsEvent(queryClient, event)

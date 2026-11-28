@@ -1,5 +1,6 @@
 // размер фигуры относительно аватара; выступ в размер блока не входит
 $shape-scale: 150%;
+$shape-offset: -25%;
 
 // размер блока равен размеру аватара внутри
 .root {
@@ -9,14 +10,15 @@ $shape-scale: 150%;
     line-height: 0;
 }
 
-// фигура стоит по центру под аватаром и выходит за границы блока
+// фигура стоит по центру под аватаром и выходит за границы блока;
+// отрицательные отступы вместо transform убирают субпиксельный сдвиг относительно аватара
 .shape {
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: $shape-offset;
+    left: $shape-offset;
+    display: block;
     width: $shape-scale;
     height: $shape-scale;
-    transform: translate(-50%, -50%);
     pointer-events: none;
 }
 

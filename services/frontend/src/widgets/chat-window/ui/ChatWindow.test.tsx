@@ -536,11 +536,13 @@ describe('ChatWindow', () => {
             expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
             expect(document.activeElement).toBe(body)
 
-            // кнопка «⋮» рядом с пузырём
+            // кнопка «⋮» рядом с пузырём: открытие меню у другого сообщения закрывает предыдущее
             const triggers = screen.getAllByRole('button', { name: 'Действия с сообщением' })
             fireEvent.click(triggers[0]!)
-            expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
-            fireEvent.click(triggers[0]!)
+            expect(screen.getAllByRole('menu', { name: 'Действия с сообщением' })).toHaveLength(1)
+            fireEvent.click(triggers[1]!)
+            expect(screen.getAllByRole('menu', { name: 'Действия с сообщением' })).toHaveLength(1)
+            fireEvent.click(triggers[1]!)
             expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
 
             // долгое нажатие на тач-экране

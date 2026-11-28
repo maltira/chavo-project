@@ -1,10 +1,16 @@
 import {
+    extractFirstUrl,
     hasFormat,
+    isSafeHttpUrl,
+    maskSpoilers,
     normalizeEntities,
+    replaceRangeWithMention,
     sameValue,
+    setLink,
     toggleFormat,
     toSegments,
     trimValue,
+    withAutoLinks,
 } from './model'
 import type { MessageEntity } from './model'
 
@@ -49,7 +55,18 @@ describe('toSegments', () => {
 
     it('returns the whole text as one part without formatting and nothing for an empty text', () => {
         expect(toSegments('abc', [])).toEqual([
-            { text: 'abc', start: 0, bold: false, italic: false, underline: false },
+            {
+                text: 'abc',
+                start: 0,
+                bold: false,
+                italic: false,
+                underline: false,
+                strikethrough: false,
+                code: false,
+                pre: false,
+                spoiler: false,
+                blockquote: false,
+            },
         ])
         expect(toSegments('', [e('bold', 0, 3)])).toEqual([])
     })
@@ -137,5 +154,84 @@ describe('sameValue', () => {
             sameValue({ text: 'ab', entities: [] }, { text: 'ab', entities: [e('bold', 0, 2)] }),
         ).toBe(false)
         expect(sameValue({ text: 'ab', entities: [] }, { text: 'abc', entities: [] })).toBe(false)
+    })
+})
+
+describe('extended entities helpers', () => {
+    it('validates safe http/https URLs and rejects javascript:', () => {
+        expect(isSafeHttpUrl('https://example.com/a?x=1')).toBe(true)
+        expect(isSafeHttpUrl('http://chavo.local')).toBe(true)
+        expect(isSafeHttpUrl('javascript:alert(1)')).toBe(false)
+        expect(isSafeHttpUrl('data:text/html,hi')).toBe(false)
+    })
+
+    it('auto-links bare URLs outside code and existing links', () => {
+        const text = 'глянь https://example.com/path, и `https://ignored.dev`'
+        const entities = withAutoLinks(text, [{ type: 'code', offset: 34, length: 21 }])
+        expect(entities).toEqual([
+            { type: 'url', offset: 6, length: 24 },
+            { type: 'code', offset: 34, length: 21 },
+        ])
+        expect(extractFirstUrl({ text, entities: [] })).toBe('https://example.com/path')
+    })
+
+    it('sets and clears text_link and replaces range with mention', () => {
+        const linked = setLink({ text: 'привет мир', entities: [] }, 0, 6, 'https://chavo.example')
+        expect(linked.entities).toEqual([
+            { type: 'text_link', offset: 0, length: 6, url: 'https://chavo.example' },
+        ])
+        expect(extractFirstUrl(linked)).toBe('https://chavo.example')
+        expect(setLink(linked, 0, 6, null).entities).toEqual([])
+
+        const mentioned = replaceRangeWithMention(
+            { text: 'эй @al!', entities: [] },
+            3,
+            6,
+            '@alice',
+            'u-alice',
+        )
+        expect(mentioned.value).toEqual({
+            text: 'эй @alice !',
+            entities: [{ type: 'mention', offset: 3, length: 6, user_id: 'u-alice' }],
+        })
+        expect(mentioned.caret).toBe(10)
+    })
+
+    it('masks spoilers and skips URLs inside spoilers or code when extracting preview URL', () => {
+        expect(
+            maskSpoilers('Убийца - садовник (и повар)', [
+                { type: 'spoiler', offset: 9, length: 8 },
+                { type: 'spoiler', offset: 21, length: 5 },
+            ]),
+        ).toBe('Убийца - спойлер (и спойлер)')
+        expect(
+            maskSpoilers('секрет', [{ type: 'spoiler', offset: 0, length: 6 }]),
+        ).toBe('спойлер')
+
+        // URL под спойлером и внутри code игнорируется, а открытый URL после него - берётся
+        const text = 'секрет https://hidden.example/a и https://open.example/b'
+        expect(
+            extractFirstUrl({
+                text,
+                entities: [{ type: 'spoiler', offset: 7, length: 24 }],
+            }),
+        ).toBe('https://open.example/b')
+
+        expect(
+            extractFirstUrl({
+                text: 'https://only-spoiler.example',
+                entities: [{ type: 'spoiler', offset: 0, length: 28 }],
+            }),
+        ).toBeNull()
+
+        expect(
+            extractFirstUrl({
+                text: 'ссылка',
+                entities: [
+                    { type: 'spoiler', offset: 0, length: 6 },
+                    { type: 'text_link', offset: 0, length: 6, url: 'https://secret.example' },
+                ],
+            }),
+        ).toBeNull()
     })
 })

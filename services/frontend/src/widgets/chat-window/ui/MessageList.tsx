@@ -39,6 +39,9 @@ interface Props {
     onShowReaders?: (message: Message) => void
     onToggleReaction?: (message: Message, emoji: string, active: boolean) => void
     onShowReactions?: (message: Message, initialEmoji?: string) => void
+    // непрочитанные упоминания в чате: кнопка @ переводит к следующему упоминанию
+    unreadMentionsCount?: number
+    onJumpToMention?: () => void
     // переход к сообщению снаружи (плашка закрепов); n отличает повторный переход к тому же сообщению
     jumpRequest: { id: string; n: number } | null
     onForward: (message: Message) => void
@@ -86,6 +89,8 @@ export function MessageList({
     onShowReaders,
     onToggleReaction,
     onShowReactions,
+    unreadMentionsCount = 0,
+    onJumpToMention,
     jumpRequest,
     onForward,
     selected,
@@ -366,13 +371,30 @@ export function MessageList({
                 {hasOlder && <div ref={sentinelRef} className={styles.sentinel} />}
             </div>
 
-            {(awayFromBottom || hasNewer) && (
-                <IconButton
-                    icon="arrow-right"
-                    aria-label={hasNewer ? 'К последним сообщениям' : 'Вниз'}
-                    className={styles.down}
-                    onClick={scrollToBottom}
-                />
+            {(unreadMentionsCount > 0 || awayFromBottom || hasNewer) && (
+                <div className={styles.fabStack}>
+                    {unreadMentionsCount > 0 && onJumpToMention && (
+                        <div className={styles.mentionFabWrap}>
+                            <IconButton
+                                icon="at"
+                                aria-label="Перейти к непрочитанному упоминанию"
+                                className={styles.mentionFab}
+                                onClick={onJumpToMention}
+                            />
+                            <span className={styles.mentionFabCount} aria-hidden="true">
+                                {unreadMentionsCount > 99 ? '99+' : unreadMentionsCount}
+                            </span>
+                        </div>
+                    )}
+                    {(awayFromBottom || hasNewer) && (
+                        <IconButton
+                            icon="arrow-right"
+                            aria-label={hasNewer ? 'К последним сообщениям' : 'Вниз'}
+                            className={styles.down}
+                            onClick={scrollToBottom}
+                        />
+                    )}
+                </div>
             )}
         </div>
     )

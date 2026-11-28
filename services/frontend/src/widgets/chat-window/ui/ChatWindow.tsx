@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { useConversation, useMembers } from '@/entities/conversation'
+import { useConversation, useMembers, useUnreadMentions } from '@/entities/conversation'
 import {
     getDraft,
     MAX_FORWARD_MESSAGES,
@@ -47,6 +47,11 @@ export function ChatWindow({ conversationId }: Props) {
     const canWrite = useCanWrite(peerId)
     const history = useMessages(conversationId)
     const members = useMembers(conversationId)
+    const unreadMentions = useUnreadMentions(
+        conversationId,
+        chat.data?.conversation_type === 'group' || (chat.data?.unread_mentions_count ?? 0) > 0,
+    )
+    const [mentionCursor, setMentionCursor] = useState(0)
     const remove = useDeleteMessage()
     const removeBatch = useDeleteMessages()
     const openInfo = useOpenChatInfo()
@@ -184,7 +189,7 @@ export function ChatWindow({ conversationId }: Props) {
             const part = m.content ?? ''
             text += part
             for (const e of m.entities ?? []) {
-                entities.push({ type: e.type, offset: baseOffset + e.offset, length: e.length })
+                entities.push({ ...e, offset: baseOffset + e.offset })
             }
         })
         void copyRich({ text, entities }).then(() => {
@@ -344,6 +349,16 @@ export function ChatWindow({ conversationId }: Props) {
                     onShowReactions={(message, initialEmoji) =>
                         setReactorsOf({ messageId: message.id, initialEmoji })
                     }
+                    unreadMentionsCount={unreadMentions.data?.length ?? 0}
+                    onJumpToMention={() => {
+                        const list = unreadMentions.data ?? []
+                        if (list.length === 0) {
+                            return
+                        }
+                        const targetId = list[mentionCursor % list.length]!
+                        setMentionCursor((c) => c + 1)
+                        setJumpRequest((r) => ({ id: targetId, n: (r?.n ?? 0) + 1 }))
+                    }}
                     jumpRequest={jumpRequest}
                     onForward={(message) => {
                         setReply(null)
@@ -410,6 +425,7 @@ export function ChatWindow({ conversationId }: Props) {
                         key={editing?.id ?? 'new'}
                         conversationId={conversationId}
                         myId={myId}
+                        isGroup={isGroup}
                         replyTo={replyTarget}
                         editing={editing}
                         onCancel={() => {

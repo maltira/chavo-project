@@ -1,13 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { InfiniteData } from '@tanstack/react-query'
 
-import { errorMessage } from '@/shared/api'
+import { ApiError, errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
 
 import { addReaction, removeReaction } from '../api/messages'
 import { messagesKey, patchMessage } from './cache'
 import type { MessagesPageParam } from './cache'
 import type { MessageReaction, MessagesPage } from './types'
+
+// пределы реакций на сервере (conversation-service)
+export const MAX_DISTINCT_REACTIONS_PER_MSG = 20
+export const MAX_USER_REACTIONS_PER_MSG = 5
 
 export interface ToggleReactionInput {
     messageId: string
@@ -89,6 +93,10 @@ export function useToggleReaction(conversationId: string, myId: string | undefin
                 patchMessage(queryClient, conversationId, messageId, {
                     reactions: context.previous,
                 })
+            }
+            // при лимите реакций тихо откатываем оптимистичное состояние, уведомление не показываем
+            if (error instanceof ApiError && error.reason === 'REACTION_LIMIT') {
+                return
             }
             notify({
                 icon: 'warn',

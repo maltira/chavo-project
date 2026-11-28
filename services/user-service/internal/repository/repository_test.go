@@ -78,6 +78,24 @@ func TestProfiles(t *testing.T) {
 		t.Fatalf("search page: %+v", page)
 	}
 
+	// поиск по набору user_ids находит по username и display_name и не возвращает посторонних
+	bobID := uuid.New()
+	if err := repo.Create(ctx, &models.Profile{UserID: bobID, Username: "z_late_member", DisplayName: "Борис Поздний"}, &models.Settings{UserID: bobID}); err != nil {
+		t.Fatal(err)
+	}
+	byIDs, err := repo.SearchByIDs(ctx, []uuid.UUID{id, bobID}, "позд", 6)
+	if err != nil || len(byIDs) != 1 || byIDs[0].UserID != bobID {
+		t.Fatalf("search by ids display_name: %+v %v", byIDs, err)
+	}
+	byIDsExact, err := repo.SearchByIDs(ctx, []uuid.UUID{id, bobID}, "z_late_member", 6)
+	if err != nil || len(byIDsExact) != 1 || byIDsExact[0].UserID != bobID {
+		t.Fatalf("search by ids exact username: %+v %v", byIDsExact, err)
+	}
+	byIDsEmpty, err := repo.SearchByIDs(ctx, []uuid.UUID{id, bobID}, "", 6)
+	if err != nil || len(byIDsEmpty) != 2 {
+		t.Fatalf("search by ids empty query: %+v %v", byIDsEmpty, err)
+	}
+
 	if err := repo.Update(ctx, id, map[string]any{"display_name": "Alice A.", "bio": "hi"}); err != nil {
 		t.Fatal(err)
 	}

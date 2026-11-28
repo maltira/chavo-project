@@ -124,5 +124,20 @@
             display: inline-flex;
             color: alpha(var(--color-text), 0.4);
         }
+
+        & .mentionBadge {
+            @include type(xs-regular);
+
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 5px;
+            border-radius: $radius-full;
+            background-color: var(--color-accent);
+            color: var(--color-bg-primary);
+            font-weight: 700;
+        }
     }
 }

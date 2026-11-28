@@ -13,11 +13,13 @@ export function useEditMessage() {
             id,
             content,
             entities,
+            disable_link_preview,
         }: {
             id: string
             content: string
             entities?: MessageEntity[]
-        }) => editMessage(id, content, entities),
+            disable_link_preview?: boolean
+        }) => editMessage(id, content, entities, disable_link_preview),
         onSuccess: (message) => {
             patchMessage(queryClient, message.conversation_id, message.id, message)
         },

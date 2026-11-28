@@ -5,7 +5,9 @@ export {
     getConversation,
     getMembers,
     joinGroup,
+    listUnreadMentions,
     searchGroups,
+    searchMembers,
 } from './api/conversations'
 export type { CreateGroupInput, Member, PublicGroup } from './api/conversations'
 export {
@@ -58,8 +60,10 @@ export {
     conversationKey,
     membersKey,
     moveReadCursor,
+    unreadMentionsKey,
     useConversation,
     useMembers,
+    useUnreadMentions,
 } from './model/useConversation'
 export {
     bansKey,

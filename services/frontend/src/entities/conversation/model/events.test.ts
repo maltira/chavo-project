@@ -245,6 +245,58 @@ describe('applyToConversations', () => {
             pinned_at: '2026-10-14T10:00:00Z',
         })
     })
+
+    it('tracks unread_mentions_count on mentions, edits and history clear', () => {
+        const created = applyToConversations(
+            list,
+            {
+                type: 'message.created',
+                data: {
+                    conversation_id: 'b',
+                    message_id: 'm-mention',
+                    sender_id: 'peer',
+                    content: 'привет @me',
+                    entities: [{ type: 'mention', offset: 7, length: 3, user_id: ME }],
+                    created_at: '2026-10-14T11:00:00Z',
+                },
+            },
+            ME,
+        )
+        if (created.kind !== 'list') throw new Error(created.kind)
+        expect(created.list[0]).toMatchObject({
+            id: 'b',
+            unread_count: 1,
+            unread_mentions_count: 1,
+        })
+
+        // правка сообщения с упоминанием меня или в чате с непрочитанными упоминаниями перечитывает список
+        const edited = applyToConversations(
+            created.list,
+            {
+                type: 'message.updated',
+                data: {
+                    conversation_id: 'b',
+                    message_id: 'm-mention',
+                    content: 'привет',
+                    entities: [],
+                },
+            },
+            ME,
+        )
+        expect(edited.kind).toBe('invalidate')
+
+        const cleared = applyToConversations(
+            created.list,
+            { type: 'conversation.history.cleared', data: { conversation_id: 'b' } },
+            ME,
+        )
+        if (cleared.kind !== 'list') throw new Error(cleared.kind)
+        expect(cleared.list[0]).toMatchObject({
+            id: 'b',
+            unread_count: 0,
+            unread_mentions_count: 0,
+        })
+    })
 })
 
 describe('applyChatSettings', () => {

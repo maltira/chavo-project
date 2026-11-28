@@ -1,14 +1,23 @@
-import { normalizeEntities, toSegments } from './model'
-import type { EntityType, MessageEntity, RichValue } from './model'
+import { isSafeHttpUrl, normalizeEntities, toSegments } from './model'
+import type { MessageEntity, RichValue } from './model'
 
-// связь редактора (contenteditable) с моделью «текст + диапазоны». В DOM допустимы <b>, <i>, <u>, переводы
-// строки <br> и обычный текст; всё остальное, что вставил браузер (<strong>, <em>, <span style>, <div>),
+// связь редактора (contenteditable) с моделью «текст + диапазоны». В DOM допустимы <b>, <i>, <u>, <s>,
+// <code>, <a href>, <span data-spoiler/data-blockquote/data-pre/data-mention>, переводы строки <br> и
+// обычный текст; всё остальное, что вставил браузер (<strong>, <em>, <del>, <blockquote>, <pre>, style),
 // читается так же
 
 interface Flags {
     bold: boolean
     italic: boolean
     underline: boolean
+    strikethrough: boolean
+    code: boolean
+    pre: boolean
+    preLanguage?: string
+    spoiler: boolean
+    blockquote: boolean
+    linkUrl?: string
+    mentionUserId?: string
 }
 
 interface Run extends Flags {
@@ -16,11 +25,22 @@ interface Run extends Flags {
     end: number
 }
 
-const BLOCKS = new Set(['DIV', 'P', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3'])
+const EMPTY_FLAGS: Flags = {
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    code: false,
+    pre: false,
+    spoiler: false,
+    blockquote: false,
+}
+
+const BLOCKS = new Set(['DIV', 'P', 'LI', 'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3'])
 const IGNORED = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'TITLE', 'META'])
 
 function flagsOf(el: HTMLElement, parent: Flags): Flags {
-    const flags = { ...parent }
+    const flags: Flags = { ...parent }
     switch (el.nodeName) {
         case 'B':
         case 'STRONG':
@@ -33,6 +53,48 @@ function flagsOf(el: HTMLElement, parent: Flags): Flags {
         case 'U':
             flags.underline = true
             break
+        case 'S':
+        case 'DEL':
+        case 'STRIKE':
+            flags.strikethrough = true
+            break
+        case 'PRE':
+            flags.pre = true
+            if (el.dataset.lang) {
+                flags.preLanguage = el.dataset.lang
+            }
+            break
+        case 'CODE':
+            // <code> внутри <pre> - это блок кода pre, а не inline code
+            if (!flags.pre) {
+                flags.code = true
+            }
+            break
+        case 'BLOCKQUOTE':
+            flags.blockquote = true
+            break
+        case 'A': {
+            const href = el.getAttribute('href')
+            if (href && isSafeHttpUrl(href)) {
+                flags.linkUrl = href.trim()
+            }
+            break
+        }
+    }
+    if (el.dataset?.spoiler === 'true') {
+        flags.spoiler = true
+    }
+    if (el.dataset?.blockquote === 'true') {
+        flags.blockquote = true
+    }
+    if (el.dataset?.pre === 'true') {
+        flags.pre = true
+        if (el.dataset.lang) {
+            flags.preLanguage = el.dataset.lang
+        }
+    }
+    if (el.dataset?.mention) {
+        flags.mentionUserId = el.dataset.mention
     }
     // оформление через style: так вставляет текст часть браузеров
     const weight = el.style?.fontWeight
@@ -42,11 +104,12 @@ function flagsOf(el: HTMLElement, parent: Flags): Flags {
     if (el.style?.fontStyle === 'italic') {
         flags.italic = true
     }
-    if (
-        el.style?.textDecorationLine?.includes('underline') ||
-        el.style?.textDecoration?.includes('underline')
-    ) {
+    const deco = `${el.style?.textDecorationLine ?? ''} ${el.style?.textDecoration ?? ''}`
+    if (deco.includes('underline')) {
         flags.underline = true
+    }
+    if (deco.includes('line-through')) {
+        flags.strikethrough = true
     }
     return flags
 }
@@ -95,27 +158,76 @@ function read(root: Node, keepTrailingBreak = false): { text: string; runs: Run[
         const own = flagsOf(el, flags)
         // блок (вставленный браузером абзац) начинается с новой строки
         if (BLOCKS.has(el.nodeName) && text !== '' && !text.endsWith('\n')) {
-            push('\n', own)
+            push('\n', flags)
         }
         el.childNodes.forEach((child) => walk(child, own))
     }
-    root.childNodes.forEach((child) =>
-        walk(child, { bold: false, italic: false, underline: false }),
-    )
+    root.childNodes.forEach((child) => walk(child, EMPTY_FLAGS))
     return { text, runs }
 }
+
+const SIMPLE_FLAGS = [
+    'bold',
+    'italic',
+    'underline',
+    'strikethrough',
+    'code',
+    'spoiler',
+    'blockquote',
+] as const
 
 // склеивает подряд идущие участки с одним оформлением в диапазоны
 function entitiesOf(runs: Run[]): MessageEntity[] {
     const entities: MessageEntity[] = []
-    for (const type of ['bold', 'italic', 'underline'] as EntityType[]) {
+    for (const type of SIMPLE_FLAGS) {
         for (const run of runs) {
             if (run[type]) {
                 entities.push({ type, offset: run.start, length: run.end - run.start })
             }
         }
     }
-    return normalizeEntities(entities)
+    for (const run of runs) {
+        if (run.pre) {
+            entities.push({
+                type: 'pre',
+                offset: run.start,
+                length: run.end - run.start,
+                ...(run.preLanguage ? { language: run.preLanguage } : {}),
+            })
+        }
+        if (run.linkUrl) {
+            entities.push({
+                type: 'text_link',
+                offset: run.start,
+                length: run.end - run.start,
+                url: run.linkUrl,
+            })
+        }
+        if (run.mentionUserId) {
+            entities.push({
+                type: 'mention',
+                offset: run.start,
+                length: run.end - run.start,
+                user_id: run.mentionUserId,
+            })
+        }
+    }
+    // подряд идущие текстовые узлы внутри одного <span data-mention> объединяем в один mention
+    const mergedMentions: MessageEntity[] = []
+    const nonMentions: MessageEntity[] = []
+    for (const e of entities) {
+        if (e.type !== 'mention') {
+            nonMentions.push(e)
+            continue
+        }
+        const prev = mergedMentions[mergedMentions.length - 1]
+        if (prev && prev.user_id === e.user_id && e.offset === prev.offset + prev.length) {
+            prev.length += e.length
+        } else {
+            mergedMentions.push({ ...e })
+        }
+    }
+    return normalizeEntities([...nonMentions, ...mergedMentions])
 }
 
 // текст и разметка редактора
@@ -208,7 +320,7 @@ export function setSelectionOffsets(root: Node, start: number, end = start) {
     selection.addRange(range)
 }
 
-// кладёт в редактор текст с разметкой: переводы строк - <br>, оформление - <b>, <i>, <u>
+// кладёт в редактор текст с разметкой: переводы строк - <br>, оформление - теги/data-атрибуты
 export function render(root: HTMLElement, value: RichValue) {
     root.replaceChildren()
     for (const segment of toSegments(value.text, value.entities)) {
@@ -223,16 +335,48 @@ export function render(root: HTMLElement, value: RichValue) {
             }
         })
         let node: Node = content
+        const wrap = (el: HTMLElement) => {
+            el.appendChild(node)
+            node = el
+        }
         for (const [on, tag] of [
+            [segment.code, 'code'],
+            [segment.strikethrough, 's'],
             [segment.underline, 'u'],
             [segment.italic, 'i'],
             [segment.bold, 'b'],
         ] as const) {
             if (on) {
-                const wrapper = document.createElement(tag)
-                wrapper.appendChild(node)
-                node = wrapper
+                wrap(document.createElement(tag))
             }
+        }
+        if (segment.spoiler) {
+            const span = document.createElement('span')
+            span.dataset.spoiler = 'true'
+            wrap(span)
+        }
+        if (segment.linkUrl) {
+            const a = document.createElement('a')
+            a.setAttribute('href', segment.linkUrl)
+            wrap(a)
+        }
+        if (segment.mentionUserId) {
+            const span = document.createElement('span')
+            span.dataset.mention = segment.mentionUserId
+            wrap(span)
+        }
+        if (segment.pre) {
+            const span = document.createElement('span')
+            span.dataset.pre = 'true'
+            if (segment.preLanguage) {
+                span.dataset.lang = segment.preLanguage
+            }
+            wrap(span)
+        }
+        if (segment.blockquote) {
+            const span = document.createElement('span')
+            span.dataset.blockquote = 'true'
+            wrap(span)
         }
         root.appendChild(node)
     }
@@ -246,11 +390,21 @@ function escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// собирает чистый HTML с <b>, <i>, <u> и <br> для буфера обмена
+function escapeAttr(text: string): string {
+    return escapeHtml(text).replace(/"/g, '&quot;')
+}
+
+// собирает чистый HTML с поддерживаемыми тегами и <br> для буфера обмена
 export function toHtml(value: RichValue): string {
     return toSegments(value.text, value.entities)
         .map((segment) => {
             let chunk = escapeHtml(segment.text).replace(/\n/g, '<br>')
+            if (segment.code) {
+                chunk = `<code>${chunk}</code>`
+            }
+            if (segment.strikethrough) {
+                chunk = `<s>${chunk}</s>`
+            }
             if (segment.underline) {
                 chunk = `<u>${chunk}</u>`
             }
@@ -259,6 +413,24 @@ export function toHtml(value: RichValue): string {
             }
             if (segment.bold) {
                 chunk = `<b>${chunk}</b>`
+            }
+            if (segment.spoiler) {
+                chunk = `<span data-spoiler="true">${chunk}</span>`
+            }
+            if (segment.linkUrl) {
+                chunk = `<a href="${escapeAttr(segment.linkUrl)}">${chunk}</a>`
+            }
+            if (segment.mentionUserId) {
+                chunk = `<span data-mention="${escapeAttr(segment.mentionUserId)}">${chunk}</span>`
+            }
+            if (segment.pre) {
+                const langAttr = segment.preLanguage
+                    ? ` data-lang="${escapeAttr(segment.preLanguage)}"`
+                    : ''
+                chunk = `<span data-pre="true"${langAttr}>${chunk}</span>`
+            }
+            if (segment.blockquote) {
+                chunk = `<span data-blockquote="true">${chunk}</span>`
             }
             return chunk
         })

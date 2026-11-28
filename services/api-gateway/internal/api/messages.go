@@ -1,13 +1,105 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
 	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/httpx"
+	"github.com/maltira/chavo-project-backend/services/api-gateway/internal/linkpreview"
 )
+
+const inlinePreviewTimeout = 1500 * time.Millisecond
+
+func (h *Handler) resolveLinkPreview(ctx context.Context, content string, entities []entityJSON, disabled bool) *conversationv1.LinkPreview {
+	if disabled || h.previews == nil {
+		return nil
+	}
+	spans := make([]linkpreview.EntitySpan, 0, len(entities))
+	for _, e := range entities {
+		span := linkpreview.EntitySpan{
+			Type:   e.Type,
+			Offset: int(e.Offset),
+			Length: int(e.Length),
+		}
+		if e.URL != nil {
+			span.URL = *e.URL
+		}
+		spans = append(spans, span)
+	}
+	target := linkpreview.ExtractFirstVisibleURL(content, spans)
+	if target == "" {
+		return nil
+	}
+	pCtx, cancel := context.WithTimeout(ctx, inlinePreviewTimeout)
+	defer cancel()
+	p, err := h.previews.Get(pCtx, target)
+	if err != nil || p == nil {
+		return nil
+	}
+	return &conversationv1.LinkPreview{
+		Url:         p.URL,
+		Title:       p.Title,
+		Description: p.Description,
+		ImageUrl:    p.ImageURL,
+		SiteName:    p.SiteName,
+	}
+}
+
+func (h *Handler) getLinkPreview(c *gin.Context) {
+	rawURL := c.Query("url")
+	if rawURL == "" {
+		httpx.Abort(c, http.StatusBadRequest, "Укажите URL", "")
+		return
+	}
+	if h.previews == nil {
+		c.JSON(http.StatusOK, gin.H{"preview": nil})
+		return
+	}
+	p, err := h.previews.Get(c.Request.Context(), rawURL)
+	if err != nil {
+		if errors.Is(err, linkpreview.ErrInvalidURL) {
+			httpx.Abort(c, http.StatusBadRequest, "Некорректная ссылка", "")
+			return
+		}
+		// недоступный или заблокированный хост - просто без превью
+		c.JSON(http.StatusOK, gin.H{"preview": nil})
+		return
+	}
+	if p == nil {
+		c.JSON(http.StatusOK, gin.H{"preview": nil})
+		return
+	}
+	// отдаём копию с подписанным прокси-путём картинки, не раскрывая внешний URL браузеру
+	out := *p
+	out.ImageURL = h.signPreviewImage(p.ImageURL)
+	c.JSON(http.StatusOK, gin.H{"preview": &out})
+}
+
+func (h *Handler) serveLinkPreviewImage(c *gin.Context) {
+	if h.previews == nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	canonicalURL, ok := h.previews.VerifyImageSignature(c.Query("url"), c.Query("sig"))
+	if !ok {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	data, contentType, err := h.previews.FetchImage(c.Request.Context(), canonicalURL)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "default-src 'none'")
+	c.Header("Cache-Control", "private, max-age=3600")
+	c.Data(http.StatusOK, contentType, data)
+}
 
 func (h *Handler) listMessages(c *gin.Context) {
 	resp, err := h.conversations.ListMessages(c.Request.Context(), &conversationv1.ListMessagesRequest{
@@ -23,7 +115,7 @@ func (h *Handler) listMessages(c *gin.Context) {
 	}
 	items := make([]*messageJSON, 0, len(resp.GetItems()))
 	for _, m := range resp.GetItems() {
-		items = append(items, toMessage(m))
+		items = append(items, h.toMessage(m))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"items":       items,
@@ -37,27 +129,28 @@ func (h *Handler) listMessages(c *gin.Context) {
 
 func (h *Handler) sendMessage(c *gin.Context) {
 	var body struct {
-		ConversationID   *string `json:"conversation_id"`
-		RecipientID      *string `json:"recipient_id"`
-		Content          string  `json:"content"`
-		ReplyToMessageID *string `json:"reply_to_message_id"`
-		// форматирование текста: bold, italic, underline; смещения в единицах UTF-16
-		Entities []entityJSON `json:"entities"`
-		IsSilent bool         `json:"is_silent"`
+		ConversationID     *string      `json:"conversation_id"`
+		RecipientID        *string      `json:"recipient_id"`
+		Content            string       `json:"content"`
+		ReplyToMessageID   *string      `json:"reply_to_message_id"`
+		Entities           []entityJSON `json:"entities"`
+		IsSilent           bool         `json:"is_silent"`
+		DisableLinkPreview bool         `json:"disable_link_preview"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
+	preview := h.resolveLinkPreview(c.Request.Context(), body.Content, body.Entities, body.DisableLinkPreview)
 	resp, err := h.conversations.SendMessage(c.Request.Context(), &conversationv1.SendMessageRequest{
 		ConversationId: body.ConversationID, RecipientId: body.RecipientID,
 		Content: body.Content, ReplyToMessageId: body.ReplyToMessageID,
-		Entities: fromEntities(body.Entities), IsSilent: body.IsSilent,
+		Entities: fromEntities(body.Entities), IsSilent: body.IsSilent, LinkPreview: preview,
 	})
 	if err != nil {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, toMessage(resp.GetMessage()))
+	c.JSON(http.StatusCreated, h.toMessage(resp.GetMessage()))
 }
 
 // forwardMessages: копии сообщений одного чата в мои чаты и/или «Избранное»;
@@ -86,7 +179,7 @@ func (h *Handler) forwardMessages(c *gin.Context) {
 	}
 	items := make([]forwardedJSON, len(resp.GetItems()))
 	for i, chat := range resp.GetItems() {
-		items[i] = forwardedJSON{ConversationID: chat.GetConversationId(), Messages: mapSlice(chat.GetMessages(), toMessage)}
+		items[i] = forwardedJSON{ConversationID: chat.GetConversationId(), Messages: mapSlice(chat.GetMessages(), h.toMessage)}
 	}
 	c.JSON(http.StatusCreated, gin.H{"items": items})
 }
@@ -97,26 +190,28 @@ func (h *Handler) getMessage(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toMessage(resp.GetMessage()))
+	c.JSON(http.StatusOK, h.toMessage(resp.GetMessage()))
 }
 
 func (h *Handler) editMessage(c *gin.Context) {
 	var body struct {
 		Content string `json:"content"`
 		// новое форматирование целиком; нет - без форматирования
-		Entities []entityJSON `json:"entities"`
+		Entities           []entityJSON `json:"entities"`
+		DisableLinkPreview bool         `json:"disable_link_preview"`
 	}
 	if !httpx.BindJSON(c, &body) {
 		return
 	}
+	preview := h.resolveLinkPreview(c.Request.Context(), body.Content, body.Entities, body.DisableLinkPreview)
 	resp, err := h.conversations.EditMessage(c.Request.Context(), &conversationv1.EditMessageRequest{
-		MessageId: c.Param("message_id"), Content: body.Content, Entities: fromEntities(body.Entities),
+		MessageId: c.Param("message_id"), Content: body.Content, Entities: fromEntities(body.Entities), LinkPreview: preview,
 	})
 	if err != nil {
 		h.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toMessage(resp.GetMessage()))
+	c.JSON(http.StatusOK, h.toMessage(resp.GetMessage()))
 }
 
 func (h *Handler) deleteMessage(c *gin.Context) {

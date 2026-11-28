@@ -24,10 +24,14 @@ type MessageRecord struct {
 	// IsForwarded - пересланная копия; ForwardedFromUserID - первый автор (nil - скрыл имя)
 	IsForwarded         bool
 	ForwardedFromUserID *uuid.UUID
-	// Entities - форматирование текста (nil - обычный текст)
+	// Entities - legacy-разметка из колонки entities (для сообщений до миграции 000003)
 	Entities []models.Entity
+	// EntitiesEnc - зашифрованный JSON списка Entity (AES-256-GCM)
+	EntitiesEnc []byte
 	// IsSilent - отправлено без звука
 	IsSilent bool
+	// LinkPreviewEnc - зашифрованный JSON превью ссылки OpenGraph (AES-256-GCM)
+	LinkPreviewEnc []byte
 	// Kind - user или system; у системного нет текста, есть SystemEvent и TargetID
 	Kind        string
 	SystemEvent *string
@@ -51,12 +55,18 @@ type MessageRepository interface {
 	FindVisible(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
 	// FindForViewer — как FindVisible, но также отдаёт сообщение, на которое отвечает видимое участнику сообщение.
 	FindForViewer(ctx context.Context, q DBTX, id, userID uuid.UUID) (*MessageRecord, error)
-	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte, entities []models.Entity) (*time.Time, error)
+	Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc, entitiesEnc, linkPreviewEnc []byte) (*time.Time, error)
 	SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error)
 	SetReadCursor(ctx context.Context, q DBTX, convID, userID, messageID uuid.UUID) (moved bool, prev *uuid.UUID, err error)
 	// AuthorsBetween возвращает авторов неудалённых сообщений в (after, upTo], кроме exclude; after == nil — с начала чата.
 	AuthorsBetween(ctx context.Context, q DBTX, convID uuid.UUID, after *uuid.UUID, upTo, exclude uuid.UUID) ([]uuid.UUID, error)
 	ListReaders(ctx context.Context, q DBTX, convID, messageID uuid.UUID) ([]uuid.UUID, error)
+	// ReplaceMentions переписывает список упомянутых в сообщении пользователей
+	ReplaceMentions(ctx context.Context, q DBTX, msgID, convID uuid.UUID, createdAt time.Time, userIDs []uuid.UUID) error
+	// DeleteMentionsByMessage удаляет индекс упоминаний при удалении сообщения
+	DeleteMentionsByMessage(ctx context.Context, q DBTX, msgID uuid.UUID) error
+	// ListUnreadMentions возвращает id непрочитанных сообщений, где упомянут userID (от старых к новым)
+	ListUnreadMentions(ctx context.Context, q DBTX, convID, userID uuid.UUID, limit int) ([]uuid.UUID, error)
 }
 
 type messageRepository struct{}
@@ -72,17 +82,17 @@ const visibleToMember = `((cm.member_role = 'admin' OR m.created_at >= cm.joined
 
 const messageColumnsM = `m.id, m.conversation_id, m.sender_id, m.content_enc, m.reply_to_message_id, m.is_edited,
 	m.kind, m.system_event, m.target_id, m.created_at, m.updated_at, m.deleted_at,
-	m.is_forwarded, m.forwarded_from_user_id, m.entities, m.is_silent`
+	m.is_forwarded, m.forwarded_from_user_id, m.entities, m.entities_enc, m.is_silent, m.link_preview_enc`
 
 const messageColumns = `id, conversation_id, sender_id, content_enc, reply_to_message_id, is_edited,
 	kind, system_event, target_id, created_at, updated_at, deleted_at,
-	is_forwarded, forwarded_from_user_id, entities, is_silent`
+	is_forwarded, forwarded_from_user_id, entities, entities_enc, is_silent, link_preview_enc`
 
 // messageDest - поля для Scan в порядке messageColumns
 func messageDest(m *MessageRecord) []any {
 	return []any{&m.ID, &m.ConversationID, &m.SenderID, &m.ContentEnc, &m.ReplyToMessageID,
 		&m.IsEdited, &m.Kind, &m.SystemEvent, &m.TargetID, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
-		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities, &m.IsSilent}
+		&m.IsForwarded, &m.ForwardedFromUserID, &m.Entities, &m.EntitiesEnc, &m.IsSilent, &m.LinkPreviewEnc}
 }
 
 func scanMessage(row pgx.Row) (*MessageRecord, error) {
@@ -93,23 +103,22 @@ func scanMessage(row pgx.Row) (*MessageRecord, error) {
 	return &m, nil
 }
 
-// entitiesArg: без форматирования в колонку пишется NULL, а не пустой массив
-func entitiesArg(entities []models.Entity) any {
-	if len(entities) == 0 {
+func bytesArg(b []byte) any {
+	if len(b) == 0 {
 		return nil
 	}
-	return entities
+	return b
 }
 
 func (r *messageRepository) Create(ctx context.Context, q DBTX, rec *MessageRecord) error {
 	// clock_timestamp(), а не NOW(): порядок сообщений должен отражать момент вставки, а не начало транзакции.
 	err := q.QueryRow(ctx,
 		`INSERT INTO messages (conversation_id, sender_id, content_enc, reply_to_message_id,
-		                       is_forwarded, forwarded_from_user_id, entities, is_silent, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp())
+		                       is_forwarded, forwarded_from_user_id, entities_enc, is_silent, link_preview_enc, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp())
 		 RETURNING id, created_at`,
 		rec.ConversationID, rec.SenderID, rec.ContentEnc, rec.ReplyToMessageID,
-		rec.IsForwarded, rec.ForwardedFromUserID, entitiesArg(rec.Entities), rec.IsSilent,
+		rec.IsForwarded, rec.ForwardedFromUserID, bytesArg(rec.EntitiesEnc), rec.IsSilent, bytesArg(rec.LinkPreviewEnc),
 	).Scan(&rec.ID, &rec.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create message: %w", err)
@@ -252,13 +261,13 @@ func (r *messageRepository) FindForViewer(ctx context.Context, q DBTX, id, userI
 }
 
 // Update меняет содержимое неудалённого сообщения; ErrMessageDeleted, если оно удалено.
-func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc []byte, entities []models.Entity) (*time.Time, error) {
+func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, contentEnc, entitiesEnc, linkPreviewEnc []byte) (*time.Time, error) {
 	var updatedAt time.Time
 	err := q.QueryRow(ctx,
-		`UPDATE messages SET content_enc = $2, entities = $3, is_edited = TRUE, updated_at = clock_timestamp()
+		`UPDATE messages SET content_enc = $2, entities = NULL, entities_enc = $3, link_preview_enc = $4, is_edited = TRUE, updated_at = clock_timestamp()
 		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'
 		 RETURNING updated_at`,
-		id, contentEnc, entitiesArg(entities),
+		id, contentEnc, bytesArg(entitiesEnc), bytesArg(linkPreviewEnc),
 	).Scan(&updatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -272,7 +281,7 @@ func (r *messageRepository) Update(ctx context.Context, q DBTX, id uuid.UUID, co
 // SoftDelete возвращает true, если сообщение было удалено именно этим вызовом.
 func (r *messageRepository) SoftDelete(ctx context.Context, q DBTX, id uuid.UUID) (bool, error) {
 	ct, err := q.Exec(ctx,
-		`UPDATE messages SET content_enc = NULL, deleted_at = clock_timestamp()
+		`UPDATE messages SET content_enc = NULL, entities = NULL, entities_enc = NULL, link_preview_enc = NULL, deleted_at = clock_timestamp()
 		 WHERE id = $1 AND deleted_at IS NULL AND kind = 'user'`, id,
 	)
 	if err != nil {
@@ -361,6 +370,67 @@ func (r *messageRepository) ListReaders(ctx context.Context, q DBTX, convID, mes
 		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scan reader: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *messageRepository) ReplaceMentions(ctx context.Context, q DBTX, msgID, convID uuid.UUID, createdAt time.Time, userIDs []uuid.UUID) error {
+	if _, err := q.Exec(ctx, `DELETE FROM message_mentions WHERE message_id = $1`, msgID); err != nil {
+		return fmt.Errorf("clear message mentions: %w", err)
+	}
+	if len(userIDs) == 0 {
+		return nil
+	}
+	for _, uid := range userIDs {
+		if _, err := q.Exec(ctx,
+			`INSERT INTO message_mentions (message_id, conversation_id, user_id, created_at)
+			 VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (message_id, user_id) DO NOTHING`,
+			msgID, convID, uid, createdAt,
+		); err != nil {
+			return fmt.Errorf("insert message mention: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *messageRepository) DeleteMentionsByMessage(ctx context.Context, q DBTX, msgID uuid.UUID) error {
+	if _, err := q.Exec(ctx, `DELETE FROM message_mentions WHERE message_id = $1`, msgID); err != nil {
+		return fmt.Errorf("delete message mentions: %w", err)
+	}
+	return nil
+}
+
+func (r *messageRepository) ListUnreadMentions(ctx context.Context, q DBTX, convID, userID uuid.UUID, limit int) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx,
+		`SELECT mm.message_id
+		 FROM message_mentions mm
+		 JOIN messages m ON m.id = mm.message_id
+		 JOIN conversation_members cm ON cm.conversation_id = mm.conversation_id AND cm.user_id = $2
+		 LEFT JOIN messages rm ON rm.id = cm.last_read_message_id
+		 WHERE mm.conversation_id = $1
+		   AND mm.user_id = $2
+		   AND m.deleted_at IS NULL
+		   AND m.sender_id <> $2
+		   AND m.created_at >= cm.joined_at
+		   AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at)
+		   AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))
+		 ORDER BY mm.created_at ASC, mm.message_id ASC
+		 LIMIT $3`,
+		convID, userID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list unread mentions: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan unread mention: %w", err)
 		}
 		ids = append(ids, id)
 	}

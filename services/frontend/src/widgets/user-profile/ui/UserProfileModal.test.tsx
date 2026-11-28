@@ -89,9 +89,12 @@ describe('UserProfileModal', () => {
         )
     })
 
-    it('picks the avatar shape on a screen with a back arrow, not in another window', () => {
+    it('picks the avatar shape from the edit screen with a back arrow, not in another window', () => {
         renderModal()
         act(() => useProfileCard.getState().open('me'))
+        expect(screen.queryByRole('button', { name: 'Изменить фигуру за аватаром' })).toBeNull()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
         fireEvent.click(screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }))
 
         // экран фигуры заменяет окно профиля, а не открывается поверх него
@@ -101,6 +104,9 @@ describe('UserProfileModal', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
         expect(screen.getAllByRole('dialog')).toHaveLength(1)
         expect(screen.getByRole('dialog', { name: /Профиль: Я/ })).toBeInTheDocument()
+        expect(
+            screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }),
+        ).toBeInTheDocument()
     })
 
     it('shows my own profile without actions', () => {
@@ -179,10 +185,8 @@ describe('UserProfileModal', () => {
             avatar_url: photo('a'),
         })
         act(() => useProfileCard.getState().open('me', { remember: false }))
-        // у своего аватара с фото выбор фигуры - отдельная кнопка
-        expect(
-            screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }),
-        ).toBeInTheDocument()
+        // в просмотре профиля кнопки смены фигуры нет - она перенесена в «Редактировать»
+        expect(screen.queryByRole('button', { name: 'Изменить фигуру за аватаром' })).toBeNull()
 
         fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
         const viewer = screen.getByRole('dialog', { name: 'Фото: Я' })

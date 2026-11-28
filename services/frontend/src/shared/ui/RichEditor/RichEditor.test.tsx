@@ -181,6 +181,23 @@ describe('RichEditor', () => {
         expect(field.querySelector('script')).toBeNull()
     })
 
+    it('pastes a bare URL copied from <code> as plain text so it stays a clickable link', () => {
+        const { field, onChange } = setup()
+        fireEvent.paste(field, {
+            clipboardData: {
+                getData: (type: string) =>
+                    type === 'text/html'
+                        ? '<code>https://github.com</code>'
+                        : 'https://github.com',
+            },
+        })
+        expect(last(onChange)).toEqual({
+            text: 'https://github.com',
+            entities: [],
+        })
+        expect(field.querySelector('code')).toBeNull()
+    })
+
     it('inserts at the caret through the handle and keeps the caret after it', () => {
         const { ref, field, onChange } = setup()
         type(field, 'приветмир')
@@ -231,5 +248,62 @@ describe('RichEditor', () => {
         expect(selectionOffsets(field)).toEqual({ start: 4, end: 4 })
         expect(last(onChange).text).toBe('один два')
         expect(ref.current!.getValue().entities).toEqual([{ type: 'italic', offset: 5, length: 3 }])
+    })
+
+    it('supports extended formats, links and mention insertion', () => {
+        const { ref, field, onChange } = setup()
+        type(field, 'привет мир')
+        select(field, 0, 6)
+
+        fireEvent.keyDown(field, { code: 'KeyX', ctrlKey: true, shiftKey: true, key: 'X' })
+        fireEvent.keyDown(field, { code: 'KeyP', ctrlKey: true, shiftKey: true, key: 'P' })
+        expect(last(onChange).entities).toEqual([
+            { type: 'strikethrough', offset: 0, length: 6 },
+            { type: 'spoiler', offset: 0, length: 6 },
+        ])
+
+        // ссылка через кнопку в панели
+        fireEvent.click(screen.getByRole('button', { name: 'Ссылка' }))
+        const urlInput = screen.getByRole('textbox', { name: 'Адрес ссылки' })
+        fireEvent.change(urlInput, { target: { value: 'https://chavo.example' } })
+        fireEvent.keyDown(urlInput, { key: 'Enter' })
+        expect(last(onChange).entities).toContainEqual({
+            type: 'text_link',
+            offset: 0,
+            length: 6,
+            url: 'https://chavo.example',
+        })
+
+        // вставка упоминания заменяет диапазон и добавляет entity mention
+        act(() => ref.current!.insertMention(7, 10, '@bob', 'u-bob'))
+        expect(last(onChange).text).toBe('привет @bob ')
+        expect(last(onChange).entities).toContainEqual({
+            type: 'mention',
+            offset: 7,
+            length: 4,
+            user_id: 'u-bob',
+        })
+    })
+
+    it('applies and removes a code block with a chosen programming language', () => {
+        const { field, onChange } = setup()
+        type(field, 'fmt.Println(1)')
+        select(field, 0, 14)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Блок кода' }))
+        const langSelect = screen.getByRole('combobox', { name: 'Язык кода' })
+        fireEvent.change(langSelect, { target: { value: 'go' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Применить блок кода' }))
+
+        expect(last(onChange).entities).toEqual([
+            { type: 'pre', offset: 0, length: 14, language: 'go' },
+        ])
+
+        // повторное открытие показывает текущий язык и позволяет снять блок кода
+        select(field, 0, 14)
+        fireEvent.click(screen.getByRole('button', { name: 'Блок кода' }))
+        expect(screen.getByRole('combobox', { name: 'Язык кода' })).toHaveValue('go')
+        fireEvent.click(screen.getByRole('button', { name: 'Убрать блок кода' }))
+        expect(last(onChange).entities).toEqual([])
     })
 })

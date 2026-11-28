@@ -13,7 +13,7 @@ import { isSystem, useDraft, useSystemText } from '@/entities/message'
 import { usePresence, UserAvatar, useUser } from '@/entities/user'
 import { ChatActionsMenu } from '@/features/chat-actions'
 import { chatPath } from '@/shared/config'
-import { cn, formatChatTime } from '@/shared/lib'
+import { cn, formatChatTime, maskSpoilers } from '@/shared/lib'
 import { Icon, Tag } from '@/shared/ui'
 import type { MenuPosition } from '@/shared/ui'
 
@@ -37,7 +37,9 @@ function preview(chat: ConversationSummary, myId: string | undefined, systemText
     if (isSystem(message)) {
         return systemText
     }
-    const text = message.is_deleted ? 'Сообщение удалено' : (message.content ?? '')
+    const text = message.is_deleted
+        ? 'Сообщение удалено'
+        : maskSpoilers(message.content ?? '', message.entities)
     // в «Избранном» все сообщения свои - без «Вы:»
     return message.sender_id === myId && !chat.is_saved ? `Вы: ${text}` : text
 }
@@ -81,6 +83,7 @@ export function ChatListItem({ chat, myId, compact }: Props) {
         chat.last_message.sender_id === myId &&
         !isSystem(chat.last_message)
     const unread = chat.unread_count > 0
+    const unreadMentions = (chat.unread_mentions_count ?? 0) > 0
     const muted = isMuted(chat)
     const time = formatChatTime(chat.last_message?.created_at ?? chat.created_at)
 
@@ -149,9 +152,18 @@ export function ChatListItem({ chat, myId, compact }: Props) {
                                         <Icon name="notif-off" size={16} color="currentColor" />
                                     </span>
                                 )}
-                                {chat.pinned_at && !unread && (
+                                {chat.pinned_at && !unread && !unreadMentions && (
                                     <span role="img" aria-label="Закреплён" className={styles.flag}>
                                         <Icon name="pinned" size={16} color="currentColor" />
+                                    </span>
+                                )}
+                                {unreadMentions && (
+                                    <span
+                                        role="img"
+                                        aria-label="Непрочитанные упоминания"
+                                        className={styles.mentionBadge}
+                                    >
+                                        @
                                     </span>
                                 )}
                                 {unread && (

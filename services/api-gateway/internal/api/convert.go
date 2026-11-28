@@ -183,6 +183,40 @@ type messageJSON struct {
 	IsSilent bool `json:"is_silent"`
 	// агрегированные реакции сообщения
 	Reactions []reactionJSON `json:"reactions"`
+	// превью ссылки (OpenGraph), если есть
+	LinkPreview *linkPreviewJSON `json:"link_preview,omitempty"`
+}
+
+type linkPreviewJSON struct {
+	URL         string  `json:"url"`
+	Title       *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
+	ImageURL    *string `json:"image_url,omitempty"`
+	SiteName    *string `json:"site_name,omitempty"`
+}
+
+func (h *Handler) signPreviewImage(raw *string) *string {
+	if raw == nil || *raw == "" || h.previews == nil {
+		return nil
+	}
+	proxied := h.previews.ProxyImageURL(*raw)
+	if proxied == "" {
+		return nil
+	}
+	return &proxied
+}
+
+func (h *Handler) toLinkPreview(lp *conversationv1.LinkPreview) *linkPreviewJSON {
+	if lp == nil {
+		return nil
+	}
+	return &linkPreviewJSON{
+		URL:         lp.GetUrl(),
+		Title:       lp.Title,
+		Description: lp.Description,
+		ImageURL:    h.signPreviewImage(lp.ImageUrl),
+		SiteName:    lp.SiteName,
+	}
 }
 
 type reactionJSON struct {
@@ -206,15 +240,25 @@ func toReactions(in []*conversationv1.MessageReaction) []reactionJSON {
 }
 
 type entityJSON struct {
-	Type   string `json:"type"`
-	Offset int32  `json:"offset"`
-	Length int32  `json:"length"`
+	Type     string  `json:"type"`
+	Offset   int32   `json:"offset"`
+	Length   int32   `json:"length"`
+	URL      *string `json:"url,omitempty"`
+	UserID   *string `json:"user_id,omitempty"`
+	Language *string `json:"language,omitempty"`
 }
 
 func toEntities(in []*conversationv1.MessageEntity) []entityJSON {
 	out := make([]entityJSON, len(in))
 	for i, e := range in {
-		out[i] = entityJSON{Type: e.GetType(), Offset: e.GetOffset(), Length: e.GetLength()}
+		out[i] = entityJSON{
+			Type:     e.GetType(),
+			Offset:   e.GetOffset(),
+			Length:   e.GetLength(),
+			URL:      e.Url,
+			UserID:   e.UserId,
+			Language: e.Language,
+		}
 	}
 	return out
 }
@@ -222,12 +266,19 @@ func toEntities(in []*conversationv1.MessageEntity) []entityJSON {
 func fromEntities(in []entityJSON) []*conversationv1.MessageEntity {
 	out := make([]*conversationv1.MessageEntity, len(in))
 	for i, e := range in {
-		out[i] = &conversationv1.MessageEntity{Type: e.Type, Offset: e.Offset, Length: e.Length}
+		out[i] = &conversationv1.MessageEntity{
+			Type:     e.Type,
+			Offset:   e.Offset,
+			Length:   e.Length,
+			Url:      e.URL,
+			UserId:   e.UserID,
+			Language: e.Language,
+		}
 	}
 	return out
 }
 
-func toMessage(m *conversationv1.Message) *messageJSON {
+func (h *Handler) toMessage(m *conversationv1.Message) *messageJSON {
 	if m == nil {
 		return nil
 	}
@@ -250,15 +301,17 @@ func toMessage(m *conversationv1.Message) *messageJSON {
 		Entities:            toEntities(m.GetEntities()),
 		IsSilent:            m.GetIsSilent(),
 		Reactions:           toReactions(m.GetReactions()),
+		LinkPreview:         h.toLinkPreview(m.GetLinkPreview()),
 	}
 }
 
 type summaryJSON struct {
 	conversationJSON
-	MyRole      string       `json:"my_role"`
-	PeerID      *string      `json:"peer_id"`
-	LastMessage *messageJSON `json:"last_message"`
-	UnreadCount int32        `json:"unread_count"`
+	MyRole              string       `json:"my_role"`
+	PeerID              *string      `json:"peer_id"`
+	LastMessage         *messageJSON `json:"last_message"`
+	UnreadCount         int32        `json:"unread_count"`
+	UnreadMentionsCount int32        `json:"unread_mentions_count"`
 	// LastMessageRead - последнее сообщение прочитал кто-то кроме его автора
 	LastMessageRead bool  `json:"last_message_read"`
 	MembersCount    int32 `json:"members_count"`
@@ -290,17 +343,18 @@ func toChatSettings(s *conversationv1.ChatSettings) chatSettingsResponseJSON {
 	}
 }
 
-func toSummary(s *conversationv1.ConversationSummary) summaryJSON {
+func (h *Handler) toSummary(s *conversationv1.ConversationSummary) summaryJSON {
 	return summaryJSON{
-		conversationJSON: toConversation(s.GetConversation()),
-		MyRole:           s.GetMyRole(),
-		PeerID:           s.PeerId,
-		LastMessage:      toMessage(s.GetLastMessage()),
-		UnreadCount:      s.GetUnreadCount(),
-		LastMessageRead:  s.GetLastMessageRead(),
-		MembersCount:     s.GetMembersCount(),
-		InviteCode:       s.InviteCode,
-		IsSaved:          s.GetIsSaved(),
+		conversationJSON:    toConversation(s.GetConversation()),
+		MyRole:              s.GetMyRole(),
+		PeerID:              s.PeerId,
+		LastMessage:         h.toMessage(s.GetLastMessage()),
+		UnreadCount:         s.GetUnreadCount(),
+		UnreadMentionsCount: s.GetUnreadMentionsCount(),
+		LastMessageRead:     s.GetLastMessageRead(),
+		MembersCount:        s.GetMembersCount(),
+		InviteCode:          s.InviteCode,
+		IsSaved:             s.GetIsSaved(),
 		chatSettingsJSON: chatSettingsJSON{
 			MutedUntil: tsPtr(s.MutedUntil), ArchivedAt: tsPtr(s.ArchivedAt), PinnedAt: tsPtr(s.PinnedAt),
 		},

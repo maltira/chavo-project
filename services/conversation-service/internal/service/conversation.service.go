@@ -92,8 +92,9 @@ func (s *conversationService) toSummary(rec *repository.SummaryRecord) (*models.
 	item := &models.ConversationSummary{
 		Conversation:    rec.Conversation,
 		MyRole:          rec.MyRole,
-		PeerID:          rec.PeerID,
-		UnreadCount:     rec.UnreadCount,
+		PeerID:              rec.PeerID,
+		UnreadCount:         rec.UnreadCount,
+		UnreadMentionsCount: rec.UnreadMentionsCount,
 		LastMessageRead: rec.LastMessageRead,
 		MembersCount:    rec.MembersCount,
 		ChatSettings:    rec.Settings,

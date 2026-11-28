@@ -78,6 +78,8 @@ service ConversationService {
   // реакции на сообщения: добавить или снять свою реакцию; ответ - актуальные реакции сообщения
   rpc AddReaction(AddReactionRequest) returns (AddReactionResponse);
   rpc RemoveReaction(RemoveReactionRequest) returns (RemoveReactionResponse);
+  // непрочитанные упоминания пользователя в чате (в хронологическом порядке)
+  rpc ListUnreadMentions(ListUnreadMentionsRequest) returns (ListUnreadMentionsResponse);
 }
 
 // Вызовы между сервисами; Gateway их наружу не открывает.
@@ -130,6 +132,16 @@ message Message {
   bool is_silent = 16;
   // агрегированные реакции сообщения
   repeated MessageReaction reactions = 17;
+  // превью ссылки (OpenGraph), если есть
+  LinkPreview link_preview = 18;
+}
+
+message LinkPreview {
+  string url = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional string image_url = 4;
+  optional string site_name = 5;
 }
 
 message MessageReaction {
@@ -139,12 +151,17 @@ message MessageReaction {
   repeated string user_ids = 4;
 }
 
-// MessageEntity - форматированный фрагмент текста: type bold, italic или underline; offset и length в единицах
-// UTF-16 (как индексы строки JS)
+// MessageEntity - форматированный фрагмент текста; offset и length в единицах UTF-16 (как индексы строки JS)
 message MessageEntity {
   string type = 1;
   int32 offset = 2;
   int32 length = 3;
+  // для text_link (http/https URL)
+  optional string url = 4;
+  // для mention (UUID упомянутого пользователя)
+  optional string user_id = 5;
+  // для pre (язык блока кода, опционально)
+  optional string language = 6;
 }
 
 message ConversationSummary {
@@ -164,6 +181,8 @@ message ConversationSummary {
   optional google.protobuf.Timestamp pinned_at = 11;
   // «Избранное» - личный чат с самим собой (peer_id нет)
   bool is_saved = 12;
+  // число непрочитанных упоминаний вызывающего в этом чате
+  int32 unread_mentions_count = 13;
 }
 
 message ForwardMessagesRequest {
@@ -504,6 +523,7 @@ message SendMessageRequest {
   optional string reply_to_message_id = 4;
   repeated MessageEntity entities = 5;
   bool is_silent = 6;
+  LinkPreview link_preview = 7;
 }
 message SendMessageResponse {
   Message message = 1;
@@ -537,6 +557,7 @@ message EditMessageRequest {
   string content = 2;
   // новая разметка целиком; пусто - без форматирования
   repeated MessageEntity entities = 3;
+  LinkPreview link_preview = 4;
 }
 message EditMessageResponse {
   Message message = 1;
@@ -595,6 +616,14 @@ message RemoveReactionRequest {
 }
 message RemoveReactionResponse {
   repeated MessageReaction reactions = 1;
+}
+
+message ListUnreadMentionsRequest {
+  string conversation_id = 1;
+  int32 limit = 2;
+}
+message ListUnreadMentionsResponse {
+  repeated string message_ids = 1;
 }
 
 // Поля статуса — как в user.v1.SetStatusRequest.

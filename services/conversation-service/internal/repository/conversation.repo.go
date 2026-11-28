@@ -26,8 +26,9 @@ type SummaryRecord struct {
 	Conversation models.Conversation
 	MyRole       string
 	PeerID       *uuid.UUID
-	LastMessage  *MessageRecord
-	UnreadCount  int
+	LastMessage         *MessageRecord
+	UnreadCount         int
+	UnreadMentionsCount int
 	// LastMessageRead - кто-то кроме автора последнего сообщения дочитал до него (курсор прочтения)
 	LastMessageRead bool
 	MembersCount    int
@@ -262,10 +263,17 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		        cm.member_role, peer.user_id,
 		        lm.id, lm.sender_id, lm.content_enc, lm.reply_to_message_id, lm.is_edited,
 		        lm.kind, lm.system_event, lm.target_id, lm.created_at, lm.updated_at, lm.deleted_at,
-		        lm.is_forwarded, lm.forwarded_from_user_id, lm.entities, lm.is_silent,
+		        lm.is_forwarded, lm.forwarded_from_user_id, lm.entities, lm.entities_enc, lm.is_silent, lm.link_preview_enc,
 		        (SELECT COUNT(*) FROM messages m
 		          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL AND m.sender_id <> $1
 		            AND m.kind = 'user'
+		            AND m.created_at >= cm.joined_at
+		            AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at)
+		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))),
+		        (SELECT COUNT(*) FROM message_mentions mm
+		          JOIN messages m ON m.id = mm.message_id
+		          WHERE mm.conversation_id = c.id AND mm.user_id = $1
+		            AND m.deleted_at IS NULL AND m.sender_id <> $1
 		            AND m.created_at >= cm.joined_at
 		            AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at)
 		            AND (rm.id IS NULL OR (m.created_at, m.id) > (rm.created_at, rm.id))),
@@ -314,14 +322,16 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 			lmForwarded                     *bool
 			lmFrom                          *uuid.UUID
 			lmEntities                      []models.Entity
+			lmEntitiesEnc                   []byte
 			lmSilent                        *bool
+			lmPreviewEnc                    []byte
 			cu                              customCols
 		)
 		dest := append(baseDest(&s.Conversation), cu.dest()...)
 		dest = append(dest, &s.MyRole, &s.PeerID,
 			&lmID, &lmSender, &lmEnc, &lmReply, &lmEdited, &lmKind, &lmEvent, &lmTarget,
-			&lmCreated, &lmUpdated, &lmDeleted, &lmForwarded, &lmFrom, &lmEntities, &lmSilent,
-			&s.UnreadCount, &s.LastMessageRead, &s.MembersCount,
+			&lmCreated, &lmUpdated, &lmDeleted, &lmForwarded, &lmFrom, &lmEntities, &lmEntitiesEnc, &lmSilent, &lmPreviewEnc,
+			&s.UnreadCount, &s.UnreadMentionsCount, &s.LastMessageRead, &s.MembersCount,
 			&s.Settings.MutedUntil, &s.Settings.ArchivedAt, &s.Settings.PinnedAt, &s.IsSaved)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
@@ -335,7 +345,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 				Kind: *lmKind, SystemEvent: lmEvent, TargetID: lmTarget,
 				CreatedAt: *lmCreated, UpdatedAt: lmUpdated, DeletedAt: lmDeleted,
 				IsForwarded: *lmForwarded, ForwardedFromUserID: lmFrom, Entities: lmEntities,
-				IsSilent: lmSilent != nil && *lmSilent,
+				EntitiesEnc: lmEntitiesEnc, IsSilent: lmSilent != nil && *lmSilent, LinkPreviewEnc: lmPreviewEnc,
 			}
 		}
 		res = append(res, s)

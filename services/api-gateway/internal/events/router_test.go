@@ -352,3 +352,46 @@ func TestRouterRevokesRedisSessionsOnAuthEvents(t *testing.T) {
 		t.Fatalf("session_ids leaked to WS client: %v", data)
 	}
 }
+
+type fakeImageSigner struct{}
+
+func (fakeImageSigner) ProxyImageURL(raw string) string {
+	return "/api/link-preview/image?proxied=" + raw
+}
+
+func TestRouterProxiesLinkPreviewImageInWSEvents(t *testing.T) {
+	sink, profiles := &fakeSink{}, &fakeProfiles{}
+	r := NewRouter(sink, nil, profiles, DefaultOptions(), zap.NewNop()).WithImageProxy(fakeImageSigner{})
+	r.now = func() time.Time { return now }
+
+	ev := event(TypeMessageCreated, map[string]any{
+		"conversation_id": "c1",
+		"message_id":      "m1",
+		"member_ids":      []string{"u1"},
+		"link_preview": map[string]any{
+			"url":       "https://example.com",
+			"title":     "Example",
+			"image_url": "https://cdn.example.com/og.png",
+		},
+	}, now)
+	if err := r.Handle(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	frame := decode(t, sink.sent[0].msg)
+	data := frame["data"].(map[string]any)
+	lp := data["link_preview"].(map[string]any)
+	if lp["image_url"] != "/api/link-preview/image?proxied=https://cdn.example.com/og.png" {
+		t.Fatalf("WS image_url not proxied: %v", lp["image_url"])
+	}
+
+	// без signer внешняя картинка вырезается, чтобы IP получателя не утёк
+	rNoSigner, sink2, _ := newRouter()
+	if err := rNoSigner.Handle(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	frame2 := decode(t, sink2.sent[0].msg)
+	lp2 := frame2["data"].(map[string]any)["link_preview"].(map[string]any)
+	if _, leaked := lp2["image_url"]; leaked {
+		t.Fatalf("external image_url leaked without signer: %v", lp2)
+	}
+}

@@ -32,7 +32,7 @@ export { blockedKey, settingsKey, useBlocked, useSettings } from './model/useMyD
 export { useMe } from './model/useMe'
 export { useMyAvatar } from './model/useMyAvatar'
 export { useFavoriteEmojis } from './model/useFavoriteEmojis'
-export { userKey, useUser } from './model/useUser'
+export { userKey, useUser, useUsers } from './model/useUser'
 export { blockStatusKey, useBlockStatus } from './model/useBlockStatus'
 export { useUserSearch } from './model/useUserSearch'
 export { RECENT_LIMIT, useRecentUsers } from './model/recent'

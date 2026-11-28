@@ -101,7 +101,7 @@ export function GroupSettingsForm({ chat, onPickShape, onSaved, onDeleted }: Pro
                 <button
                     type="button"
                     className={styles.avatar}
-                    aria-label="Изменить фигуру за аватаром"
+                    aria-label="Изменить оформление"
                     onClick={onPickShape}
                 >
                     <UserAvatar src={chat.avatar_url} shape={chat.avatar_shape} size={96} />

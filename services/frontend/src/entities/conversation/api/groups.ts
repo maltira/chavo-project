@@ -1,6 +1,6 @@
 import { photoForm, request } from '@/shared/api'
 
-import type { AvatarShape, Status, StatusInput } from '@/entities/user/@x/conversation'
+import type { AvatarShape, ProfileCover, Status, StatusInput } from '@/entities/user/@x/conversation'
 
 import type { ConversationSummary } from '../model/types'
 import type { Member, Page } from './conversations'
@@ -45,6 +45,7 @@ export interface InviteInfo {
     request_status: string | null
     status: Status | null
     avatar_shape: AvatarShape | null
+    profile_cover?: ProfileCover | null
 }
 
 export function getInviteInfo(code: string): Promise<InviteInfo> {
@@ -143,6 +144,14 @@ export function setGroupAvatarShape(id: string, shape: AvatarShape): Promise<Ava
 
 export function clearGroupAvatarShape(id: string): Promise<void> {
     return request<void>(`${base(id)}/avatar-shape`, { method: 'DELETE' })
+}
+
+export function setGroupProfileCover(id: string, cover: ProfileCover): Promise<ProfileCover> {
+    return request<ProfileCover>(`${base(id)}/profile-cover`, { method: 'POST', body: cover })
+}
+
+export function clearGroupProfileCover(id: string): Promise<void> {
+    return request<void>(`${base(id)}/profile-cover`, { method: 'DELETE' })
 }
 
 // фото группы (только админ)

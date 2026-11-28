@@ -97,7 +97,7 @@ export function ProfileEditForm({ profile: current, onDone, onPickShape }: Props
                         <button
                             type="button"
                             className={styles.shapeButton}
-                            aria-label="Изменить фигуру за аватаром"
+                            aria-label="Изменить оформление"
                             onClick={onPickShape}
                         >
                             <Icon name="pallete" size={16} color="inherit" />

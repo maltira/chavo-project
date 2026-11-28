@@ -1,0 +1,128 @@
+@property --cover-spread {
+    syntax: '<percentage>';
+    inherits: false;
+    initial-value: 190%;
+}
+
+.root {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 0;
+
+    height: 296px;
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+}
+
+.compact {
+    height: 100%;
+}
+
+.gradient {
+    position: absolute;
+    inset: 0;
+
+    background:
+        radial-gradient(
+            115% 86% at 50% 6%,
+            color-mix(in srgb, var(--cover-color) 54%, transparent) 0%,
+            color-mix(in srgb, var(--cover-color) 28%, transparent) 44%,
+            color-mix(in srgb, var(--cover-color) 8%, transparent) 72%,
+            transparent 100%
+        ),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cover-color) 30%, transparent) 0%,
+            color-mix(in srgb, var(--cover-color) 11%, transparent) 58%,
+            transparent 100%
+        );
+}
+
+.pattern {
+    position: absolute;
+    inset: 0;
+
+    color: color-mix(in srgb, var(--cover-color) 58%, var(--color-text));
+    mask-image: radial-gradient(84% 78% at 50% 34%, #000 38%, transparent 100%);
+}
+
+.symbol {
+    position: absolute;
+    display: block;
+}
+
+// плавное растворение нижней кромки в фон карточки без резкой границы
+.fade {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 92px;
+
+    background: linear-gradient(180deg, transparent 0%, var(--color-bg-secondary) 100%);
+}
+
+.compact .fade {
+    height: 44px;
+}
+
+// мягкое раскрытие шапки из центра аватара через растущую радиальную маску без резких краёв
+.animated {
+    & .gradient {
+        mask-image: radial-gradient(
+            circle at 50% 34%,
+            #000 calc(var(--cover-spread) * 0.52),
+            transparent var(--cover-spread)
+        );
+        animation: cover-halo-spread 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    & .pattern {
+        transform-origin: 50% 34%;
+        animation: cover-pattern-bloom 680ms cubic-bezier(0.16, 1, 0.3, 1) 40ms both;
+    }
+}
+
+@keyframes cover-halo-spread {
+    0% {
+        --cover-spread: 0%;
+        opacity: 0;
+    }
+
+    18% {
+        opacity: 1;
+    }
+
+    100% {
+        --cover-spread: 190%;
+        opacity: 1;
+    }
+}
+
+@keyframes cover-pattern-bloom {
+    from {
+        opacity: 0;
+        transform: scale(0.76);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animated {
+        & .gradient {
+            mask-image: none;
+            animation: none;
+        }
+
+        & .pattern {
+            animation: none;
+        }
+    }
+}

@@ -17,6 +17,8 @@ interface Props {
     titleAlign?: 'center' | 'start'
     // слот слева в шапке: статус, кнопка «назад»
     headerStart?: ReactNode
+    // декоративный фон шапки (например, обложка профиля), лежит позади содержимого окна
+    cover?: ReactNode
     // подпись для скринридера, если заголовка нет
     'aria-label'?: string
     width?: number
@@ -32,6 +34,7 @@ export function Modal({
     title,
     titleAlign = 'center',
     headerStart,
+    cover,
     'aria-label': ariaLabel,
     width = 471,
     className,
@@ -72,9 +75,14 @@ export function Modal({
                 aria-modal="true"
                 aria-label={title ?? ariaLabel}
                 tabIndex={-1}
-                className={cn(styles.dialog, className)}
+                className={cn(styles.dialog, !!cover && styles.withCover, className)}
                 style={{ width }}
             >
+                {cover && (
+                    <div className={styles.coverLayer} aria-hidden="true">
+                        {cover}
+                    </div>
+                )}
                 <div className={styles.header}>
                     <div className={styles.start}>
                         {titleAlign === 'start' && title ? (

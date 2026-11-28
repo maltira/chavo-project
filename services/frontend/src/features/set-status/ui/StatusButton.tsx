@@ -11,15 +11,18 @@ interface Props {
     onEdit: () => void
     // во всю ширину (в меню профиля); по умолчанию - по размеру плашки
     block?: boolean
+    // плавное разворачивание из круга 36x36 при открытии модалки профиля/группы
+    animate?: boolean
     // по умолчанию - мой статус
     target?: CustomTarget
 }
 
 // статус (мой или группы) в профиле и настройках: по нажатию - редактор; без статуса - «Добавить статус»
-export function StatusButton({ onEdit, block = false, target = ME }: Props) {
+export function StatusButton({ onEdit, block = false, animate = false, target = ME }: Props) {
     const status = useTargetStatus(target)
     // истёкший статус сервер ещё может отдать до перезагрузки профиля
     const active = status && (!status.expires_at || new Date(status.expires_at) > new Date())
+    const shouldAnimate = animate && !block
 
     return (
         <button
@@ -35,9 +38,10 @@ export function StatusButton({ onEdit, block = false, target = ME }: Props) {
                     background={status.background}
                     foreground={status.foreground}
                     expiresAt={status.expires_at}
+                    animate={shouldAnimate}
                 />
             ) : (
-                <span className={styles.empty}>
+                <span className={cn(styles.empty, shouldAnimate && styles.animated)}>
                     <Icon
                         name="shape-plus"
                         size={24}

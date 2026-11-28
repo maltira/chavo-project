@@ -3,6 +3,11 @@ export interface AvatarShape {
     color: string
 }
 
+export interface ProfileCover {
+    color: string
+    pattern: string
+}
+
 export interface Status {
     icon: string
     text: string
@@ -19,6 +24,7 @@ export interface Profile {
     bio?: string
     avatar_url?: string
     avatar_shape?: AvatarShape | null
+    profile_cover?: ProfileCover | null
     status?: Status | null
     last_seen_at: string | null
     online: boolean

@@ -10,8 +10,10 @@ import (
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	avatarshapev1 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
+	profilecoverv1 "github.com/maltira/chavo-project-backend/proto/gen/go/profilecover/v1"
 	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/profilecover"
 	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/models"
@@ -109,6 +111,7 @@ func toConversation(c *models.Conversation) *conversationv1.Conversation {
 		Status:           toStatus(c.Status),
 		AvatarShape:      toAvatarShape(c.AvatarShape),
 		Slug:             c.Slug,
+		ProfileCover:     toProfileCover(c.ProfileCover),
 	}
 }
 
@@ -118,6 +121,18 @@ func toAvatarShape(sh *models.AvatarShape) *avatarshapev1.AvatarShape {
 		return nil
 	}
 	return &avatarshapev1.AvatarShape{Shape: sh.Shape, Color: sh.Color}
+}
+
+// toProfileCover - паттерн, убранный из каталога, сбрасывается в пустой (остаётся градиент цвета)
+func toProfileCover(cov *models.ProfileCover) *profilecoverv1.ProfileCover {
+	if cov == nil {
+		return nil
+	}
+	pattern := cov.Pattern
+	if pattern != "" && !profilecover.Known(pattern) {
+		pattern = ""
+	}
+	return &profilecoverv1.ProfileCover{Color: cov.Color, Pattern: pattern}
 }
 
 // toStatus: иконка, убранная из каталога после установки, — отсутствие статуса.

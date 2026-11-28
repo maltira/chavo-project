@@ -7,6 +7,7 @@ import (
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
 	"github.com/maltira/chavo-project-backend/proto/media"
+	"github.com/maltira/chavo-project-backend/proto/profilecover"
 	"github.com/maltira/chavo-project-backend/proto/status"
 )
 
@@ -51,6 +52,8 @@ func HTTPCode(err error) int {
 		errors.Is(err, status.ErrInvalidColor),
 		errors.Is(err, avatarshape.ErrUnknownShape),
 		errors.Is(err, avatarshape.ErrInvalidColor),
+		errors.Is(err, profilecover.ErrUnknownPattern),
+		errors.Is(err, profilecover.ErrInvalidColor),
 		errors.Is(err, media.ErrInvalidAvatarURL):
 		return http.StatusBadRequest
 	default:
@@ -90,6 +93,10 @@ func UserMessage(err error) string {
 		return "Неизвестная фигура"
 	case errors.Is(err, avatarshape.ErrInvalidColor):
 		return "Цвет фигуры задаётся в формате #RRGGBB"
+	case errors.Is(err, profilecover.ErrUnknownPattern):
+		return "Неизвестный паттерн обложки"
+	case errors.Is(err, profilecover.ErrInvalidColor):
+		return "Цвет обложки задаётся в формате #RRGGBB"
 	case errors.Is(err, media.ErrInvalidAvatarURL):
 		return "Фото профиля можно только загрузить"
 	case errors.Is(err, status.ErrUnknownIcon):
@@ -118,6 +125,10 @@ func Reason(err error) string {
 		return "AVATAR_SHAPE_INVALID"
 	case errors.Is(err, avatarshape.ErrInvalidColor):
 		return "AVATAR_SHAPE_COLOR_INVALID"
+	case errors.Is(err, profilecover.ErrUnknownPattern):
+		return "PROFILE_COVER_PATTERN_INVALID"
+	case errors.Is(err, profilecover.ErrInvalidColor):
+		return "PROFILE_COVER_COLOR_INVALID"
 	case errors.Is(err, media.ErrInvalidAvatarURL):
 		return "AVATAR_INVALID"
 	case errors.Is(err, status.ErrUnknownIcon):

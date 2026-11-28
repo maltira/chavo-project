@@ -80,6 +80,7 @@ func (s *Server) SearchPublicGroups(ctx context.Context, req *conversationv1.Sea
 			Status:       toStatus(g.Status),
 			AvatarShape:  toAvatarShape(g.AvatarShape),
 			Slug:         g.Slug,
+			ProfileCover: toProfileCover(g.ProfileCover),
 		}
 	}
 	return &conversationv1.SearchPublicGroupsResponse{Items: out, Limit: int32(limit), Offset: int32(offset)}, nil
@@ -314,6 +315,7 @@ func (s *Server) GetInviteInfo(ctx context.Context, req *conversationv1.GetInvit
 		RequestStatus:  info.RequestStatus,
 		Status:         toStatus(info.Status),
 		AvatarShape:    toAvatarShape(info.AvatarShape),
+		ProfileCover:   toProfileCover(info.ProfileCover),
 	}}, nil
 }
 
@@ -713,6 +715,37 @@ func (s *Server) ClearGroupAvatarShape(ctx context.Context, req *conversationv1.
 		return nil, err
 	}
 	return &conversationv1.ClearGroupAvatarShapeResponse{}, nil
+}
+
+func (s *Server) SetGroupProfileCover(ctx context.Context, req *conversationv1.SetGroupProfileCoverRequest) (*conversationv1.SetGroupProfileCoverResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	cov, err := s.groups.SetProfileCover(ctx, user, convID, req.GetColor(), req.GetPattern())
+	if err != nil {
+		return nil, err
+	}
+	return &conversationv1.SetGroupProfileCoverResponse{ProfileCover: toProfileCover(cov)}, nil
+}
+
+func (s *Server) ClearGroupProfileCover(ctx context.Context, req *conversationv1.ClearGroupProfileCoverRequest) (*conversationv1.ClearGroupProfileCoverResponse, error) {
+	user, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	convID, err := parseID(req.GetConversationId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.groups.ClearProfileCover(ctx, user, convID); err != nil {
+		return nil, err
+	}
+	return &conversationv1.ClearGroupProfileCoverResponse{}, nil
 }
 
 func (s *Server) SetChatMute(ctx context.Context, req *conversationv1.SetChatMuteRequest) (*conversationv1.SetChatMuteResponse, error) {

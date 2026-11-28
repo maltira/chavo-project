@@ -192,6 +192,23 @@ func (r *fakeShapeRepo) Clear(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// fakeCoverRepo пишет обложку прямо в профиль fakeProfiles, как fakeShapeRepo
+type fakeCoverRepo struct{ profiles *fakeProfiles }
+
+func (r *fakeCoverRepo) Set(_ context.Context, id uuid.UUID, cov models.ProfileCover) error {
+	p := r.profiles.byID[id]
+	p.ProfileCover = &cov
+	r.profiles.byID[id] = p
+	return nil
+}
+
+func (r *fakeCoverRepo) Clear(_ context.Context, id uuid.UUID) error {
+	p := r.profiles.byID[id]
+	p.ProfileCover = nil
+	r.profiles.byID[id] = p
+	return nil
+}
+
 type deps struct {
 	profiles *fakeProfiles
 	blocks   *fakeBlocks
@@ -216,7 +233,8 @@ func start(t *testing.T, d *deps) (userv1.UserServiceClient, userv1.UserInternal
 	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(zap.NewNop())))
 	statuses := service.NewStatusService(&fakeStatusRepo{profiles: d.profiles})
 	shapes := service.NewAvatarShapeService(&fakeShapeRepo{profiles: d.profiles})
-	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, shapes, d.avatars, d.presence)
+	covers := service.NewProfileCoverService(&fakeCoverRepo{profiles: d.profiles})
+	impl := grpcserver.New(d.profiles, d.blocks, d.settings, statuses, shapes, covers, d.avatars, d.presence)
 	userv1.RegisterUserServiceServer(srv, impl)
 	userv1.RegisterUserInternalServiceServer(srv, impl)
 	go func() { _ = srv.Serve(lis) }()
@@ -565,6 +583,77 @@ func TestAvatarShapeSetClearAndBlockHiding(t *testing.T) {
 	}
 }
 
+func TestProfileCoverSetClearAndBlockHiding(t *testing.T) {
+	d := newDeps()
+	owner, blocked, other := uuid.New(), uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{owner, blocked, other} {
+		d.profiles.byID[id] = models.Profile{UserID: id, Username: "u", DisplayName: "U"}
+	}
+	d.blocks.blocked[[2]uuid.UUID{owner, blocked}] = true
+	users, _ := start(t, d)
+
+	set, err := users.SetProfileCover(as(owner), &userv1.SetProfileCoverRequest{Color: "#34d399", Pattern: "star"})
+	if err != nil || set.GetProfileCover().GetColor() != "#34D399" || set.GetProfileCover().GetPattern() != "star" {
+		t.Fatalf("set: %v %v", set, err)
+	}
+
+	p, _ := users.GetProfile(as(other), &userv1.GetProfileRequest{UserId: owner.String()})
+	if p.GetProfile().GetProfileCover().GetColor() != "#34D399" || p.GetProfile().GetProfileCover().GetPattern() != "star" {
+		t.Fatalf("other must see cover: %v", p)
+	}
+	p, _ = users.GetProfile(as(blocked), &userv1.GetProfileRequest{UserId: owner.String()})
+	if p.GetProfile().GetProfileCover() != nil {
+		t.Fatalf("blocked viewer sees cover: %v", p)
+	}
+	found, _ := users.SearchProfiles(as(blocked), &userv1.SearchProfilesRequest{Query: "u"})
+	for _, f := range found.GetProfiles() {
+		if f.GetUserId() == owner.String() && f.GetProfileCover() != nil {
+			t.Fatalf("blocked viewer sees cover in search: %v", f)
+		}
+	}
+
+	// обложка без паттерна (только градиент) - допустима и заменяет прежнюю
+	if set, err = users.SetProfileCover(as(owner), &userv1.SetProfileCoverRequest{Color: "#4f46e5", Pattern: ""}); err != nil || set.GetProfileCover().GetColor() != "#4F46E5" || set.GetProfileCover().GetPattern() != "" {
+		t.Fatalf("replace gradient-only: %v %v", set, err)
+	}
+	if me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{}); me.GetProfile().GetProfileCover().GetColor() != "#4F46E5" {
+		t.Fatalf("own cover: %v", me)
+	}
+
+	for _, req := range []*userv1.SetProfileCoverRequest{
+		{Color: "#000000", Pattern: "Star"},
+		{Color: "#000000", Pattern: "unknown"},
+		{Color: "", Pattern: "star"},
+		{Color: "blue", Pattern: "star"},
+	} {
+		if _, err := users.SetProfileCover(as(owner), req); grpcxCode(err) != codes.InvalidArgument {
+			t.Fatalf("%v: %v", req, err)
+		}
+	}
+	if _, err := users.SetProfileCover(context.Background(), &userv1.SetProfileCoverRequest{Color: "#000000", Pattern: "star"}); grpcxCode(err) != codes.Unauthenticated {
+		t.Fatalf("anonymous set: %v", err)
+	}
+
+	// паттерн, убранный из каталога после установки, деградирует в пустой (только градиент)
+	p0 := d.profiles.byID[other]
+	p0.ProfileCover = &models.ProfileCover{Color: "#112233", Pattern: "removed-pattern"}
+	d.profiles.byID[other] = p0
+	if p, _ := users.GetProfile(as(owner), &userv1.GetProfileRequest{UserId: other.String()}); p.GetProfile().GetProfileCover() == nil || p.GetProfile().GetProfileCover().GetColor() != "#112233" || p.GetProfile().GetProfileCover().GetPattern() != "" {
+		t.Fatalf("removed pattern read: %v", p)
+	}
+
+	if _, err := users.ClearProfileCover(as(owner), &userv1.ClearProfileCoverRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if me, _ := users.GetMe(as(owner), &userv1.GetMeRequest{}); me.GetProfile().GetProfileCover() != nil {
+		t.Fatal("cover not cleared")
+	}
+	// повторное удаление - не ошибка
+	if _, err := users.ClearProfileCover(as(owner), &userv1.ClearProfileCoverRequest{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestForwardAuthorsHidden(t *testing.T) {
 	d := newDeps()
 	open, hidden := uuid.New(), uuid.New()
@@ -629,10 +718,11 @@ func TestDeletedProfileDisplayAndMessagingBlocked(t *testing.T) {
 		DisplayName: "Old Name",
 		Bio:         &bio,
 		AvatarURL:   &avatar,
-		Status:      &models.Status{Icon: "moon", Text: "Hi", Background: "#000000", Foreground: "#FFFFFF"},
-		AvatarShape: &models.AvatarShape{Shape: "circle", Color: "#000000"},
-		LastSeenAt:  now,
-		DeletedAt:   &now,
+		Status:       &models.Status{Icon: "moon", Text: "Hi", Background: "#000000", Foreground: "#FFFFFF"},
+		AvatarShape:  &models.AvatarShape{Shape: "circle", Color: "#000000"},
+		ProfileCover: &models.ProfileCover{Color: "#4F46E5", Pattern: "star"},
+		LastSeenAt:   now,
+		DeletedAt:    &now,
 	}
 	d.presence.online[deleted] = true
 	d.settings.show[deleted] = true
@@ -646,7 +736,7 @@ func TestDeletedProfileDisplayAndMessagingBlocked(t *testing.T) {
 	if !p.GetIsDeleted() || p.GetDisplayName() != "Удалённый аккаунт" || p.GetUsername() != "" {
 		t.Fatalf("unexpected deleted profile: %+v", p)
 	}
-	if p.Bio != nil || p.AvatarUrl != nil || p.Status != nil || p.AvatarShape != nil || p.GetOnline() || p.LastSeenAt != nil {
+	if p.Bio != nil || p.AvatarUrl != nil || p.Status != nil || p.AvatarShape != nil || p.ProfileCover != nil || p.GetOnline() || p.LastSeenAt != nil {
 		t.Fatalf("deleted profile leaks private fields: %+v", p)
 	}
 

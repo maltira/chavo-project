@@ -19,25 +19,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_CreateProfile_FullMethodName    = "/user.v1.UserService/CreateProfile"
-	UserService_GetMe_FullMethodName            = "/user.v1.UserService/GetMe"
-	UserService_UpdateMe_FullMethodName         = "/user.v1.UserService/UpdateMe"
-	UserService_GetProfile_FullMethodName       = "/user.v1.UserService/GetProfile"
-	UserService_SearchProfiles_FullMethodName   = "/user.v1.UserService/SearchProfiles"
-	UserService_ListAvatars_FullMethodName      = "/user.v1.UserService/ListAvatars"
-	UserService_AddAvatar_FullMethodName        = "/user.v1.UserService/AddAvatar"
-	UserService_SelectAvatar_FullMethodName     = "/user.v1.UserService/SelectAvatar"
-	UserService_DeleteAvatar_FullMethodName     = "/user.v1.UserService/DeleteAvatar"
-	UserService_ListBlocked_FullMethodName      = "/user.v1.UserService/ListBlocked"
-	UserService_GetBlockStatus_FullMethodName   = "/user.v1.UserService/GetBlockStatus"
-	UserService_BlockUser_FullMethodName        = "/user.v1.UserService/BlockUser"
-	UserService_UnblockUser_FullMethodName      = "/user.v1.UserService/UnblockUser"
-	UserService_GetSettings_FullMethodName      = "/user.v1.UserService/GetSettings"
-	UserService_UpdateSettings_FullMethodName   = "/user.v1.UserService/UpdateSettings"
-	UserService_SetStatus_FullMethodName        = "/user.v1.UserService/SetStatus"
-	UserService_ClearStatus_FullMethodName      = "/user.v1.UserService/ClearStatus"
-	UserService_SetAvatarShape_FullMethodName   = "/user.v1.UserService/SetAvatarShape"
-	UserService_ClearAvatarShape_FullMethodName = "/user.v1.UserService/ClearAvatarShape"
+	UserService_CreateProfile_FullMethodName     = "/user.v1.UserService/CreateProfile"
+	UserService_GetMe_FullMethodName             = "/user.v1.UserService/GetMe"
+	UserService_UpdateMe_FullMethodName          = "/user.v1.UserService/UpdateMe"
+	UserService_GetProfile_FullMethodName        = "/user.v1.UserService/GetProfile"
+	UserService_SearchProfiles_FullMethodName    = "/user.v1.UserService/SearchProfiles"
+	UserService_ListAvatars_FullMethodName       = "/user.v1.UserService/ListAvatars"
+	UserService_AddAvatar_FullMethodName         = "/user.v1.UserService/AddAvatar"
+	UserService_SelectAvatar_FullMethodName      = "/user.v1.UserService/SelectAvatar"
+	UserService_DeleteAvatar_FullMethodName      = "/user.v1.UserService/DeleteAvatar"
+	UserService_ListBlocked_FullMethodName       = "/user.v1.UserService/ListBlocked"
+	UserService_GetBlockStatus_FullMethodName    = "/user.v1.UserService/GetBlockStatus"
+	UserService_BlockUser_FullMethodName         = "/user.v1.UserService/BlockUser"
+	UserService_UnblockUser_FullMethodName       = "/user.v1.UserService/UnblockUser"
+	UserService_GetSettings_FullMethodName       = "/user.v1.UserService/GetSettings"
+	UserService_UpdateSettings_FullMethodName    = "/user.v1.UserService/UpdateSettings"
+	UserService_SetStatus_FullMethodName         = "/user.v1.UserService/SetStatus"
+	UserService_ClearStatus_FullMethodName       = "/user.v1.UserService/ClearStatus"
+	UserService_SetAvatarShape_FullMethodName    = "/user.v1.UserService/SetAvatarShape"
+	UserService_ClearAvatarShape_FullMethodName  = "/user.v1.UserService/ClearAvatarShape"
+	UserService_SetProfileCover_FullMethodName   = "/user.v1.UserService/SetProfileCover"
+	UserService_ClearProfileCover_FullMethodName = "/user.v1.UserService/ClearProfileCover"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -72,6 +74,9 @@ type UserServiceClient interface {
 	// SetAvatarShape ставит фигуру позади аватара целиком (прежняя заменяется); редактировать нельзя
 	SetAvatarShape(ctx context.Context, in *SetAvatarShapeRequest, opts ...grpc.CallOption) (*SetAvatarShapeResponse, error)
 	ClearAvatarShape(ctx context.Context, in *ClearAvatarShapeRequest, opts ...grpc.CallOption) (*ClearAvatarShapeResponse, error)
+	// SetProfileCover ставит шапку / обложку профиля целиком (прежняя заменяется)
+	SetProfileCover(ctx context.Context, in *SetProfileCoverRequest, opts ...grpc.CallOption) (*SetProfileCoverResponse, error)
+	ClearProfileCover(ctx context.Context, in *ClearProfileCoverRequest, opts ...grpc.CallOption) (*ClearProfileCoverResponse, error)
 }
 
 type userServiceClient struct {
@@ -272,6 +277,26 @@ func (c *userServiceClient) ClearAvatarShape(ctx context.Context, in *ClearAvata
 	return out, nil
 }
 
+func (c *userServiceClient) SetProfileCover(ctx context.Context, in *SetProfileCoverRequest, opts ...grpc.CallOption) (*SetProfileCoverResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetProfileCoverResponse)
+	err := c.cc.Invoke(ctx, UserService_SetProfileCover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ClearProfileCover(ctx context.Context, in *ClearProfileCoverRequest, opts ...grpc.CallOption) (*ClearProfileCoverResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearProfileCoverResponse)
+	err := c.cc.Invoke(ctx, UserService_ClearProfileCover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -304,6 +329,9 @@ type UserServiceServer interface {
 	// SetAvatarShape ставит фигуру позади аватара целиком (прежняя заменяется); редактировать нельзя
 	SetAvatarShape(context.Context, *SetAvatarShapeRequest) (*SetAvatarShapeResponse, error)
 	ClearAvatarShape(context.Context, *ClearAvatarShapeRequest) (*ClearAvatarShapeResponse, error)
+	// SetProfileCover ставит шапку / обложку профиля целиком (прежняя заменяется)
+	SetProfileCover(context.Context, *SetProfileCoverRequest) (*SetProfileCoverResponse, error)
+	ClearProfileCover(context.Context, *ClearProfileCoverRequest) (*ClearProfileCoverResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -370,6 +398,12 @@ func (UnimplementedUserServiceServer) SetAvatarShape(context.Context, *SetAvatar
 }
 func (UnimplementedUserServiceServer) ClearAvatarShape(context.Context, *ClearAvatarShapeRequest) (*ClearAvatarShapeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ClearAvatarShape not implemented")
+}
+func (UnimplementedUserServiceServer) SetProfileCover(context.Context, *SetProfileCoverRequest) (*SetProfileCoverResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetProfileCover not implemented")
+}
+func (UnimplementedUserServiceServer) ClearProfileCover(context.Context, *ClearProfileCoverRequest) (*ClearProfileCoverResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearProfileCover not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -734,6 +768,42 @@ func _UserService_ClearAvatarShape_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SetProfileCover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetProfileCoverRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetProfileCover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetProfileCover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetProfileCover(ctx, req.(*SetProfileCoverRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ClearProfileCover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearProfileCoverRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ClearProfileCover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ClearProfileCover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ClearProfileCover(ctx, req.(*ClearProfileCoverRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -816,6 +886,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ClearAvatarShape",
 			Handler:    _UserService_ClearAvatarShape_Handler,
+		},
+		{
+			MethodName: "SetProfileCover",
+			Handler:    _UserService_SetProfileCover_Handler,
+		},
+		{
+			MethodName: "ClearProfileCover",
+			Handler:    _UserService_ClearProfileCover_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -4,6 +4,7 @@ package conversation.v1;
 
 import "google/protobuf/timestamp.proto";
 import "avatarshape/v1/avatarshape.proto";
+import "profilecover/v1/profilecover.proto";
 import "status/v1/status.proto";
 
 option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1;conversationv1";
@@ -22,6 +23,9 @@ service ConversationService {
   // SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
   rpc SetGroupAvatarShape(SetGroupAvatarShapeRequest) returns (SetGroupAvatarShapeResponse);
   rpc ClearGroupAvatarShape(ClearGroupAvatarShapeRequest) returns (ClearGroupAvatarShapeResponse);
+  // SetGroupProfileCover - только админ группы; ставит обложку группы целиком, прежняя заменяется
+  rpc SetGroupProfileCover(SetGroupProfileCoverRequest) returns (SetGroupProfileCoverResponse);
+  rpc ClearGroupProfileCover(ClearGroupProfileCoverRequest) returns (ClearGroupProfileCoverResponse);
   // DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
   // ClearHistory - очищает историю чата только для вызывающего, сам чат остаётся в списке
@@ -106,6 +110,8 @@ message Conversation {
   avatarshape.v1.AvatarShape avatar_shape = 11;
   // код ссылки открытой группы (/chat/<slug>)
   optional string slug = 12;
+  // только у групп; не задана - обложки нет
+  profilecover.v1.ProfileCover profile_cover = 13;
 }
 
 // Message — расшифрованное сообщение; content отсутствует у удалённых.
@@ -274,6 +280,7 @@ message InviteInfo {
   avatarshape.v1.AvatarShape avatar_shape = 9;
   string visibility = 10;
   optional string slug = 11;
+  profilecover.v1.ProfileCover profile_cover = 12;
 }
 
 message PublicGroup {
@@ -286,6 +293,7 @@ message PublicGroup {
   status.v1.Status status = 7;
   avatarshape.v1.AvatarShape avatar_shape = 8;
   string slug = 9;
+  profilecover.v1.ProfileCover profile_cover = 10;
 }
 
 message ListConversationsRequest {
@@ -656,3 +664,17 @@ message ClearGroupAvatarShapeRequest {
   string conversation_id = 1;
 }
 message ClearGroupAvatarShapeResponse {}
+
+message SetGroupProfileCoverRequest {
+  string conversation_id = 1;
+  // #RRGGBB
+  string color = 2;
+  string pattern = 3;
+}
+message SetGroupProfileCoverResponse {
+  profilecover.v1.ProfileCover profile_cover = 1;
+}
+message ClearGroupProfileCoverRequest {
+  string conversation_id = 1;
+}
+message ClearGroupProfileCoverResponse {}

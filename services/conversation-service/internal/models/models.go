@@ -44,13 +44,19 @@ type Conversation struct {
 	LastMessageAt time.Time    `json:"last_message_at"`
 	CreatedAt     time.Time    `json:"created_at"`
 	UpdatedAt     time.Time    `json:"updated_at"`
-	Status        *Status      `json:"status,omitempty"`
-	AvatarShape   *AvatarShape `json:"avatar_shape,omitempty"`
+	Status        *Status       `json:"status,omitempty"`
+	AvatarShape   *AvatarShape  `json:"avatar_shape,omitempty"`
+	ProfileCover  *ProfileCover `json:"profile_cover,omitempty"`
 }
 
 type AvatarShape struct {
 	Shape string
 	Color string
+}
+
+type ProfileCover struct {
+	Color   string
+	Pattern string
 }
 
 type Status struct {
@@ -209,19 +215,21 @@ type InviteInfo struct {
 	MembersCount   int          `json:"members_count"`
 	IsMember       bool         `json:"is_member"`
 	RequestStatus  *string      `json:"request_status"`
-	Status         *Status      `json:"status,omitempty"`
-	AvatarShape    *AvatarShape `json:"avatar_shape,omitempty"`
+	Status         *Status       `json:"status,omitempty"`
+	AvatarShape    *AvatarShape  `json:"avatar_shape,omitempty"`
+	ProfileCover   *ProfileCover `json:"profile_cover,omitempty"`
 }
 
 // PublicGroup — краткая карточка публичной группы для поиска.
 type PublicGroup struct {
-	ID           uuid.UUID    `json:"id"`
-	Name         string       `json:"name"`
-	Description  *string      `json:"description"`
-	AvatarURL    *string      `json:"avatar_url"`
-	Slug         string       `json:"slug"`
-	MembersCount int          `json:"members_count"`
-	IsMember     bool         `json:"is_member"`
-	Status       *Status      `json:"status,omitempty"`
-	AvatarShape  *AvatarShape `json:"avatar_shape,omitempty"`
+	ID           uuid.UUID     `json:"id"`
+	Name         string        `json:"name"`
+	Description  *string       `json:"description"`
+	AvatarURL    *string       `json:"avatar_url"`
+	Slug         string        `json:"slug"`
+	MembersCount int           `json:"members_count"`
+	IsMember     bool          `json:"is_member"`
+	Status       *Status       `json:"status,omitempty"`
+	AvatarShape  *AvatarShape  `json:"avatar_shape,omitempty"`
+	ProfileCover *ProfileCover `json:"profile_cover,omitempty"`
 }

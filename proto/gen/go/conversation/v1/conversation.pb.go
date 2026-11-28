@@ -8,6 +8,7 @@ package conversationv1
 
 import (
 	v11 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
+	v12 "github.com/maltira/chavo-project-backend/proto/gen/go/profilecover/v1"
 	v1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -40,7 +41,9 @@ type Conversation struct {
 	// только у групп; не задана - фигуры нет
 	AvatarShape *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
 	// код ссылки открытой группы (/chat/<slug>)
-	Slug          *string `protobuf:"bytes,12,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
+	Slug *string `protobuf:"bytes,12,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
+	// только у групп; не задана - обложки нет
+	ProfileCover  *v12.ProfileCover `protobuf:"bytes,13,opt,name=profile_cover,json=profileCover,proto3" json:"profile_cover,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -157,6 +160,13 @@ func (x *Conversation) GetSlug() string {
 		return *x.Slug
 	}
 	return ""
+}
+
+func (x *Conversation) GetProfileCover() *v12.ProfileCover {
+	if x != nil {
+		return x.ProfileCover
+	}
+	return nil
 }
 
 // Message — расшифрованное сообщение; content отсутствует у удалённых.
@@ -1547,6 +1557,7 @@ type InviteInfo struct {
 	AvatarShape    *v11.AvatarShape       `protobuf:"bytes,9,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
 	Visibility     string                 `protobuf:"bytes,10,opt,name=visibility,proto3" json:"visibility,omitempty"`
 	Slug           *string                `protobuf:"bytes,11,opt,name=slug,proto3,oneof" json:"slug,omitempty"`
+	ProfileCover   *v12.ProfileCover      `protobuf:"bytes,12,opt,name=profile_cover,json=profileCover,proto3" json:"profile_cover,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1658,6 +1669,13 @@ func (x *InviteInfo) GetSlug() string {
 	return ""
 }
 
+func (x *InviteInfo) GetProfileCover() *v12.ProfileCover {
+	if x != nil {
+		return x.ProfileCover
+	}
+	return nil
+}
+
 type PublicGroup struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1669,6 +1687,7 @@ type PublicGroup struct {
 	Status        *v1.Status             `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`
 	AvatarShape   *v11.AvatarShape       `protobuf:"bytes,8,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
 	Slug          string                 `protobuf:"bytes,9,opt,name=slug,proto3" json:"slug,omitempty"`
+	ProfileCover  *v12.ProfileCover      `protobuf:"bytes,10,opt,name=profile_cover,json=profileCover,proto3" json:"profile_cover,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1764,6 +1783,13 @@ func (x *PublicGroup) GetSlug() string {
 		return x.Slug
 	}
 	return ""
+}
+
+func (x *PublicGroup) GetProfileCover() *v12.ProfileCover {
+	if x != nil {
+		return x.ProfileCover
+	}
+	return nil
 }
 
 type ListConversationsRequest struct {
@@ -6236,11 +6262,196 @@ func (*ClearGroupAvatarShapeResponse) Descriptor() ([]byte, []int) {
 	return file_conversation_v1_conversation_proto_rawDescGZIP(), []int{110}
 }
 
+type SetGroupProfileCoverRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	// #RRGGBB
+	Color         string `protobuf:"bytes,2,opt,name=color,proto3" json:"color,omitempty"`
+	Pattern       string `protobuf:"bytes,3,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetGroupProfileCoverRequest) Reset() {
+	*x = SetGroupProfileCoverRequest{}
+	mi := &file_conversation_v1_conversation_proto_msgTypes[111]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetGroupProfileCoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetGroupProfileCoverRequest) ProtoMessage() {}
+
+func (x *SetGroupProfileCoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conversation_v1_conversation_proto_msgTypes[111]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetGroupProfileCoverRequest.ProtoReflect.Descriptor instead.
+func (*SetGroupProfileCoverRequest) Descriptor() ([]byte, []int) {
+	return file_conversation_v1_conversation_proto_rawDescGZIP(), []int{111}
+}
+
+func (x *SetGroupProfileCoverRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *SetGroupProfileCoverRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *SetGroupProfileCoverRequest) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+type SetGroupProfileCoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProfileCover  *v12.ProfileCover      `protobuf:"bytes,1,opt,name=profile_cover,json=profileCover,proto3" json:"profile_cover,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetGroupProfileCoverResponse) Reset() {
+	*x = SetGroupProfileCoverResponse{}
+	mi := &file_conversation_v1_conversation_proto_msgTypes[112]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetGroupProfileCoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetGroupProfileCoverResponse) ProtoMessage() {}
+
+func (x *SetGroupProfileCoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conversation_v1_conversation_proto_msgTypes[112]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetGroupProfileCoverResponse.ProtoReflect.Descriptor instead.
+func (*SetGroupProfileCoverResponse) Descriptor() ([]byte, []int) {
+	return file_conversation_v1_conversation_proto_rawDescGZIP(), []int{112}
+}
+
+func (x *SetGroupProfileCoverResponse) GetProfileCover() *v12.ProfileCover {
+	if x != nil {
+		return x.ProfileCover
+	}
+	return nil
+}
+
+type ClearGroupProfileCoverRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ClearGroupProfileCoverRequest) Reset() {
+	*x = ClearGroupProfileCoverRequest{}
+	mi := &file_conversation_v1_conversation_proto_msgTypes[113]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearGroupProfileCoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearGroupProfileCoverRequest) ProtoMessage() {}
+
+func (x *ClearGroupProfileCoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conversation_v1_conversation_proto_msgTypes[113]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearGroupProfileCoverRequest.ProtoReflect.Descriptor instead.
+func (*ClearGroupProfileCoverRequest) Descriptor() ([]byte, []int) {
+	return file_conversation_v1_conversation_proto_rawDescGZIP(), []int{113}
+}
+
+func (x *ClearGroupProfileCoverRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+type ClearGroupProfileCoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearGroupProfileCoverResponse) Reset() {
+	*x = ClearGroupProfileCoverResponse{}
+	mi := &file_conversation_v1_conversation_proto_msgTypes[114]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearGroupProfileCoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearGroupProfileCoverResponse) ProtoMessage() {}
+
+func (x *ClearGroupProfileCoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conversation_v1_conversation_proto_msgTypes[114]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearGroupProfileCoverResponse.ProtoReflect.Descriptor instead.
+func (*ClearGroupProfileCoverResponse) Descriptor() ([]byte, []int) {
+	return file_conversation_v1_conversation_proto_rawDescGZIP(), []int{114}
+}
+
 var File_conversation_v1_conversation_proto protoreflect.FileDescriptor
 
 const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\n" +
-	"\"conversation/v1/conversation.proto\x12\x0fconversation.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\xbe\x04\n" +
+	"\"conversation/v1/conversation.proto\x12\x0fconversation.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\"profilecover/v1/profilecover.proto\x1a\x16status/v1/status.proto\"\x82\x05\n" +
 	"\fConversation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11conversation_type\x18\x02 \x01(\tR\x10conversationType\x12\x1e\n" +
@@ -6259,7 +6470,8 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\x06status\x18\n" +
 	" \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
 	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x17\n" +
-	"\x04slug\x18\f \x01(\tH\x03R\x04slug\x88\x01\x01B\a\n" +
+	"\x04slug\x18\f \x01(\tH\x03R\x04slug\x88\x01\x01\x12B\n" +
+	"\rprofile_cover\x18\r \x01(\v2\x1d.profilecover.v1.ProfileCoverR\fprofileCoverB\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_descriptionB\r\n" +
 	"\v_avatar_urlB\a\n" +
@@ -6412,7 +6624,7 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xef\x03\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xb3\x04\n" +
 	"\n" +
 	"InviteInfo\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x17\n" +
@@ -6429,12 +6641,13 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"visibility\x18\n" +
 	" \x01(\tR\n" +
 	"visibility\x12\x17\n" +
-	"\x04slug\x18\v \x01(\tH\x04R\x04slug\x88\x01\x01B\a\n" +
+	"\x04slug\x18\v \x01(\tH\x04R\x04slug\x88\x01\x01\x12B\n" +
+	"\rprofile_cover\x18\f \x01(\v2\x1d.profilecover.v1.ProfileCoverR\fprofileCoverB\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_descriptionB\r\n" +
 	"\v_avatar_urlB\x11\n" +
 	"\x0f_request_statusB\a\n" +
-	"\x05_slug\"\xdc\x02\n" +
+	"\x05_slug\"\xa0\x03\n" +
 	"\vPublicGroup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
@@ -6445,7 +6658,9 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\tis_member\x18\x06 \x01(\bR\bisMember\x12)\n" +
 	"\x06status\x18\a \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
 	"\favatar_shape\x18\b \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x12\n" +
-	"\x04slug\x18\t \x01(\tR\x04slugB\x0e\n" +
+	"\x04slug\x18\t \x01(\tR\x04slug\x12B\n" +
+	"\rprofile_cover\x18\n" +
+	" \x01(\v2\x1d.profilecover.v1.ProfileCoverR\fprofileCoverB\x0e\n" +
 	"\f_descriptionB\r\n" +
 	"\v_avatar_url\"d\n" +
 	"\x18ListConversationsRequest\x12\x14\n" +
@@ -6744,7 +6959,16 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\favatar_shape\x18\x01 \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\"G\n" +
 	"\x1cClearGroupAvatarShapeRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"\x1f\n" +
-	"\x1dClearGroupAvatarShapeResponse2\xff\"\n" +
+	"\x1dClearGroupAvatarShapeResponse\"v\n" +
+	"\x1bSetGroupProfileCoverRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x14\n" +
+	"\x05color\x18\x02 \x01(\tR\x05color\x12\x18\n" +
+	"\apattern\x18\x03 \x01(\tR\apattern\"b\n" +
+	"\x1cSetGroupProfileCoverResponse\x12B\n" +
+	"\rprofile_cover\x18\x01 \x01(\v2\x1d.profilecover.v1.ProfileCoverR\fprofileCover\"H\n" +
+	"\x1dClearGroupProfileCoverRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\" \n" +
+	"\x1eClearGroupProfileCoverResponse2\xef$\n" +
 	"\x13ConversationService\x12j\n" +
 	"\x11ListConversations\x12).conversation.v1.ListConversationsRequest\x1a*.conversation.v1.ListConversationsResponse\x12d\n" +
 	"\x0fGetConversation\x12'.conversation.v1.GetConversationRequest\x1a(.conversation.v1.GetConversationResponse\x12m\n" +
@@ -6754,7 +6978,9 @@ const file_conversation_v1_conversation_proto_rawDesc = "" +
 	"\x0eSetGroupStatus\x12&.conversation.v1.SetGroupStatusRequest\x1a'.conversation.v1.SetGroupStatusResponse\x12g\n" +
 	"\x10ClearGroupStatus\x12(.conversation.v1.ClearGroupStatusRequest\x1a).conversation.v1.ClearGroupStatusResponse\x12p\n" +
 	"\x13SetGroupAvatarShape\x12+.conversation.v1.SetGroupAvatarShapeRequest\x1a,.conversation.v1.SetGroupAvatarShapeResponse\x12v\n" +
-	"\x15ClearGroupAvatarShape\x12-.conversation.v1.ClearGroupAvatarShapeRequest\x1a..conversation.v1.ClearGroupAvatarShapeResponse\x12m\n" +
+	"\x15ClearGroupAvatarShape\x12-.conversation.v1.ClearGroupAvatarShapeRequest\x1a..conversation.v1.ClearGroupAvatarShapeResponse\x12s\n" +
+	"\x14SetGroupProfileCover\x12,.conversation.v1.SetGroupProfileCoverRequest\x1a-.conversation.v1.SetGroupProfileCoverResponse\x12y\n" +
+	"\x16ClearGroupProfileCover\x12..conversation.v1.ClearGroupProfileCoverRequest\x1a/.conversation.v1.ClearGroupProfileCoverResponse\x12m\n" +
 	"\x12DeleteConversation\x12*.conversation.v1.DeleteConversationRequest\x1a+.conversation.v1.DeleteConversationResponse\x12[\n" +
 	"\fClearHistory\x12$.conversation.v1.ClearHistoryRequest\x1a%.conversation.v1.ClearHistoryResponse\x12R\n" +
 	"\tJoinGroup\x12!.conversation.v1.JoinGroupRequest\x1a\".conversation.v1.JoinGroupResponse\x12g\n" +
@@ -6811,284 +7037,297 @@ func file_conversation_v1_conversation_proto_rawDescGZIP() []byte {
 	return file_conversation_v1_conversation_proto_rawDescData
 }
 
-var file_conversation_v1_conversation_proto_msgTypes = make([]protoimpl.MessageInfo, 111)
+var file_conversation_v1_conversation_proto_msgTypes = make([]protoimpl.MessageInfo, 115)
 var file_conversation_v1_conversation_proto_goTypes = []any{
-	(*Conversation)(nil),                  // 0: conversation.v1.Conversation
-	(*Message)(nil),                       // 1: conversation.v1.Message
-	(*LinkPreview)(nil),                   // 2: conversation.v1.LinkPreview
-	(*MessageReaction)(nil),               // 3: conversation.v1.MessageReaction
-	(*MessageEntity)(nil),                 // 4: conversation.v1.MessageEntity
-	(*ConversationSummary)(nil),           // 5: conversation.v1.ConversationSummary
-	(*ForwardMessagesRequest)(nil),        // 6: conversation.v1.ForwardMessagesRequest
-	(*ForwardedChat)(nil),                 // 7: conversation.v1.ForwardedChat
-	(*ForwardMessagesResponse)(nil),       // 8: conversation.v1.ForwardMessagesResponse
-	(*PinnedMessage)(nil),                 // 9: conversation.v1.PinnedMessage
-	(*ListPinsRequest)(nil),               // 10: conversation.v1.ListPinsRequest
-	(*ListPinsResponse)(nil),              // 11: conversation.v1.ListPinsResponse
-	(*PinMessageRequest)(nil),             // 12: conversation.v1.PinMessageRequest
-	(*PinMessageResponse)(nil),            // 13: conversation.v1.PinMessageResponse
-	(*UnpinMessageRequest)(nil),           // 14: conversation.v1.UnpinMessageRequest
-	(*UnpinMessageResponse)(nil),          // 15: conversation.v1.UnpinMessageResponse
-	(*ChatSettings)(nil),                  // 16: conversation.v1.ChatSettings
-	(*Member)(nil),                        // 17: conversation.v1.Member
-	(*Ban)(nil),                           // 18: conversation.v1.Ban
-	(*JoinRequest)(nil),                   // 19: conversation.v1.JoinRequest
-	(*InviteInfo)(nil),                    // 20: conversation.v1.InviteInfo
-	(*PublicGroup)(nil),                   // 21: conversation.v1.PublicGroup
-	(*ListConversationsRequest)(nil),      // 22: conversation.v1.ListConversationsRequest
-	(*ListConversationsResponse)(nil),     // 23: conversation.v1.ListConversationsResponse
-	(*GetConversationRequest)(nil),        // 24: conversation.v1.GetConversationRequest
-	(*GetConversationResponse)(nil),       // 25: conversation.v1.GetConversationResponse
-	(*SearchPublicGroupsRequest)(nil),     // 26: conversation.v1.SearchPublicGroupsRequest
-	(*SearchPublicGroupsResponse)(nil),    // 27: conversation.v1.SearchPublicGroupsResponse
-	(*CreateGroupRequest)(nil),            // 28: conversation.v1.CreateGroupRequest
-	(*CreateGroupResponse)(nil),           // 29: conversation.v1.CreateGroupResponse
-	(*UpdateGroupRequest)(nil),            // 30: conversation.v1.UpdateGroupRequest
-	(*UpdateGroupResponse)(nil),           // 31: conversation.v1.UpdateGroupResponse
-	(*DeleteConversationRequest)(nil),     // 32: conversation.v1.DeleteConversationRequest
-	(*DeleteConversationResponse)(nil),    // 33: conversation.v1.DeleteConversationResponse
-	(*ClearHistoryRequest)(nil),           // 34: conversation.v1.ClearHistoryRequest
-	(*ClearHistoryResponse)(nil),          // 35: conversation.v1.ClearHistoryResponse
-	(*JoinGroupRequest)(nil),              // 36: conversation.v1.JoinGroupRequest
-	(*JoinGroupResponse)(nil),             // 37: conversation.v1.JoinGroupResponse
-	(*AvatarPhoto)(nil),                   // 38: conversation.v1.AvatarPhoto
-	(*ListGroupAvatarsRequest)(nil),       // 39: conversation.v1.ListGroupAvatarsRequest
-	(*ListGroupAvatarsResponse)(nil),      // 40: conversation.v1.ListGroupAvatarsResponse
-	(*AddGroupAvatarRequest)(nil),         // 41: conversation.v1.AddGroupAvatarRequest
-	(*AddGroupAvatarResponse)(nil),        // 42: conversation.v1.AddGroupAvatarResponse
-	(*SelectGroupAvatarRequest)(nil),      // 43: conversation.v1.SelectGroupAvatarRequest
-	(*SelectGroupAvatarResponse)(nil),     // 44: conversation.v1.SelectGroupAvatarResponse
-	(*DeleteGroupAvatarRequest)(nil),      // 45: conversation.v1.DeleteGroupAvatarRequest
-	(*DeleteGroupAvatarResponse)(nil),     // 46: conversation.v1.DeleteGroupAvatarResponse
-	(*SetChatMuteRequest)(nil),            // 47: conversation.v1.SetChatMuteRequest
-	(*SetChatMuteResponse)(nil),           // 48: conversation.v1.SetChatMuteResponse
-	(*SetChatArchivedRequest)(nil),        // 49: conversation.v1.SetChatArchivedRequest
-	(*SetChatArchivedResponse)(nil),       // 50: conversation.v1.SetChatArchivedResponse
-	(*SetChatPinnedRequest)(nil),          // 51: conversation.v1.SetChatPinnedRequest
-	(*SetChatPinnedResponse)(nil),         // 52: conversation.v1.SetChatPinnedResponse
-	(*ListMembersRequest)(nil),            // 53: conversation.v1.ListMembersRequest
-	(*ListMembersResponse)(nil),           // 54: conversation.v1.ListMembersResponse
-	(*AddMembersRequest)(nil),             // 55: conversation.v1.AddMembersRequest
-	(*AddMembersResponse)(nil),            // 56: conversation.v1.AddMembersResponse
-	(*SetMemberRoleRequest)(nil),          // 57: conversation.v1.SetMemberRoleRequest
-	(*SetMemberRoleResponse)(nil),         // 58: conversation.v1.SetMemberRoleResponse
-	(*RemoveMemberRequest)(nil),           // 59: conversation.v1.RemoveMemberRequest
-	(*RemoveMemberResponse)(nil),          // 60: conversation.v1.RemoveMemberResponse
-	(*ListBansRequest)(nil),               // 61: conversation.v1.ListBansRequest
-	(*ListBansResponse)(nil),              // 62: conversation.v1.ListBansResponse
-	(*UnbanRequest)(nil),                  // 63: conversation.v1.UnbanRequest
-	(*UnbanResponse)(nil),                 // 64: conversation.v1.UnbanResponse
-	(*GetInviteInfoRequest)(nil),          // 65: conversation.v1.GetInviteInfoRequest
-	(*GetInviteInfoResponse)(nil),         // 66: conversation.v1.GetInviteInfoResponse
-	(*RegenerateInviteRequest)(nil),       // 67: conversation.v1.RegenerateInviteRequest
-	(*RegenerateInviteResponse)(nil),      // 68: conversation.v1.RegenerateInviteResponse
-	(*RequestJoinRequest)(nil),            // 69: conversation.v1.RequestJoinRequest
-	(*RequestJoinResponse)(nil),           // 70: conversation.v1.RequestJoinResponse
-	(*ListJoinRequestsRequest)(nil),       // 71: conversation.v1.ListJoinRequestsRequest
-	(*ListJoinRequestsResponse)(nil),      // 72: conversation.v1.ListJoinRequestsResponse
-	(*ApproveJoinRequestRequest)(nil),     // 73: conversation.v1.ApproveJoinRequestRequest
-	(*ApproveJoinRequestResponse)(nil),    // 74: conversation.v1.ApproveJoinRequestResponse
-	(*RejectJoinRequestRequest)(nil),      // 75: conversation.v1.RejectJoinRequestRequest
-	(*RejectJoinRequestResponse)(nil),     // 76: conversation.v1.RejectJoinRequestResponse
-	(*SendMessageRequest)(nil),            // 77: conversation.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),           // 78: conversation.v1.SendMessageResponse
-	(*GetMessageRequest)(nil),             // 79: conversation.v1.GetMessageRequest
-	(*GetMessageResponse)(nil),            // 80: conversation.v1.GetMessageResponse
-	(*ListMessagesRequest)(nil),           // 81: conversation.v1.ListMessagesRequest
-	(*ListMessagesResponse)(nil),          // 82: conversation.v1.ListMessagesResponse
-	(*EditMessageRequest)(nil),            // 83: conversation.v1.EditMessageRequest
-	(*EditMessageResponse)(nil),           // 84: conversation.v1.EditMessageResponse
-	(*DeleteMessageRequest)(nil),          // 85: conversation.v1.DeleteMessageRequest
-	(*DeleteMessageResponse)(nil),         // 86: conversation.v1.DeleteMessageResponse
-	(*DeleteMessagesRequest)(nil),         // 87: conversation.v1.DeleteMessagesRequest
-	(*DeleteMessagesResponse)(nil),        // 88: conversation.v1.DeleteMessagesResponse
-	(*MarkReadRequest)(nil),               // 89: conversation.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),              // 90: conversation.v1.MarkReadResponse
-	(*ListReadersRequest)(nil),            // 91: conversation.v1.ListReadersRequest
-	(*ListReadersResponse)(nil),           // 92: conversation.v1.ListReadersResponse
-	(*ListDirectPeersRequest)(nil),        // 93: conversation.v1.ListDirectPeersRequest
-	(*ListDirectPeersResponse)(nil),       // 94: conversation.v1.ListDirectPeersResponse
-	(*ListMemberIDsRequest)(nil),          // 95: conversation.v1.ListMemberIDsRequest
-	(*ListMemberIDsResponse)(nil),         // 96: conversation.v1.ListMemberIDsResponse
-	(*AddReactionRequest)(nil),            // 97: conversation.v1.AddReactionRequest
-	(*AddReactionResponse)(nil),           // 98: conversation.v1.AddReactionResponse
-	(*RemoveReactionRequest)(nil),         // 99: conversation.v1.RemoveReactionRequest
-	(*RemoveReactionResponse)(nil),        // 100: conversation.v1.RemoveReactionResponse
-	(*ListUnreadMentionsRequest)(nil),     // 101: conversation.v1.ListUnreadMentionsRequest
-	(*ListUnreadMentionsResponse)(nil),    // 102: conversation.v1.ListUnreadMentionsResponse
-	(*SetGroupStatusRequest)(nil),         // 103: conversation.v1.SetGroupStatusRequest
-	(*SetGroupStatusResponse)(nil),        // 104: conversation.v1.SetGroupStatusResponse
-	(*ClearGroupStatusRequest)(nil),       // 105: conversation.v1.ClearGroupStatusRequest
-	(*ClearGroupStatusResponse)(nil),      // 106: conversation.v1.ClearGroupStatusResponse
-	(*SetGroupAvatarShapeRequest)(nil),    // 107: conversation.v1.SetGroupAvatarShapeRequest
-	(*SetGroupAvatarShapeResponse)(nil),   // 108: conversation.v1.SetGroupAvatarShapeResponse
-	(*ClearGroupAvatarShapeRequest)(nil),  // 109: conversation.v1.ClearGroupAvatarShapeRequest
-	(*ClearGroupAvatarShapeResponse)(nil), // 110: conversation.v1.ClearGroupAvatarShapeResponse
-	(*timestamppb.Timestamp)(nil),         // 111: google.protobuf.Timestamp
-	(*v1.Status)(nil),                     // 112: status.v1.Status
-	(*v11.AvatarShape)(nil),               // 113: avatarshape.v1.AvatarShape
+	(*Conversation)(nil),                   // 0: conversation.v1.Conversation
+	(*Message)(nil),                        // 1: conversation.v1.Message
+	(*LinkPreview)(nil),                    // 2: conversation.v1.LinkPreview
+	(*MessageReaction)(nil),                // 3: conversation.v1.MessageReaction
+	(*MessageEntity)(nil),                  // 4: conversation.v1.MessageEntity
+	(*ConversationSummary)(nil),            // 5: conversation.v1.ConversationSummary
+	(*ForwardMessagesRequest)(nil),         // 6: conversation.v1.ForwardMessagesRequest
+	(*ForwardedChat)(nil),                  // 7: conversation.v1.ForwardedChat
+	(*ForwardMessagesResponse)(nil),        // 8: conversation.v1.ForwardMessagesResponse
+	(*PinnedMessage)(nil),                  // 9: conversation.v1.PinnedMessage
+	(*ListPinsRequest)(nil),                // 10: conversation.v1.ListPinsRequest
+	(*ListPinsResponse)(nil),               // 11: conversation.v1.ListPinsResponse
+	(*PinMessageRequest)(nil),              // 12: conversation.v1.PinMessageRequest
+	(*PinMessageResponse)(nil),             // 13: conversation.v1.PinMessageResponse
+	(*UnpinMessageRequest)(nil),            // 14: conversation.v1.UnpinMessageRequest
+	(*UnpinMessageResponse)(nil),           // 15: conversation.v1.UnpinMessageResponse
+	(*ChatSettings)(nil),                   // 16: conversation.v1.ChatSettings
+	(*Member)(nil),                         // 17: conversation.v1.Member
+	(*Ban)(nil),                            // 18: conversation.v1.Ban
+	(*JoinRequest)(nil),                    // 19: conversation.v1.JoinRequest
+	(*InviteInfo)(nil),                     // 20: conversation.v1.InviteInfo
+	(*PublicGroup)(nil),                    // 21: conversation.v1.PublicGroup
+	(*ListConversationsRequest)(nil),       // 22: conversation.v1.ListConversationsRequest
+	(*ListConversationsResponse)(nil),      // 23: conversation.v1.ListConversationsResponse
+	(*GetConversationRequest)(nil),         // 24: conversation.v1.GetConversationRequest
+	(*GetConversationResponse)(nil),        // 25: conversation.v1.GetConversationResponse
+	(*SearchPublicGroupsRequest)(nil),      // 26: conversation.v1.SearchPublicGroupsRequest
+	(*SearchPublicGroupsResponse)(nil),     // 27: conversation.v1.SearchPublicGroupsResponse
+	(*CreateGroupRequest)(nil),             // 28: conversation.v1.CreateGroupRequest
+	(*CreateGroupResponse)(nil),            // 29: conversation.v1.CreateGroupResponse
+	(*UpdateGroupRequest)(nil),             // 30: conversation.v1.UpdateGroupRequest
+	(*UpdateGroupResponse)(nil),            // 31: conversation.v1.UpdateGroupResponse
+	(*DeleteConversationRequest)(nil),      // 32: conversation.v1.DeleteConversationRequest
+	(*DeleteConversationResponse)(nil),     // 33: conversation.v1.DeleteConversationResponse
+	(*ClearHistoryRequest)(nil),            // 34: conversation.v1.ClearHistoryRequest
+	(*ClearHistoryResponse)(nil),           // 35: conversation.v1.ClearHistoryResponse
+	(*JoinGroupRequest)(nil),               // 36: conversation.v1.JoinGroupRequest
+	(*JoinGroupResponse)(nil),              // 37: conversation.v1.JoinGroupResponse
+	(*AvatarPhoto)(nil),                    // 38: conversation.v1.AvatarPhoto
+	(*ListGroupAvatarsRequest)(nil),        // 39: conversation.v1.ListGroupAvatarsRequest
+	(*ListGroupAvatarsResponse)(nil),       // 40: conversation.v1.ListGroupAvatarsResponse
+	(*AddGroupAvatarRequest)(nil),          // 41: conversation.v1.AddGroupAvatarRequest
+	(*AddGroupAvatarResponse)(nil),         // 42: conversation.v1.AddGroupAvatarResponse
+	(*SelectGroupAvatarRequest)(nil),       // 43: conversation.v1.SelectGroupAvatarRequest
+	(*SelectGroupAvatarResponse)(nil),      // 44: conversation.v1.SelectGroupAvatarResponse
+	(*DeleteGroupAvatarRequest)(nil),       // 45: conversation.v1.DeleteGroupAvatarRequest
+	(*DeleteGroupAvatarResponse)(nil),      // 46: conversation.v1.DeleteGroupAvatarResponse
+	(*SetChatMuteRequest)(nil),             // 47: conversation.v1.SetChatMuteRequest
+	(*SetChatMuteResponse)(nil),            // 48: conversation.v1.SetChatMuteResponse
+	(*SetChatArchivedRequest)(nil),         // 49: conversation.v1.SetChatArchivedRequest
+	(*SetChatArchivedResponse)(nil),        // 50: conversation.v1.SetChatArchivedResponse
+	(*SetChatPinnedRequest)(nil),           // 51: conversation.v1.SetChatPinnedRequest
+	(*SetChatPinnedResponse)(nil),          // 52: conversation.v1.SetChatPinnedResponse
+	(*ListMembersRequest)(nil),             // 53: conversation.v1.ListMembersRequest
+	(*ListMembersResponse)(nil),            // 54: conversation.v1.ListMembersResponse
+	(*AddMembersRequest)(nil),              // 55: conversation.v1.AddMembersRequest
+	(*AddMembersResponse)(nil),             // 56: conversation.v1.AddMembersResponse
+	(*SetMemberRoleRequest)(nil),           // 57: conversation.v1.SetMemberRoleRequest
+	(*SetMemberRoleResponse)(nil),          // 58: conversation.v1.SetMemberRoleResponse
+	(*RemoveMemberRequest)(nil),            // 59: conversation.v1.RemoveMemberRequest
+	(*RemoveMemberResponse)(nil),           // 60: conversation.v1.RemoveMemberResponse
+	(*ListBansRequest)(nil),                // 61: conversation.v1.ListBansRequest
+	(*ListBansResponse)(nil),               // 62: conversation.v1.ListBansResponse
+	(*UnbanRequest)(nil),                   // 63: conversation.v1.UnbanRequest
+	(*UnbanResponse)(nil),                  // 64: conversation.v1.UnbanResponse
+	(*GetInviteInfoRequest)(nil),           // 65: conversation.v1.GetInviteInfoRequest
+	(*GetInviteInfoResponse)(nil),          // 66: conversation.v1.GetInviteInfoResponse
+	(*RegenerateInviteRequest)(nil),        // 67: conversation.v1.RegenerateInviteRequest
+	(*RegenerateInviteResponse)(nil),       // 68: conversation.v1.RegenerateInviteResponse
+	(*RequestJoinRequest)(nil),             // 69: conversation.v1.RequestJoinRequest
+	(*RequestJoinResponse)(nil),            // 70: conversation.v1.RequestJoinResponse
+	(*ListJoinRequestsRequest)(nil),        // 71: conversation.v1.ListJoinRequestsRequest
+	(*ListJoinRequestsResponse)(nil),       // 72: conversation.v1.ListJoinRequestsResponse
+	(*ApproveJoinRequestRequest)(nil),      // 73: conversation.v1.ApproveJoinRequestRequest
+	(*ApproveJoinRequestResponse)(nil),     // 74: conversation.v1.ApproveJoinRequestResponse
+	(*RejectJoinRequestRequest)(nil),       // 75: conversation.v1.RejectJoinRequestRequest
+	(*RejectJoinRequestResponse)(nil),      // 76: conversation.v1.RejectJoinRequestResponse
+	(*SendMessageRequest)(nil),             // 77: conversation.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),            // 78: conversation.v1.SendMessageResponse
+	(*GetMessageRequest)(nil),              // 79: conversation.v1.GetMessageRequest
+	(*GetMessageResponse)(nil),             // 80: conversation.v1.GetMessageResponse
+	(*ListMessagesRequest)(nil),            // 81: conversation.v1.ListMessagesRequest
+	(*ListMessagesResponse)(nil),           // 82: conversation.v1.ListMessagesResponse
+	(*EditMessageRequest)(nil),             // 83: conversation.v1.EditMessageRequest
+	(*EditMessageResponse)(nil),            // 84: conversation.v1.EditMessageResponse
+	(*DeleteMessageRequest)(nil),           // 85: conversation.v1.DeleteMessageRequest
+	(*DeleteMessageResponse)(nil),          // 86: conversation.v1.DeleteMessageResponse
+	(*DeleteMessagesRequest)(nil),          // 87: conversation.v1.DeleteMessagesRequest
+	(*DeleteMessagesResponse)(nil),         // 88: conversation.v1.DeleteMessagesResponse
+	(*MarkReadRequest)(nil),                // 89: conversation.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),               // 90: conversation.v1.MarkReadResponse
+	(*ListReadersRequest)(nil),             // 91: conversation.v1.ListReadersRequest
+	(*ListReadersResponse)(nil),            // 92: conversation.v1.ListReadersResponse
+	(*ListDirectPeersRequest)(nil),         // 93: conversation.v1.ListDirectPeersRequest
+	(*ListDirectPeersResponse)(nil),        // 94: conversation.v1.ListDirectPeersResponse
+	(*ListMemberIDsRequest)(nil),           // 95: conversation.v1.ListMemberIDsRequest
+	(*ListMemberIDsResponse)(nil),          // 96: conversation.v1.ListMemberIDsResponse
+	(*AddReactionRequest)(nil),             // 97: conversation.v1.AddReactionRequest
+	(*AddReactionResponse)(nil),            // 98: conversation.v1.AddReactionResponse
+	(*RemoveReactionRequest)(nil),          // 99: conversation.v1.RemoveReactionRequest
+	(*RemoveReactionResponse)(nil),         // 100: conversation.v1.RemoveReactionResponse
+	(*ListUnreadMentionsRequest)(nil),      // 101: conversation.v1.ListUnreadMentionsRequest
+	(*ListUnreadMentionsResponse)(nil),     // 102: conversation.v1.ListUnreadMentionsResponse
+	(*SetGroupStatusRequest)(nil),          // 103: conversation.v1.SetGroupStatusRequest
+	(*SetGroupStatusResponse)(nil),         // 104: conversation.v1.SetGroupStatusResponse
+	(*ClearGroupStatusRequest)(nil),        // 105: conversation.v1.ClearGroupStatusRequest
+	(*ClearGroupStatusResponse)(nil),       // 106: conversation.v1.ClearGroupStatusResponse
+	(*SetGroupAvatarShapeRequest)(nil),     // 107: conversation.v1.SetGroupAvatarShapeRequest
+	(*SetGroupAvatarShapeResponse)(nil),    // 108: conversation.v1.SetGroupAvatarShapeResponse
+	(*ClearGroupAvatarShapeRequest)(nil),   // 109: conversation.v1.ClearGroupAvatarShapeRequest
+	(*ClearGroupAvatarShapeResponse)(nil),  // 110: conversation.v1.ClearGroupAvatarShapeResponse
+	(*SetGroupProfileCoverRequest)(nil),    // 111: conversation.v1.SetGroupProfileCoverRequest
+	(*SetGroupProfileCoverResponse)(nil),   // 112: conversation.v1.SetGroupProfileCoverResponse
+	(*ClearGroupProfileCoverRequest)(nil),  // 113: conversation.v1.ClearGroupProfileCoverRequest
+	(*ClearGroupProfileCoverResponse)(nil), // 114: conversation.v1.ClearGroupProfileCoverResponse
+	(*timestamppb.Timestamp)(nil),          // 115: google.protobuf.Timestamp
+	(*v1.Status)(nil),                      // 116: status.v1.Status
+	(*v11.AvatarShape)(nil),                // 117: avatarshape.v1.AvatarShape
+	(*v12.ProfileCover)(nil),               // 118: profilecover.v1.ProfileCover
 }
 var file_conversation_v1_conversation_proto_depIdxs = []int32{
-	111, // 0: conversation.v1.Conversation.last_message_at:type_name -> google.protobuf.Timestamp
-	111, // 1: conversation.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	111, // 2: conversation.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	112, // 3: conversation.v1.Conversation.status:type_name -> status.v1.Status
-	113, // 4: conversation.v1.Conversation.avatar_shape:type_name -> avatarshape.v1.AvatarShape
-	111, // 5: conversation.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	111, // 6: conversation.v1.Message.updated_at:type_name -> google.protobuf.Timestamp
-	4,   // 7: conversation.v1.Message.entities:type_name -> conversation.v1.MessageEntity
-	3,   // 8: conversation.v1.Message.reactions:type_name -> conversation.v1.MessageReaction
-	2,   // 9: conversation.v1.Message.link_preview:type_name -> conversation.v1.LinkPreview
-	0,   // 10: conversation.v1.ConversationSummary.conversation:type_name -> conversation.v1.Conversation
-	1,   // 11: conversation.v1.ConversationSummary.last_message:type_name -> conversation.v1.Message
-	111, // 12: conversation.v1.ConversationSummary.muted_until:type_name -> google.protobuf.Timestamp
-	111, // 13: conversation.v1.ConversationSummary.archived_at:type_name -> google.protobuf.Timestamp
-	111, // 14: conversation.v1.ConversationSummary.pinned_at:type_name -> google.protobuf.Timestamp
-	1,   // 15: conversation.v1.ForwardedChat.messages:type_name -> conversation.v1.Message
-	7,   // 16: conversation.v1.ForwardMessagesResponse.items:type_name -> conversation.v1.ForwardedChat
-	1,   // 17: conversation.v1.PinnedMessage.message:type_name -> conversation.v1.Message
-	111, // 18: conversation.v1.PinnedMessage.pinned_at:type_name -> google.protobuf.Timestamp
-	9,   // 19: conversation.v1.ListPinsResponse.items:type_name -> conversation.v1.PinnedMessage
-	9,   // 20: conversation.v1.PinMessageResponse.pin:type_name -> conversation.v1.PinnedMessage
-	111, // 21: conversation.v1.ChatSettings.muted_until:type_name -> google.protobuf.Timestamp
-	111, // 22: conversation.v1.ChatSettings.archived_at:type_name -> google.protobuf.Timestamp
-	111, // 23: conversation.v1.ChatSettings.pinned_at:type_name -> google.protobuf.Timestamp
-	111, // 24: conversation.v1.Member.joined_at:type_name -> google.protobuf.Timestamp
-	111, // 25: conversation.v1.Ban.created_at:type_name -> google.protobuf.Timestamp
-	111, // 26: conversation.v1.JoinRequest.created_at:type_name -> google.protobuf.Timestamp
-	111, // 27: conversation.v1.JoinRequest.updated_at:type_name -> google.protobuf.Timestamp
-	112, // 28: conversation.v1.InviteInfo.status:type_name -> status.v1.Status
-	113, // 29: conversation.v1.InviteInfo.avatar_shape:type_name -> avatarshape.v1.AvatarShape
-	112, // 30: conversation.v1.PublicGroup.status:type_name -> status.v1.Status
-	113, // 31: conversation.v1.PublicGroup.avatar_shape:type_name -> avatarshape.v1.AvatarShape
-	5,   // 32: conversation.v1.ListConversationsResponse.items:type_name -> conversation.v1.ConversationSummary
-	5,   // 33: conversation.v1.GetConversationResponse.conversation:type_name -> conversation.v1.ConversationSummary
-	21,  // 34: conversation.v1.SearchPublicGroupsResponse.items:type_name -> conversation.v1.PublicGroup
-	0,   // 35: conversation.v1.CreateGroupResponse.conversation:type_name -> conversation.v1.Conversation
-	0,   // 36: conversation.v1.UpdateGroupResponse.conversation:type_name -> conversation.v1.Conversation
-	111, // 37: conversation.v1.AvatarPhoto.created_at:type_name -> google.protobuf.Timestamp
-	38,  // 38: conversation.v1.ListGroupAvatarsResponse.items:type_name -> conversation.v1.AvatarPhoto
-	16,  // 39: conversation.v1.SetChatMuteResponse.settings:type_name -> conversation.v1.ChatSettings
-	16,  // 40: conversation.v1.SetChatArchivedResponse.settings:type_name -> conversation.v1.ChatSettings
-	16,  // 41: conversation.v1.SetChatPinnedResponse.settings:type_name -> conversation.v1.ChatSettings
-	17,  // 42: conversation.v1.ListMembersResponse.items:type_name -> conversation.v1.Member
-	18,  // 43: conversation.v1.ListBansResponse.items:type_name -> conversation.v1.Ban
-	20,  // 44: conversation.v1.GetInviteInfoResponse.info:type_name -> conversation.v1.InviteInfo
-	19,  // 45: conversation.v1.RequestJoinResponse.request:type_name -> conversation.v1.JoinRequest
-	19,  // 46: conversation.v1.ListJoinRequestsResponse.items:type_name -> conversation.v1.JoinRequest
-	4,   // 47: conversation.v1.SendMessageRequest.entities:type_name -> conversation.v1.MessageEntity
-	2,   // 48: conversation.v1.SendMessageRequest.link_preview:type_name -> conversation.v1.LinkPreview
-	1,   // 49: conversation.v1.SendMessageResponse.message:type_name -> conversation.v1.Message
-	1,   // 50: conversation.v1.GetMessageResponse.message:type_name -> conversation.v1.Message
-	1,   // 51: conversation.v1.ListMessagesResponse.items:type_name -> conversation.v1.Message
-	4,   // 52: conversation.v1.EditMessageRequest.entities:type_name -> conversation.v1.MessageEntity
-	2,   // 53: conversation.v1.EditMessageRequest.link_preview:type_name -> conversation.v1.LinkPreview
-	1,   // 54: conversation.v1.EditMessageResponse.message:type_name -> conversation.v1.Message
-	3,   // 55: conversation.v1.AddReactionResponse.reactions:type_name -> conversation.v1.MessageReaction
-	3,   // 56: conversation.v1.RemoveReactionResponse.reactions:type_name -> conversation.v1.MessageReaction
-	112, // 57: conversation.v1.SetGroupStatusResponse.status:type_name -> status.v1.Status
-	113, // 58: conversation.v1.SetGroupAvatarShapeResponse.avatar_shape:type_name -> avatarshape.v1.AvatarShape
-	22,  // 59: conversation.v1.ConversationService.ListConversations:input_type -> conversation.v1.ListConversationsRequest
-	24,  // 60: conversation.v1.ConversationService.GetConversation:input_type -> conversation.v1.GetConversationRequest
-	26,  // 61: conversation.v1.ConversationService.SearchPublicGroups:input_type -> conversation.v1.SearchPublicGroupsRequest
-	28,  // 62: conversation.v1.ConversationService.CreateGroup:input_type -> conversation.v1.CreateGroupRequest
-	30,  // 63: conversation.v1.ConversationService.UpdateGroup:input_type -> conversation.v1.UpdateGroupRequest
-	103, // 64: conversation.v1.ConversationService.SetGroupStatus:input_type -> conversation.v1.SetGroupStatusRequest
-	105, // 65: conversation.v1.ConversationService.ClearGroupStatus:input_type -> conversation.v1.ClearGroupStatusRequest
-	107, // 66: conversation.v1.ConversationService.SetGroupAvatarShape:input_type -> conversation.v1.SetGroupAvatarShapeRequest
-	109, // 67: conversation.v1.ConversationService.ClearGroupAvatarShape:input_type -> conversation.v1.ClearGroupAvatarShapeRequest
-	32,  // 68: conversation.v1.ConversationService.DeleteConversation:input_type -> conversation.v1.DeleteConversationRequest
-	34,  // 69: conversation.v1.ConversationService.ClearHistory:input_type -> conversation.v1.ClearHistoryRequest
-	36,  // 70: conversation.v1.ConversationService.JoinGroup:input_type -> conversation.v1.JoinGroupRequest
-	39,  // 71: conversation.v1.ConversationService.ListGroupAvatars:input_type -> conversation.v1.ListGroupAvatarsRequest
-	41,  // 72: conversation.v1.ConversationService.AddGroupAvatar:input_type -> conversation.v1.AddGroupAvatarRequest
-	43,  // 73: conversation.v1.ConversationService.SelectGroupAvatar:input_type -> conversation.v1.SelectGroupAvatarRequest
-	45,  // 74: conversation.v1.ConversationService.DeleteGroupAvatar:input_type -> conversation.v1.DeleteGroupAvatarRequest
-	47,  // 75: conversation.v1.ConversationService.SetChatMute:input_type -> conversation.v1.SetChatMuteRequest
-	49,  // 76: conversation.v1.ConversationService.SetChatArchived:input_type -> conversation.v1.SetChatArchivedRequest
-	51,  // 77: conversation.v1.ConversationService.SetChatPinned:input_type -> conversation.v1.SetChatPinnedRequest
-	53,  // 78: conversation.v1.ConversationService.ListMembers:input_type -> conversation.v1.ListMembersRequest
-	55,  // 79: conversation.v1.ConversationService.AddMembers:input_type -> conversation.v1.AddMembersRequest
-	57,  // 80: conversation.v1.ConversationService.SetMemberRole:input_type -> conversation.v1.SetMemberRoleRequest
-	59,  // 81: conversation.v1.ConversationService.RemoveMember:input_type -> conversation.v1.RemoveMemberRequest
-	61,  // 82: conversation.v1.ConversationService.ListBans:input_type -> conversation.v1.ListBansRequest
-	63,  // 83: conversation.v1.ConversationService.Unban:input_type -> conversation.v1.UnbanRequest
-	65,  // 84: conversation.v1.ConversationService.GetInviteInfo:input_type -> conversation.v1.GetInviteInfoRequest
-	67,  // 85: conversation.v1.ConversationService.RegenerateInvite:input_type -> conversation.v1.RegenerateInviteRequest
-	69,  // 86: conversation.v1.ConversationService.RequestJoin:input_type -> conversation.v1.RequestJoinRequest
-	71,  // 87: conversation.v1.ConversationService.ListJoinRequests:input_type -> conversation.v1.ListJoinRequestsRequest
-	73,  // 88: conversation.v1.ConversationService.ApproveJoinRequest:input_type -> conversation.v1.ApproveJoinRequestRequest
-	75,  // 89: conversation.v1.ConversationService.RejectJoinRequest:input_type -> conversation.v1.RejectJoinRequestRequest
-	77,  // 90: conversation.v1.ConversationService.SendMessage:input_type -> conversation.v1.SendMessageRequest
-	79,  // 91: conversation.v1.ConversationService.GetMessage:input_type -> conversation.v1.GetMessageRequest
-	81,  // 92: conversation.v1.ConversationService.ListMessages:input_type -> conversation.v1.ListMessagesRequest
-	83,  // 93: conversation.v1.ConversationService.EditMessage:input_type -> conversation.v1.EditMessageRequest
-	85,  // 94: conversation.v1.ConversationService.DeleteMessage:input_type -> conversation.v1.DeleteMessageRequest
-	87,  // 95: conversation.v1.ConversationService.DeleteMessages:input_type -> conversation.v1.DeleteMessagesRequest
-	6,   // 96: conversation.v1.ConversationService.ForwardMessages:input_type -> conversation.v1.ForwardMessagesRequest
-	89,  // 97: conversation.v1.ConversationService.MarkRead:input_type -> conversation.v1.MarkReadRequest
-	91,  // 98: conversation.v1.ConversationService.ListReaders:input_type -> conversation.v1.ListReadersRequest
-	10,  // 99: conversation.v1.ConversationService.ListPins:input_type -> conversation.v1.ListPinsRequest
-	12,  // 100: conversation.v1.ConversationService.PinMessage:input_type -> conversation.v1.PinMessageRequest
-	14,  // 101: conversation.v1.ConversationService.UnpinMessage:input_type -> conversation.v1.UnpinMessageRequest
-	97,  // 102: conversation.v1.ConversationService.AddReaction:input_type -> conversation.v1.AddReactionRequest
-	99,  // 103: conversation.v1.ConversationService.RemoveReaction:input_type -> conversation.v1.RemoveReactionRequest
-	101, // 104: conversation.v1.ConversationService.ListUnreadMentions:input_type -> conversation.v1.ListUnreadMentionsRequest
-	93,  // 105: conversation.v1.ConversationInternalService.ListDirectPeers:input_type -> conversation.v1.ListDirectPeersRequest
-	95,  // 106: conversation.v1.ConversationInternalService.ListMemberIDs:input_type -> conversation.v1.ListMemberIDsRequest
-	23,  // 107: conversation.v1.ConversationService.ListConversations:output_type -> conversation.v1.ListConversationsResponse
-	25,  // 108: conversation.v1.ConversationService.GetConversation:output_type -> conversation.v1.GetConversationResponse
-	27,  // 109: conversation.v1.ConversationService.SearchPublicGroups:output_type -> conversation.v1.SearchPublicGroupsResponse
-	29,  // 110: conversation.v1.ConversationService.CreateGroup:output_type -> conversation.v1.CreateGroupResponse
-	31,  // 111: conversation.v1.ConversationService.UpdateGroup:output_type -> conversation.v1.UpdateGroupResponse
-	104, // 112: conversation.v1.ConversationService.SetGroupStatus:output_type -> conversation.v1.SetGroupStatusResponse
-	106, // 113: conversation.v1.ConversationService.ClearGroupStatus:output_type -> conversation.v1.ClearGroupStatusResponse
-	108, // 114: conversation.v1.ConversationService.SetGroupAvatarShape:output_type -> conversation.v1.SetGroupAvatarShapeResponse
-	110, // 115: conversation.v1.ConversationService.ClearGroupAvatarShape:output_type -> conversation.v1.ClearGroupAvatarShapeResponse
-	33,  // 116: conversation.v1.ConversationService.DeleteConversation:output_type -> conversation.v1.DeleteConversationResponse
-	35,  // 117: conversation.v1.ConversationService.ClearHistory:output_type -> conversation.v1.ClearHistoryResponse
-	37,  // 118: conversation.v1.ConversationService.JoinGroup:output_type -> conversation.v1.JoinGroupResponse
-	40,  // 119: conversation.v1.ConversationService.ListGroupAvatars:output_type -> conversation.v1.ListGroupAvatarsResponse
-	42,  // 120: conversation.v1.ConversationService.AddGroupAvatar:output_type -> conversation.v1.AddGroupAvatarResponse
-	44,  // 121: conversation.v1.ConversationService.SelectGroupAvatar:output_type -> conversation.v1.SelectGroupAvatarResponse
-	46,  // 122: conversation.v1.ConversationService.DeleteGroupAvatar:output_type -> conversation.v1.DeleteGroupAvatarResponse
-	48,  // 123: conversation.v1.ConversationService.SetChatMute:output_type -> conversation.v1.SetChatMuteResponse
-	50,  // 124: conversation.v1.ConversationService.SetChatArchived:output_type -> conversation.v1.SetChatArchivedResponse
-	52,  // 125: conversation.v1.ConversationService.SetChatPinned:output_type -> conversation.v1.SetChatPinnedResponse
-	54,  // 126: conversation.v1.ConversationService.ListMembers:output_type -> conversation.v1.ListMembersResponse
-	56,  // 127: conversation.v1.ConversationService.AddMembers:output_type -> conversation.v1.AddMembersResponse
-	58,  // 128: conversation.v1.ConversationService.SetMemberRole:output_type -> conversation.v1.SetMemberRoleResponse
-	60,  // 129: conversation.v1.ConversationService.RemoveMember:output_type -> conversation.v1.RemoveMemberResponse
-	62,  // 130: conversation.v1.ConversationService.ListBans:output_type -> conversation.v1.ListBansResponse
-	64,  // 131: conversation.v1.ConversationService.Unban:output_type -> conversation.v1.UnbanResponse
-	66,  // 132: conversation.v1.ConversationService.GetInviteInfo:output_type -> conversation.v1.GetInviteInfoResponse
-	68,  // 133: conversation.v1.ConversationService.RegenerateInvite:output_type -> conversation.v1.RegenerateInviteResponse
-	70,  // 134: conversation.v1.ConversationService.RequestJoin:output_type -> conversation.v1.RequestJoinResponse
-	72,  // 135: conversation.v1.ConversationService.ListJoinRequests:output_type -> conversation.v1.ListJoinRequestsResponse
-	74,  // 136: conversation.v1.ConversationService.ApproveJoinRequest:output_type -> conversation.v1.ApproveJoinRequestResponse
-	76,  // 137: conversation.v1.ConversationService.RejectJoinRequest:output_type -> conversation.v1.RejectJoinRequestResponse
-	78,  // 138: conversation.v1.ConversationService.SendMessage:output_type -> conversation.v1.SendMessageResponse
-	80,  // 139: conversation.v1.ConversationService.GetMessage:output_type -> conversation.v1.GetMessageResponse
-	82,  // 140: conversation.v1.ConversationService.ListMessages:output_type -> conversation.v1.ListMessagesResponse
-	84,  // 141: conversation.v1.ConversationService.EditMessage:output_type -> conversation.v1.EditMessageResponse
-	86,  // 142: conversation.v1.ConversationService.DeleteMessage:output_type -> conversation.v1.DeleteMessageResponse
-	88,  // 143: conversation.v1.ConversationService.DeleteMessages:output_type -> conversation.v1.DeleteMessagesResponse
-	8,   // 144: conversation.v1.ConversationService.ForwardMessages:output_type -> conversation.v1.ForwardMessagesResponse
-	90,  // 145: conversation.v1.ConversationService.MarkRead:output_type -> conversation.v1.MarkReadResponse
-	92,  // 146: conversation.v1.ConversationService.ListReaders:output_type -> conversation.v1.ListReadersResponse
-	11,  // 147: conversation.v1.ConversationService.ListPins:output_type -> conversation.v1.ListPinsResponse
-	13,  // 148: conversation.v1.ConversationService.PinMessage:output_type -> conversation.v1.PinMessageResponse
-	15,  // 149: conversation.v1.ConversationService.UnpinMessage:output_type -> conversation.v1.UnpinMessageResponse
-	98,  // 150: conversation.v1.ConversationService.AddReaction:output_type -> conversation.v1.AddReactionResponse
-	100, // 151: conversation.v1.ConversationService.RemoveReaction:output_type -> conversation.v1.RemoveReactionResponse
-	102, // 152: conversation.v1.ConversationService.ListUnreadMentions:output_type -> conversation.v1.ListUnreadMentionsResponse
-	94,  // 153: conversation.v1.ConversationInternalService.ListDirectPeers:output_type -> conversation.v1.ListDirectPeersResponse
-	96,  // 154: conversation.v1.ConversationInternalService.ListMemberIDs:output_type -> conversation.v1.ListMemberIDsResponse
-	107, // [107:155] is the sub-list for method output_type
-	59,  // [59:107] is the sub-list for method input_type
-	59,  // [59:59] is the sub-list for extension type_name
-	59,  // [59:59] is the sub-list for extension extendee
-	0,   // [0:59] is the sub-list for field type_name
+	115, // 0: conversation.v1.Conversation.last_message_at:type_name -> google.protobuf.Timestamp
+	115, // 1: conversation.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	115, // 2: conversation.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	116, // 3: conversation.v1.Conversation.status:type_name -> status.v1.Status
+	117, // 4: conversation.v1.Conversation.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	118, // 5: conversation.v1.Conversation.profile_cover:type_name -> profilecover.v1.ProfileCover
+	115, // 6: conversation.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	115, // 7: conversation.v1.Message.updated_at:type_name -> google.protobuf.Timestamp
+	4,   // 8: conversation.v1.Message.entities:type_name -> conversation.v1.MessageEntity
+	3,   // 9: conversation.v1.Message.reactions:type_name -> conversation.v1.MessageReaction
+	2,   // 10: conversation.v1.Message.link_preview:type_name -> conversation.v1.LinkPreview
+	0,   // 11: conversation.v1.ConversationSummary.conversation:type_name -> conversation.v1.Conversation
+	1,   // 12: conversation.v1.ConversationSummary.last_message:type_name -> conversation.v1.Message
+	115, // 13: conversation.v1.ConversationSummary.muted_until:type_name -> google.protobuf.Timestamp
+	115, // 14: conversation.v1.ConversationSummary.archived_at:type_name -> google.protobuf.Timestamp
+	115, // 15: conversation.v1.ConversationSummary.pinned_at:type_name -> google.protobuf.Timestamp
+	1,   // 16: conversation.v1.ForwardedChat.messages:type_name -> conversation.v1.Message
+	7,   // 17: conversation.v1.ForwardMessagesResponse.items:type_name -> conversation.v1.ForwardedChat
+	1,   // 18: conversation.v1.PinnedMessage.message:type_name -> conversation.v1.Message
+	115, // 19: conversation.v1.PinnedMessage.pinned_at:type_name -> google.protobuf.Timestamp
+	9,   // 20: conversation.v1.ListPinsResponse.items:type_name -> conversation.v1.PinnedMessage
+	9,   // 21: conversation.v1.PinMessageResponse.pin:type_name -> conversation.v1.PinnedMessage
+	115, // 22: conversation.v1.ChatSettings.muted_until:type_name -> google.protobuf.Timestamp
+	115, // 23: conversation.v1.ChatSettings.archived_at:type_name -> google.protobuf.Timestamp
+	115, // 24: conversation.v1.ChatSettings.pinned_at:type_name -> google.protobuf.Timestamp
+	115, // 25: conversation.v1.Member.joined_at:type_name -> google.protobuf.Timestamp
+	115, // 26: conversation.v1.Ban.created_at:type_name -> google.protobuf.Timestamp
+	115, // 27: conversation.v1.JoinRequest.created_at:type_name -> google.protobuf.Timestamp
+	115, // 28: conversation.v1.JoinRequest.updated_at:type_name -> google.protobuf.Timestamp
+	116, // 29: conversation.v1.InviteInfo.status:type_name -> status.v1.Status
+	117, // 30: conversation.v1.InviteInfo.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	118, // 31: conversation.v1.InviteInfo.profile_cover:type_name -> profilecover.v1.ProfileCover
+	116, // 32: conversation.v1.PublicGroup.status:type_name -> status.v1.Status
+	117, // 33: conversation.v1.PublicGroup.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	118, // 34: conversation.v1.PublicGroup.profile_cover:type_name -> profilecover.v1.ProfileCover
+	5,   // 35: conversation.v1.ListConversationsResponse.items:type_name -> conversation.v1.ConversationSummary
+	5,   // 36: conversation.v1.GetConversationResponse.conversation:type_name -> conversation.v1.ConversationSummary
+	21,  // 37: conversation.v1.SearchPublicGroupsResponse.items:type_name -> conversation.v1.PublicGroup
+	0,   // 38: conversation.v1.CreateGroupResponse.conversation:type_name -> conversation.v1.Conversation
+	0,   // 39: conversation.v1.UpdateGroupResponse.conversation:type_name -> conversation.v1.Conversation
+	115, // 40: conversation.v1.AvatarPhoto.created_at:type_name -> google.protobuf.Timestamp
+	38,  // 41: conversation.v1.ListGroupAvatarsResponse.items:type_name -> conversation.v1.AvatarPhoto
+	16,  // 42: conversation.v1.SetChatMuteResponse.settings:type_name -> conversation.v1.ChatSettings
+	16,  // 43: conversation.v1.SetChatArchivedResponse.settings:type_name -> conversation.v1.ChatSettings
+	16,  // 44: conversation.v1.SetChatPinnedResponse.settings:type_name -> conversation.v1.ChatSettings
+	17,  // 45: conversation.v1.ListMembersResponse.items:type_name -> conversation.v1.Member
+	18,  // 46: conversation.v1.ListBansResponse.items:type_name -> conversation.v1.Ban
+	20,  // 47: conversation.v1.GetInviteInfoResponse.info:type_name -> conversation.v1.InviteInfo
+	19,  // 48: conversation.v1.RequestJoinResponse.request:type_name -> conversation.v1.JoinRequest
+	19,  // 49: conversation.v1.ListJoinRequestsResponse.items:type_name -> conversation.v1.JoinRequest
+	4,   // 50: conversation.v1.SendMessageRequest.entities:type_name -> conversation.v1.MessageEntity
+	2,   // 51: conversation.v1.SendMessageRequest.link_preview:type_name -> conversation.v1.LinkPreview
+	1,   // 52: conversation.v1.SendMessageResponse.message:type_name -> conversation.v1.Message
+	1,   // 53: conversation.v1.GetMessageResponse.message:type_name -> conversation.v1.Message
+	1,   // 54: conversation.v1.ListMessagesResponse.items:type_name -> conversation.v1.Message
+	4,   // 55: conversation.v1.EditMessageRequest.entities:type_name -> conversation.v1.MessageEntity
+	2,   // 56: conversation.v1.EditMessageRequest.link_preview:type_name -> conversation.v1.LinkPreview
+	1,   // 57: conversation.v1.EditMessageResponse.message:type_name -> conversation.v1.Message
+	3,   // 58: conversation.v1.AddReactionResponse.reactions:type_name -> conversation.v1.MessageReaction
+	3,   // 59: conversation.v1.RemoveReactionResponse.reactions:type_name -> conversation.v1.MessageReaction
+	116, // 60: conversation.v1.SetGroupStatusResponse.status:type_name -> status.v1.Status
+	117, // 61: conversation.v1.SetGroupAvatarShapeResponse.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	118, // 62: conversation.v1.SetGroupProfileCoverResponse.profile_cover:type_name -> profilecover.v1.ProfileCover
+	22,  // 63: conversation.v1.ConversationService.ListConversations:input_type -> conversation.v1.ListConversationsRequest
+	24,  // 64: conversation.v1.ConversationService.GetConversation:input_type -> conversation.v1.GetConversationRequest
+	26,  // 65: conversation.v1.ConversationService.SearchPublicGroups:input_type -> conversation.v1.SearchPublicGroupsRequest
+	28,  // 66: conversation.v1.ConversationService.CreateGroup:input_type -> conversation.v1.CreateGroupRequest
+	30,  // 67: conversation.v1.ConversationService.UpdateGroup:input_type -> conversation.v1.UpdateGroupRequest
+	103, // 68: conversation.v1.ConversationService.SetGroupStatus:input_type -> conversation.v1.SetGroupStatusRequest
+	105, // 69: conversation.v1.ConversationService.ClearGroupStatus:input_type -> conversation.v1.ClearGroupStatusRequest
+	107, // 70: conversation.v1.ConversationService.SetGroupAvatarShape:input_type -> conversation.v1.SetGroupAvatarShapeRequest
+	109, // 71: conversation.v1.ConversationService.ClearGroupAvatarShape:input_type -> conversation.v1.ClearGroupAvatarShapeRequest
+	111, // 72: conversation.v1.ConversationService.SetGroupProfileCover:input_type -> conversation.v1.SetGroupProfileCoverRequest
+	113, // 73: conversation.v1.ConversationService.ClearGroupProfileCover:input_type -> conversation.v1.ClearGroupProfileCoverRequest
+	32,  // 74: conversation.v1.ConversationService.DeleteConversation:input_type -> conversation.v1.DeleteConversationRequest
+	34,  // 75: conversation.v1.ConversationService.ClearHistory:input_type -> conversation.v1.ClearHistoryRequest
+	36,  // 76: conversation.v1.ConversationService.JoinGroup:input_type -> conversation.v1.JoinGroupRequest
+	39,  // 77: conversation.v1.ConversationService.ListGroupAvatars:input_type -> conversation.v1.ListGroupAvatarsRequest
+	41,  // 78: conversation.v1.ConversationService.AddGroupAvatar:input_type -> conversation.v1.AddGroupAvatarRequest
+	43,  // 79: conversation.v1.ConversationService.SelectGroupAvatar:input_type -> conversation.v1.SelectGroupAvatarRequest
+	45,  // 80: conversation.v1.ConversationService.DeleteGroupAvatar:input_type -> conversation.v1.DeleteGroupAvatarRequest
+	47,  // 81: conversation.v1.ConversationService.SetChatMute:input_type -> conversation.v1.SetChatMuteRequest
+	49,  // 82: conversation.v1.ConversationService.SetChatArchived:input_type -> conversation.v1.SetChatArchivedRequest
+	51,  // 83: conversation.v1.ConversationService.SetChatPinned:input_type -> conversation.v1.SetChatPinnedRequest
+	53,  // 84: conversation.v1.ConversationService.ListMembers:input_type -> conversation.v1.ListMembersRequest
+	55,  // 85: conversation.v1.ConversationService.AddMembers:input_type -> conversation.v1.AddMembersRequest
+	57,  // 86: conversation.v1.ConversationService.SetMemberRole:input_type -> conversation.v1.SetMemberRoleRequest
+	59,  // 87: conversation.v1.ConversationService.RemoveMember:input_type -> conversation.v1.RemoveMemberRequest
+	61,  // 88: conversation.v1.ConversationService.ListBans:input_type -> conversation.v1.ListBansRequest
+	63,  // 89: conversation.v1.ConversationService.Unban:input_type -> conversation.v1.UnbanRequest
+	65,  // 90: conversation.v1.ConversationService.GetInviteInfo:input_type -> conversation.v1.GetInviteInfoRequest
+	67,  // 91: conversation.v1.ConversationService.RegenerateInvite:input_type -> conversation.v1.RegenerateInviteRequest
+	69,  // 92: conversation.v1.ConversationService.RequestJoin:input_type -> conversation.v1.RequestJoinRequest
+	71,  // 93: conversation.v1.ConversationService.ListJoinRequests:input_type -> conversation.v1.ListJoinRequestsRequest
+	73,  // 94: conversation.v1.ConversationService.ApproveJoinRequest:input_type -> conversation.v1.ApproveJoinRequestRequest
+	75,  // 95: conversation.v1.ConversationService.RejectJoinRequest:input_type -> conversation.v1.RejectJoinRequestRequest
+	77,  // 96: conversation.v1.ConversationService.SendMessage:input_type -> conversation.v1.SendMessageRequest
+	79,  // 97: conversation.v1.ConversationService.GetMessage:input_type -> conversation.v1.GetMessageRequest
+	81,  // 98: conversation.v1.ConversationService.ListMessages:input_type -> conversation.v1.ListMessagesRequest
+	83,  // 99: conversation.v1.ConversationService.EditMessage:input_type -> conversation.v1.EditMessageRequest
+	85,  // 100: conversation.v1.ConversationService.DeleteMessage:input_type -> conversation.v1.DeleteMessageRequest
+	87,  // 101: conversation.v1.ConversationService.DeleteMessages:input_type -> conversation.v1.DeleteMessagesRequest
+	6,   // 102: conversation.v1.ConversationService.ForwardMessages:input_type -> conversation.v1.ForwardMessagesRequest
+	89,  // 103: conversation.v1.ConversationService.MarkRead:input_type -> conversation.v1.MarkReadRequest
+	91,  // 104: conversation.v1.ConversationService.ListReaders:input_type -> conversation.v1.ListReadersRequest
+	10,  // 105: conversation.v1.ConversationService.ListPins:input_type -> conversation.v1.ListPinsRequest
+	12,  // 106: conversation.v1.ConversationService.PinMessage:input_type -> conversation.v1.PinMessageRequest
+	14,  // 107: conversation.v1.ConversationService.UnpinMessage:input_type -> conversation.v1.UnpinMessageRequest
+	97,  // 108: conversation.v1.ConversationService.AddReaction:input_type -> conversation.v1.AddReactionRequest
+	99,  // 109: conversation.v1.ConversationService.RemoveReaction:input_type -> conversation.v1.RemoveReactionRequest
+	101, // 110: conversation.v1.ConversationService.ListUnreadMentions:input_type -> conversation.v1.ListUnreadMentionsRequest
+	93,  // 111: conversation.v1.ConversationInternalService.ListDirectPeers:input_type -> conversation.v1.ListDirectPeersRequest
+	95,  // 112: conversation.v1.ConversationInternalService.ListMemberIDs:input_type -> conversation.v1.ListMemberIDsRequest
+	23,  // 113: conversation.v1.ConversationService.ListConversations:output_type -> conversation.v1.ListConversationsResponse
+	25,  // 114: conversation.v1.ConversationService.GetConversation:output_type -> conversation.v1.GetConversationResponse
+	27,  // 115: conversation.v1.ConversationService.SearchPublicGroups:output_type -> conversation.v1.SearchPublicGroupsResponse
+	29,  // 116: conversation.v1.ConversationService.CreateGroup:output_type -> conversation.v1.CreateGroupResponse
+	31,  // 117: conversation.v1.ConversationService.UpdateGroup:output_type -> conversation.v1.UpdateGroupResponse
+	104, // 118: conversation.v1.ConversationService.SetGroupStatus:output_type -> conversation.v1.SetGroupStatusResponse
+	106, // 119: conversation.v1.ConversationService.ClearGroupStatus:output_type -> conversation.v1.ClearGroupStatusResponse
+	108, // 120: conversation.v1.ConversationService.SetGroupAvatarShape:output_type -> conversation.v1.SetGroupAvatarShapeResponse
+	110, // 121: conversation.v1.ConversationService.ClearGroupAvatarShape:output_type -> conversation.v1.ClearGroupAvatarShapeResponse
+	112, // 122: conversation.v1.ConversationService.SetGroupProfileCover:output_type -> conversation.v1.SetGroupProfileCoverResponse
+	114, // 123: conversation.v1.ConversationService.ClearGroupProfileCover:output_type -> conversation.v1.ClearGroupProfileCoverResponse
+	33,  // 124: conversation.v1.ConversationService.DeleteConversation:output_type -> conversation.v1.DeleteConversationResponse
+	35,  // 125: conversation.v1.ConversationService.ClearHistory:output_type -> conversation.v1.ClearHistoryResponse
+	37,  // 126: conversation.v1.ConversationService.JoinGroup:output_type -> conversation.v1.JoinGroupResponse
+	40,  // 127: conversation.v1.ConversationService.ListGroupAvatars:output_type -> conversation.v1.ListGroupAvatarsResponse
+	42,  // 128: conversation.v1.ConversationService.AddGroupAvatar:output_type -> conversation.v1.AddGroupAvatarResponse
+	44,  // 129: conversation.v1.ConversationService.SelectGroupAvatar:output_type -> conversation.v1.SelectGroupAvatarResponse
+	46,  // 130: conversation.v1.ConversationService.DeleteGroupAvatar:output_type -> conversation.v1.DeleteGroupAvatarResponse
+	48,  // 131: conversation.v1.ConversationService.SetChatMute:output_type -> conversation.v1.SetChatMuteResponse
+	50,  // 132: conversation.v1.ConversationService.SetChatArchived:output_type -> conversation.v1.SetChatArchivedResponse
+	52,  // 133: conversation.v1.ConversationService.SetChatPinned:output_type -> conversation.v1.SetChatPinnedResponse
+	54,  // 134: conversation.v1.ConversationService.ListMembers:output_type -> conversation.v1.ListMembersResponse
+	56,  // 135: conversation.v1.ConversationService.AddMembers:output_type -> conversation.v1.AddMembersResponse
+	58,  // 136: conversation.v1.ConversationService.SetMemberRole:output_type -> conversation.v1.SetMemberRoleResponse
+	60,  // 137: conversation.v1.ConversationService.RemoveMember:output_type -> conversation.v1.RemoveMemberResponse
+	62,  // 138: conversation.v1.ConversationService.ListBans:output_type -> conversation.v1.ListBansResponse
+	64,  // 139: conversation.v1.ConversationService.Unban:output_type -> conversation.v1.UnbanResponse
+	66,  // 140: conversation.v1.ConversationService.GetInviteInfo:output_type -> conversation.v1.GetInviteInfoResponse
+	68,  // 141: conversation.v1.ConversationService.RegenerateInvite:output_type -> conversation.v1.RegenerateInviteResponse
+	70,  // 142: conversation.v1.ConversationService.RequestJoin:output_type -> conversation.v1.RequestJoinResponse
+	72,  // 143: conversation.v1.ConversationService.ListJoinRequests:output_type -> conversation.v1.ListJoinRequestsResponse
+	74,  // 144: conversation.v1.ConversationService.ApproveJoinRequest:output_type -> conversation.v1.ApproveJoinRequestResponse
+	76,  // 145: conversation.v1.ConversationService.RejectJoinRequest:output_type -> conversation.v1.RejectJoinRequestResponse
+	78,  // 146: conversation.v1.ConversationService.SendMessage:output_type -> conversation.v1.SendMessageResponse
+	80,  // 147: conversation.v1.ConversationService.GetMessage:output_type -> conversation.v1.GetMessageResponse
+	82,  // 148: conversation.v1.ConversationService.ListMessages:output_type -> conversation.v1.ListMessagesResponse
+	84,  // 149: conversation.v1.ConversationService.EditMessage:output_type -> conversation.v1.EditMessageResponse
+	86,  // 150: conversation.v1.ConversationService.DeleteMessage:output_type -> conversation.v1.DeleteMessageResponse
+	88,  // 151: conversation.v1.ConversationService.DeleteMessages:output_type -> conversation.v1.DeleteMessagesResponse
+	8,   // 152: conversation.v1.ConversationService.ForwardMessages:output_type -> conversation.v1.ForwardMessagesResponse
+	90,  // 153: conversation.v1.ConversationService.MarkRead:output_type -> conversation.v1.MarkReadResponse
+	92,  // 154: conversation.v1.ConversationService.ListReaders:output_type -> conversation.v1.ListReadersResponse
+	11,  // 155: conversation.v1.ConversationService.ListPins:output_type -> conversation.v1.ListPinsResponse
+	13,  // 156: conversation.v1.ConversationService.PinMessage:output_type -> conversation.v1.PinMessageResponse
+	15,  // 157: conversation.v1.ConversationService.UnpinMessage:output_type -> conversation.v1.UnpinMessageResponse
+	98,  // 158: conversation.v1.ConversationService.AddReaction:output_type -> conversation.v1.AddReactionResponse
+	100, // 159: conversation.v1.ConversationService.RemoveReaction:output_type -> conversation.v1.RemoveReactionResponse
+	102, // 160: conversation.v1.ConversationService.ListUnreadMentions:output_type -> conversation.v1.ListUnreadMentionsResponse
+	94,  // 161: conversation.v1.ConversationInternalService.ListDirectPeers:output_type -> conversation.v1.ListDirectPeersResponse
+	96,  // 162: conversation.v1.ConversationInternalService.ListMemberIDs:output_type -> conversation.v1.ListMemberIDsResponse
+	113, // [113:163] is the sub-list for method output_type
+	63,  // [63:113] is the sub-list for method input_type
+	63,  // [63:63] is the sub-list for extension type_name
+	63,  // [63:63] is the sub-list for extension extendee
+	0,   // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_conversation_v1_conversation_proto_init() }
@@ -7121,7 +7360,7 @@ func file_conversation_v1_conversation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_conversation_v1_conversation_proto_rawDesc), len(file_conversation_v1_conversation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   111,
+			NumMessages:   115,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

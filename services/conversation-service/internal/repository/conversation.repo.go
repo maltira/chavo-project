@@ -37,26 +37,29 @@ type SummaryRecord struct {
 	IsSaved bool
 }
 
-// conversationColumns и customJoins - чтение разговора со статусом и фигурой за аватаром; истёкший статус не читается
+// conversationColumns и customJoins - чтение разговора со статусом, фигурой и обложкой; истёкший статус не читается
 const (
-	customColumns = `cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at, sh.shape, sh.color`
+	customColumns = `cs.icon, cs.text, cs.background, cs.foreground, cs.expires_at, sh.shape, sh.color, pc.color, pc.pattern`
 	baseColumns   = `c.id, c.conversation_type, c.visibility, c.name, c.description, c.avatar_url,
 		c.public_slug, c.invite_token_enc, c.last_message_at, c.created_at, c.updated_at`
 	conversationColumns = baseColumns + `, ` + customColumns
 	customJoins         = `LEFT JOIN conversation_statuses cs ON cs.conversation_id = c.id AND (cs.expires_at IS NULL OR cs.expires_at > NOW())
-		 LEFT JOIN conversation_avatar_shapes sh ON sh.conversation_id = c.id`
+		 LEFT JOIN conversation_avatar_shapes sh ON sh.conversation_id = c.id
+		 LEFT JOIN conversation_profile_covers pc ON pc.conversation_id = c.id`
 )
 
-// customCols - nullable-поля статуса и фигуры из customJoins
+// customCols - nullable-поля статуса, фигуры и обложки из customJoins
 type customCols struct {
 	icon, text, bg, fg *string
 	expires            *time.Time
 	shape, color       *string
+	coverColor         *string
+	coverPattern       *string
 }
 
 // dest - поля для Scan в порядке customColumns
 func (s *customCols) dest() []any {
-	return []any{&s.icon, &s.text, &s.bg, &s.fg, &s.expires, &s.shape, &s.color}
+	return []any{&s.icon, &s.text, &s.bg, &s.fg, &s.expires, &s.shape, &s.color, &s.coverColor, &s.coverPattern}
 }
 
 func (s customCols) status() *models.Status {
@@ -71,6 +74,17 @@ func (s customCols) avatarShape() *models.AvatarShape {
 		return nil
 	}
 	return &models.AvatarShape{Shape: *s.shape, Color: *s.color}
+}
+
+func (s customCols) profileCover() *models.ProfileCover {
+	if s.coverColor == nil {
+		return nil
+	}
+	pattern := ""
+	if s.coverPattern != nil {
+		pattern = *s.coverPattern
+	}
+	return &models.ProfileCover{Color: *s.coverColor, Pattern: pattern}
 }
 
 // baseDest - поля для Scan в порядке baseColumns
@@ -89,6 +103,7 @@ func scanConversation(row pgx.Row) (*models.Conversation, error) {
 	}
 	c.Status = cu.status()
 	c.AvatarShape = cu.avatarShape()
+	c.ProfileCover = cu.profileCover()
 	return &c, nil
 }
 
@@ -99,6 +114,9 @@ type ConversationRepository interface {
 	// SetAvatarShape ставит фигуру за аватаром группы целиком (прежняя заменяется)
 	SetAvatarShape(ctx context.Context, q DBTX, convID, setBy uuid.UUID, sh models.AvatarShape) error
 	ClearAvatarShape(ctx context.Context, q DBTX, convID uuid.UUID) error
+	// SetProfileCover ставит обложку группы целиком (прежняя заменяется)
+	SetProfileCover(ctx context.Context, q DBTX, convID, setBy uuid.UUID, cov models.ProfileCover) error
+	ClearProfileCover(ctx context.Context, q DBTX, convID uuid.UUID) error
 	CreateDirectIfAbsent(ctx context.Context, q DBTX, directKey string) (id uuid.UUID, created bool, err error)
 	AddMember(ctx context.Context, q DBTX, convID, userID uuid.UUID, role string) error
 	Access(ctx context.Context, q DBTX, convID, userID uuid.UUID) (*Access, error)
@@ -338,6 +356,7 @@ func (r *conversationRepository) ListSummaries(ctx context.Context, q DBTX, user
 		}
 		s.Conversation.Status = cu.status()
 		s.Conversation.AvatarShape = cu.avatarShape()
+		s.Conversation.ProfileCover = cu.profileCover()
 		if lmID != nil {
 			s.LastMessage = &MessageRecord{
 				ID: *lmID, ConversationID: s.Conversation.ID, SenderID: *lmSender,
@@ -687,6 +706,7 @@ func (r *conversationRepository) SearchPublicGroups(ctx context.Context, q DBTX,
 		}
 		g.Status = cu.status()
 		g.AvatarShape = cu.avatarShape()
+		g.ProfileCover = cu.profileCover()
 		res = append(res, g)
 	}
 	return res, rows.Err()
@@ -755,6 +775,26 @@ func (r *conversationRepository) SetAvatarShape(ctx context.Context, q DBTX, con
 func (r *conversationRepository) ClearAvatarShape(ctx context.Context, q DBTX, convID uuid.UUID) error {
 	if _, err := q.Exec(ctx, `DELETE FROM conversation_avatar_shapes WHERE conversation_id = $1`, convID); err != nil {
 		return fmt.Errorf("clear group avatar shape: %w", err)
+	}
+	return nil
+}
+
+func (r *conversationRepository) SetProfileCover(ctx context.Context, q DBTX, convID, setBy uuid.UUID, cov models.ProfileCover) error {
+	if _, err := q.Exec(ctx,
+		`INSERT INTO conversation_profile_covers (conversation_id, color, pattern, set_by, set_at)
+		 VALUES ($1, $2, $3, $4, NOW())
+		 ON CONFLICT (conversation_id) DO UPDATE
+		   SET color = EXCLUDED.color, pattern = EXCLUDED.pattern, set_by = EXCLUDED.set_by, set_at = NOW()`,
+		convID, cov.Color, cov.Pattern, setBy,
+	); err != nil {
+		return fmt.Errorf("set group profile cover: %w", err)
+	}
+	return nil
+}
+
+func (r *conversationRepository) ClearProfileCover(ctx context.Context, q DBTX, convID uuid.UUID) error {
+	if _, err := q.Exec(ctx, `DELETE FROM conversation_profile_covers WHERE conversation_id = $1`, convID); err != nil {
+		return fmt.Errorf("clear group profile cover: %w", err)
 	}
 	return nil
 }

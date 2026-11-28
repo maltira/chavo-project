@@ -184,6 +184,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	p.DELETE("/users/me/status", h.clearMyStatus)
 	p.POST("/users/me/avatar-shape", h.setMyAvatarShape)
 	p.DELETE("/users/me/avatar-shape", h.clearMyAvatarShape)
+	p.POST("/users/me/profile-cover", h.setMyProfileCover)
+	p.DELETE("/users/me/profile-cover", h.clearMyProfileCover)
 	p.GET("/users/me/avatars", h.listMyAvatars)
 	p.POST("/users/me/avatars/:id/select", h.selectMyAvatar)
 	if d.Media != nil {
@@ -209,6 +211,8 @@ func NewRouter(d Deps) (*gin.Engine, error) {
 	conv.DELETE("/:id/status", h.clearGroupStatus)
 	conv.POST("/:id/avatar-shape", h.setGroupAvatarShape)
 	conv.DELETE("/:id/avatar-shape", h.clearGroupAvatarShape)
+	conv.POST("/:id/profile-cover", h.setGroupProfileCover)
+	conv.DELETE("/:id/profile-cover", h.clearGroupProfileCover)
 	if d.Media != nil {
 		conv.POST("/:id/avatar", append(uploadLimit, h.uploadGroupAvatar)...)
 		conv.DELETE("/:id/avatars/:photo_id", h.deleteGroupAvatarPhoto)

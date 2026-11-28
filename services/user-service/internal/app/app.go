@@ -74,8 +74,9 @@ func New() (*App, error) {
 
 	statusSvc := service.NewStatusService(repository.NewStatusRepository(pool))
 	shapeSvc := service.NewAvatarShapeService(repository.NewAvatarShapeRepository(pool))
+	coverSvc := service.NewProfileCoverService(repository.NewProfileCoverRepository(pool))
 	avatarSvc := service.NewAvatarHistoryService(repository.NewAvatarHistoryRepository(pool), repository.NewBlockRepository(pool))
-	srv := grpcserver.New(profileSvc, blockSvc, settingsSvc, statusSvc, shapeSvc, avatarSvc, presence.NewChecker(rdb))
+	srv := grpcserver.New(profileSvc, blockSvc, settingsSvc, statusSvc, shapeSvc, coverSvc, avatarSvc, presence.NewChecker(rdb))
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.UnaryInterceptor(log)))
 	userv1.RegisterUserServiceServer(server, srv)
 	userv1.RegisterUserInternalServiceServer(server, srv)

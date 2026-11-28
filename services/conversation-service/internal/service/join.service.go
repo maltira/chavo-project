@@ -89,6 +89,7 @@ func (s *joinService) InviteInfo(ctx context.Context, userID uuid.UUID, token st
 		RequestStatus:  pending,
 		Status:         conv.Status,
 		AvatarShape:    conv.AvatarShape,
+		ProfileCover:   conv.ProfileCover,
 	}, nil
 }
 

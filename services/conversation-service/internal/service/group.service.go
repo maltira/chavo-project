@@ -11,6 +11,7 @@ import (
 
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	"github.com/maltira/chavo-project-backend/proto/media"
+	"github.com/maltira/chavo-project-backend/proto/profilecover"
 	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/conversation-service/internal/client/userclient"
@@ -74,6 +75,9 @@ type GroupService interface {
 	// SetAvatarShape ставит новую фигуру за аватаром группы целиком; только admin, direct - ErrForbidden
 	SetAvatarShape(ctx context.Context, adminID, convID uuid.UUID, shape, color string) (*models.AvatarShape, error)
 	ClearAvatarShape(ctx context.Context, adminID, convID uuid.UUID) error
+	// SetProfileCover ставит обложку группы целиком; только admin, direct - ErrForbidden
+	SetProfileCover(ctx context.Context, adminID, convID uuid.UUID, color, pattern string) (*models.ProfileCover, error)
+	ClearProfileCover(ctx context.Context, adminID, convID uuid.UUID) error
 
 	// История аватарок: до media.MaxAvatarHistory последних фото, текущее - самое новое. Менять - только admin,
 	// участники узнают по conversation.updated (fields: avatar_url). Файлы хранит и удаляет Gateway: сервис лишь
@@ -753,6 +757,39 @@ func (s *groupService) ClearAvatarShape(ctx context.Context, adminID, convID uui
 			return err
 		}
 		return s.convs.ClearAvatarShape(ctx, tx, convID)
+	})
+}
+
+func (s *groupService) SetProfileCover(ctx context.Context, adminID, convID uuid.UUID, color, pattern string) (*models.ProfileCover, error) {
+	v, err := profilecover.Validate(color, pattern)
+	if err != nil {
+		return nil, err
+	}
+	cov := models.ProfileCover{Color: v.Color, Pattern: v.Pattern}
+	err = s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		return s.convs.SetProfileCover(ctx, tx, convID, adminID, cov)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &cov, nil
+}
+
+func (s *groupService) ClearProfileCover(ctx context.Context, adminID, convID uuid.UUID) error {
+	return s.db.WithTx(ctx, func(tx repository.DBTX) error {
+		if _, err := s.convs.Lock(ctx, tx, convID); err != nil {
+			return err
+		}
+		if err := s.requireGroupAdmin(ctx, tx, convID, adminID); err != nil {
+			return err
+		}
+		return s.convs.ClearProfileCover(ctx, tx, convID)
 	})
 }
 

@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import { cn, codeLanguageLabel, normalizeEntities, toSegments, withAutoLinks } from '@/shared/lib'
 import type { MessageEntity, Segment } from '@/shared/lib'
 
 import { Icon } from '../Icon'
 import styles from './RichText.module.scss'
+import { SpoilerParticles } from './SpoilerParticles'
+import type { RevealOrigin } from './SpoilerParticles'
 
 function CodeBlock({
     code,
@@ -74,34 +76,60 @@ function CodeBlock({
     )
 }
 
-function SpoilerMosaic({ length }: { length: number }) {
-    const cols = Math.max(4, Math.min(20, Math.round(length * 0.7)))
-    const total = cols * 2
+function SpoilerSpan({
+    interactive,
+    shown,
+    onReveal,
+    children,
+}: {
+    interactive: boolean
+    shown: boolean
+    onReveal: () => void
+    children: ReactNode
+}) {
+    const hostRef = useRef<HTMLSpanElement>(null)
+    const [origin, setOrigin] = useState<RevealOrigin | null>(null)
+
+    if (!interactive) {
+        return (
+            <span ref={hostRef} className={styles.spoiler}>
+                <span className={styles.spoilerText}>{children}</span>
+                <SpoilerParticles hostRef={hostRef} revealed={false} origin={null} />
+            </span>
+        )
+    }
+
     return (
         <span
-            aria-hidden="true"
-            className={styles.spoilerCover}
-            style={{ '--spoiler-cols': cols } as CSSProperties}
+            ref={hostRef}
+            role="button"
+            tabIndex={shown ? -1 : 0}
+            aria-label={shown ? undefined : 'Показать скрытый текст'}
+            className={cn(styles.spoiler, shown && styles.spoilerRevealed)}
+            onClick={(event) => {
+                if (!shown) {
+                    event.stopPropagation()
+                    const rect = hostRef.current?.getBoundingClientRect()
+                    if (rect && rect.width > 0 && rect.height > 0) {
+                        setOrigin({
+                            x: event.clientX - rect.left,
+                            y: event.clientY - rect.top,
+                        })
+                    }
+                    onReveal()
+                }
+            }}
+            onKeyDown={(event) => {
+                if (!shown && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setOrigin(null)
+                    onReveal()
+                }
+            }}
         >
-            {Array.from({ length: total }, (_, i) => {
-                const col = i % cols
-                const strength = `${38 + ((i * 37) % 55)}%`
-                const idleDelay = `${(i * 190) % 2400}ms`
-                const outDelay = `${Math.round((col / cols) * 180 + (i >= cols ? 35 : 0))}ms`
-                return (
-                    <span
-                        key={i}
-                        className={styles.spoilerCell}
-                        style={
-                            {
-                                '--cell-strength': strength,
-                                '--idle-delay': idleDelay,
-                                '--out-delay': outDelay,
-                            } as CSSProperties
-                        }
-                    />
-                )
-            })}
+            <span className={styles.spoilerText}>{children}</span>
+            <SpoilerParticles hostRef={hostRef} revealed={shown} origin={origin} />
         </span>
     )
 }
@@ -209,39 +237,16 @@ export function RichText({ text, entities, interactive = true, onMentionClick }:
                 i++
             }
             const shown = revealed.has(spoilerKey)
-            const len = group.reduce((sum, s) => sum + s.text.length, 0)
             const inner = group.map((s) => <Fragment key={s.start}>{renderLeaf(s)}</Fragment>)
             out.push(
-                interactive ? (
-                    <span
-                        key={first.start}
-                        role="button"
-                        tabIndex={shown ? -1 : 0}
-                        aria-label={shown ? undefined : 'Показать скрытый текст'}
-                        className={cn(styles.spoiler, shown && styles.spoilerRevealed)}
-                        onClick={(event) => {
-                            if (!shown) {
-                                event.stopPropagation()
-                                revealSpoiler(spoilerKey)
-                            }
-                        }}
-                        onKeyDown={(event) => {
-                            if (!shown && (event.key === 'Enter' || event.key === ' ')) {
-                                event.preventDefault()
-                                event.stopPropagation()
-                                revealSpoiler(spoilerKey)
-                            }
-                        }}
-                    >
-                        <span className={styles.spoilerText}>{inner}</span>
-                        <SpoilerMosaic length={len} />
-                    </span>
-                ) : (
-                    <span key={first.start} className={styles.spoiler}>
-                        <span className={styles.spoilerText}>{inner}</span>
-                        <SpoilerMosaic length={len} />
-                    </span>
-                ),
+                <SpoilerSpan
+                    key={first.start}
+                    interactive={interactive}
+                    shown={shown}
+                    onReveal={() => revealSpoiler(spoilerKey)}
+                >
+                    {inner}
+                </SpoilerSpan>,
             )
         }
         return out

@@ -229,7 +229,7 @@ export function maskSpoilers(text: string, entities?: MessageEntity[]): string {
             out += text.slice(cursor, from)
         }
         if (to > from) {
-            out += '•••'
+            out += 'спойлер'
         }
         cursor = to
     }

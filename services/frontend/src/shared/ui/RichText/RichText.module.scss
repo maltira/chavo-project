@@ -148,19 +148,13 @@
     position: relative;
     display: inline-block;
     max-width: 100%;
-    padding: 0 6px;
+    padding: 0 5px;
     margin: 0 1px;
     border-radius: 6px;
-    background-color: alpha(var(--color-accent), 0.14);
     vertical-align: baseline;
-    overflow: hidden;
     cursor: pointer;
     user-select: none;
-    transition: background-color 0.3s ease;
-
-    &:hover:not(.spoilerRevealed) .spoilerCell {
-        filter: brightness(1.16);
-    }
+    transition: background-color 0.32s ease;
 
     &:focus-visible {
         outline: 2px solid var(--color-accent);
@@ -172,64 +166,26 @@
     position: relative;
     z-index: 1;
     opacity: 0;
-    transition: opacity 0.28s ease;
+    transition: opacity 0.3s ease;
 }
 
-.spoilerCover {
+// выступает на 6px за границы слова, чтобы частицы мягко разлетались при клике
+.spoilerCanvas {
     position: absolute;
-    inset: 0;
+    inset: -6px;
+    width: calc(100% + 12px);
+    height: calc(100% + 12px);
     z-index: 2;
-    display: grid;
-    grid-template-columns: repeat(var(--spoiler-cols, 8), 1fr);
-    grid-template-rows: repeat(2, 1fr);
-    gap: 2px;
-    padding: 2px;
-    border-radius: inherit;
+    display: block;
     pointer-events: none;
 }
 
-.spoilerCell {
-    border-radius: 2px;
-    background-color: color-mix(in srgb, var(--color-accent) var(--cell-strength, 65%), transparent);
-    animation: mosaic-breathe 2.6s ease-in-out infinite;
-    animation-delay: var(--idle-delay, 0ms);
-    transition:
-        opacity 0.22s ease,
-        transform 0.22s ease,
-        filter $transition-fast;
-    transition-delay: 0ms;
-}
-
 .spoilerRevealed {
-    background-color: alpha(var(--color-accent), 0.08);
+    background-color: alpha(var(--color-text), 0.06);
     cursor: text;
     user-select: text;
 
     & .spoilerText {
         opacity: 1;
-    }
-
-    & .spoilerCell {
-        animation: none;
-        opacity: 0;
-        transform: scale(0.45);
-        transition-delay: var(--out-delay, 0ms);
-    }
-}
-
-@keyframes mosaic-breathe {
-    0%,
-    100% {
-        opacity: 0.45;
-    }
-
-    50% {
-        opacity: 0.95;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .spoilerCell {
-        animation: none;
     }
 }

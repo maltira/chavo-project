@@ -58,11 +58,9 @@ describe('RichText', () => {
         expect(container.querySelector('s')?.textContent).toBe('strike')
         expect(container.querySelector('code')?.textContent).toBe('code')
 
-        // спойлер покрыт мозаикой и открывается по клику
+        // спойлер покрыт canvas-частицами и открывается по клику
         const spoiler = screen.getByRole('button', { name: 'Показать скрытый текст' })
-        expect(spoiler.querySelectorAll('[aria-hidden="true"] span').length).toBeGreaterThanOrEqual(
-            8,
-        )
+        expect(spoiler.querySelector('canvas[aria-hidden="true"]')).toBeInTheDocument()
         fireEvent.click(spoiler)
         expect(screen.queryByRole('button', { name: 'Показать скрытый текст' })).toBeNull()
 

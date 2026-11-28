@@ -203,7 +203,10 @@ describe('extended entities helpers', () => {
                 { type: 'spoiler', offset: 9, length: 8 },
                 { type: 'spoiler', offset: 21, length: 5 },
             ]),
-        ).toBe('Убийца - ••• (и •••)')
+        ).toBe('Убийца - спойлер (и спойлер)')
+        expect(
+            maskSpoilers('секрет', [{ type: 'spoiler', offset: 0, length: 6 }]),
+        ).toBe('спойлер')
 
         // URL под спойлером и внутри code игнорируется, а открытый URL после него - берётся
         const text = 'секрет https://hidden.example/a и https://open.example/b'

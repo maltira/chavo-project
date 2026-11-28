@@ -160,8 +160,8 @@ describe('notifyNewMessage', () => {
                 setup('direct'),
                 'me',
             )
-            expect(notices()[0]).toMatchObject({ description: 'Убийца - •••' })
-            expect(shown).toEqual([{ title: 'Давыд', body: 'Убийца - •••' }])
+            expect(notices()[0]).toMatchObject({ description: 'Убийца - спойлер' })
+            expect(shown).toEqual([{ title: 'Давыд', body: 'Убийца - спойлер' }])
         } finally {
             if (prev) {
                 Object.defineProperty(document, 'visibilityState', prev)

@@ -8,6 +8,7 @@ package userv1
 
 import (
 	v11 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
+	v12 "github.com/maltira/chavo-project-backend/proto/gen/go/profilecover/v1"
 	v1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -41,7 +42,9 @@ type Profile struct {
 	// не задана - фигуры нет или она скрыта от заблокированного
 	AvatarShape *v11.AvatarShape `protobuf:"bytes,11,opt,name=avatar_shape,json=avatarShape,proto3" json:"avatar_shape,omitempty"`
 	// аккаунт удалён: показывается как «Удалённый аккаунт» без username и фото
-	IsDeleted     bool `protobuf:"varint,12,opt,name=is_deleted,json=isDeleted,proto3" json:"is_deleted,omitempty"`
+	IsDeleted bool `protobuf:"varint,12,opt,name=is_deleted,json=isDeleted,proto3" json:"is_deleted,omitempty"`
+	// не задана - обложки нет или она скрыта от заблокированного
+	ProfileCover  *v12.ProfileCover `protobuf:"bytes,13,opt,name=profile_cover,json=profileCover,proto3" json:"profile_cover,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -158,6 +161,13 @@ func (x *Profile) GetIsDeleted() bool {
 		return x.IsDeleted
 	}
 	return false
+}
+
+func (x *Profile) GetProfileCover() *v12.ProfileCover {
+	if x != nil {
+		return x.ProfileCover
+	}
+	return nil
 }
 
 type AvatarPhoto struct {
@@ -2884,11 +2894,180 @@ func (*ClearAvatarShapeResponse) Descriptor() ([]byte, []int) {
 	return file_user_v1_user_proto_rawDescGZIP(), []int{56}
 }
 
+// color - #RRGGBB (обязателен); pattern - ключ символа из каталога или пустая строка (без паттерна)
+type SetProfileCoverRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Color         string                 `protobuf:"bytes,1,opt,name=color,proto3" json:"color,omitempty"`
+	Pattern       string                 `protobuf:"bytes,2,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetProfileCoverRequest) Reset() {
+	*x = SetProfileCoverRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetProfileCoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetProfileCoverRequest) ProtoMessage() {}
+
+func (x *SetProfileCoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetProfileCoverRequest.ProtoReflect.Descriptor instead.
+func (*SetProfileCoverRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *SetProfileCoverRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *SetProfileCoverRequest) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+type SetProfileCoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProfileCover  *v12.ProfileCover      `protobuf:"bytes,1,opt,name=profile_cover,json=profileCover,proto3" json:"profile_cover,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetProfileCoverResponse) Reset() {
+	*x = SetProfileCoverResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetProfileCoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetProfileCoverResponse) ProtoMessage() {}
+
+func (x *SetProfileCoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetProfileCoverResponse.ProtoReflect.Descriptor instead.
+func (*SetProfileCoverResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *SetProfileCoverResponse) GetProfileCover() *v12.ProfileCover {
+	if x != nil {
+		return x.ProfileCover
+	}
+	return nil
+}
+
+type ClearProfileCoverRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearProfileCoverRequest) Reset() {
+	*x = ClearProfileCoverRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearProfileCoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearProfileCoverRequest) ProtoMessage() {}
+
+func (x *ClearProfileCoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearProfileCoverRequest.ProtoReflect.Descriptor instead.
+func (*ClearProfileCoverRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{59}
+}
+
+type ClearProfileCoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearProfileCoverResponse) Reset() {
+	*x = ClearProfileCoverResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearProfileCoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearProfileCoverResponse) ProtoMessage() {}
+
+func (x *ClearProfileCoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearProfileCoverResponse.ProtoReflect.Descriptor instead.
+func (*ClearProfileCoverResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{60}
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\x16status/v1/status.proto\"\x89\x04\n" +
+	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a avatarshape/v1/avatarshape.proto\x1a\"profilecover/v1/profilecover.proto\x1a\x16status/v1/status.proto\"\xcd\x04\n" +
 	"\aProfile\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
@@ -2907,7 +3086,8 @@ const file_user_v1_user_proto_rawDesc = "" +
 	" \x01(\v2\x11.status.v1.StatusR\x06status\x12>\n" +
 	"\favatar_shape\x18\v \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\x12\x1d\n" +
 	"\n" +
-	"is_deleted\x18\f \x01(\bR\tisDeletedB\x06\n" +
+	"is_deleted\x18\f \x01(\bR\tisDeleted\x12B\n" +
+	"\rprofile_cover\x18\r \x01(\v2\x1d.profilecover.v1.ProfileCoverR\fprofileCoverB\x06\n" +
 	"\x04_bioB\r\n" +
 	"\v_avatar_url\"\x96\x01\n" +
 	"\vAvatarPhoto\x12\x0e\n" +
@@ -3093,7 +3273,14 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x16SetAvatarShapeResponse\x12>\n" +
 	"\favatar_shape\x18\x01 \x01(\v2\x1b.avatarshape.v1.AvatarShapeR\vavatarShape\"\x19\n" +
 	"\x17ClearAvatarShapeRequest\"\x1a\n" +
-	"\x18ClearAvatarShapeResponse2\x9a\v\n" +
+	"\x18ClearAvatarShapeResponse\"H\n" +
+	"\x16SetProfileCoverRequest\x12\x14\n" +
+	"\x05color\x18\x01 \x01(\tR\x05color\x12\x18\n" +
+	"\apattern\x18\x02 \x01(\tR\apattern\"]\n" +
+	"\x17SetProfileCoverResponse\x12B\n" +
+	"\rprofile_cover\x18\x01 \x01(\v2\x1d.profilecover.v1.ProfileCoverR\fprofileCover\"\x1a\n" +
+	"\x18ClearProfileCoverRequest\"\x1b\n" +
+	"\x19ClearProfileCoverResponse2\xcc\f\n" +
 	"\vUserService\x12N\n" +
 	"\rCreateProfile\x12\x1d.user.v1.CreateProfileRequest\x1a\x1e.user.v1.CreateProfileResponse\x126\n" +
 	"\x05GetMe\x12\x15.user.v1.GetMeRequest\x1a\x16.user.v1.GetMeResponse\x12?\n" +
@@ -3114,7 +3301,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\tSetStatus\x12\x19.user.v1.SetStatusRequest\x1a\x1a.user.v1.SetStatusResponse\x12H\n" +
 	"\vClearStatus\x12\x1b.user.v1.ClearStatusRequest\x1a\x1c.user.v1.ClearStatusResponse\x12Q\n" +
 	"\x0eSetAvatarShape\x12\x1e.user.v1.SetAvatarShapeRequest\x1a\x1f.user.v1.SetAvatarShapeResponse\x12W\n" +
-	"\x10ClearAvatarShape\x12 .user.v1.ClearAvatarShapeRequest\x1a!.user.v1.ClearAvatarShapeResponse2\xf8\x04\n" +
+	"\x10ClearAvatarShape\x12 .user.v1.ClearAvatarShapeRequest\x1a!.user.v1.ClearAvatarShapeResponse\x12T\n" +
+	"\x0fSetProfileCover\x12\x1f.user.v1.SetProfileCoverRequest\x1a .user.v1.SetProfileCoverResponse\x12Z\n" +
+	"\x11ClearProfileCover\x12!.user.v1.ClearProfileCoverRequest\x1a\".user.v1.ClearProfileCoverResponse2\xf8\x04\n" +
 	"\x13UserInternalService\x12W\n" +
 	"\x10MessagingAllowed\x12 .user.v1.MessagingAllowedRequest\x1a!.user.v1.MessagingAllowedResponse\x12E\n" +
 	"\n" +
@@ -3138,7 +3327,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 63)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                      // 0: user.v1.Profile
 	(*AvatarPhoto)(nil),                  // 1: user.v1.AvatarPhoto
@@ -3197,92 +3386,103 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*SetAvatarShapeResponse)(nil),       // 54: user.v1.SetAvatarShapeResponse
 	(*ClearAvatarShapeRequest)(nil),      // 55: user.v1.ClearAvatarShapeRequest
 	(*ClearAvatarShapeResponse)(nil),     // 56: user.v1.ClearAvatarShapeResponse
-	nil,                                  // 57: user.v1.PresenceVisibleResponse.VisibleEntry
-	nil,                                  // 58: user.v1.PresenceVisibleResponse.LastSeenAtEntry
-	(*timestamppb.Timestamp)(nil),        // 59: google.protobuf.Timestamp
-	(*v1.Status)(nil),                    // 60: status.v1.Status
-	(*v11.AvatarShape)(nil),              // 61: avatarshape.v1.AvatarShape
+	(*SetProfileCoverRequest)(nil),       // 57: user.v1.SetProfileCoverRequest
+	(*SetProfileCoverResponse)(nil),      // 58: user.v1.SetProfileCoverResponse
+	(*ClearProfileCoverRequest)(nil),     // 59: user.v1.ClearProfileCoverRequest
+	(*ClearProfileCoverResponse)(nil),    // 60: user.v1.ClearProfileCoverResponse
+	nil,                                  // 61: user.v1.PresenceVisibleResponse.VisibleEntry
+	nil,                                  // 62: user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	(*timestamppb.Timestamp)(nil),        // 63: google.protobuf.Timestamp
+	(*v1.Status)(nil),                    // 64: status.v1.Status
+	(*v11.AvatarShape)(nil),              // 65: avatarshape.v1.AvatarShape
+	(*v12.ProfileCover)(nil),             // 66: profilecover.v1.ProfileCover
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	59, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
-	59, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	59, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	60, // 3: user.v1.Profile.status:type_name -> status.v1.Status
-	61, // 4: user.v1.Profile.avatar_shape:type_name -> avatarshape.v1.AvatarShape
-	59, // 5: user.v1.AvatarPhoto.created_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: user.v1.ListAvatarsResponse.items:type_name -> user.v1.AvatarPhoto
-	59, // 7: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
-	59, // 8: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
-	59, // 9: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
-	0,  // 10: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
-	0,  // 11: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
-	0,  // 12: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
-	11, // 13: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
-	10, // 14: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
-	33, // 15: user.v1.UpdateSettingsRequest.favorite_emojis:type_name -> user.v1.EmojiList
-	0,  // 16: user.v1.SearchProfilesByIDsResponse.profiles:type_name -> user.v1.Profile
-	57, // 17: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
-	58, // 18: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
-	60, // 19: user.v1.SetStatusResponse.status:type_name -> status.v1.Status
-	61, // 20: user.v1.SetAvatarShapeResponse.avatar_shape:type_name -> avatarshape.v1.AvatarShape
-	59, // 21: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
-	12, // 22: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
-	14, // 23: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
-	16, // 24: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
-	18, // 25: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	20, // 26: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
-	2,  // 27: user.v1.UserService.ListAvatars:input_type -> user.v1.ListAvatarsRequest
-	4,  // 28: user.v1.UserService.AddAvatar:input_type -> user.v1.AddAvatarRequest
-	6,  // 29: user.v1.UserService.SelectAvatar:input_type -> user.v1.SelectAvatarRequest
-	8,  // 30: user.v1.UserService.DeleteAvatar:input_type -> user.v1.DeleteAvatarRequest
-	22, // 31: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
-	24, // 32: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
-	26, // 33: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
-	28, // 34: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
-	30, // 35: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
-	32, // 36: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
-	49, // 37: user.v1.UserService.SetStatus:input_type -> user.v1.SetStatusRequest
-	51, // 38: user.v1.UserService.ClearStatus:input_type -> user.v1.ClearStatusRequest
-	53, // 39: user.v1.UserService.SetAvatarShape:input_type -> user.v1.SetAvatarShapeRequest
-	55, // 40: user.v1.UserService.ClearAvatarShape:input_type -> user.v1.ClearAvatarShapeRequest
-	39, // 41: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
-	41, // 42: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
-	43, // 43: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
-	45, // 44: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
-	47, // 45: user.v1.UserInternalService.BlockedIDs:input_type -> user.v1.BlockedIDsRequest
-	35, // 46: user.v1.UserInternalService.ForwardAuthorsHidden:input_type -> user.v1.ForwardAuthorsHiddenRequest
-	37, // 47: user.v1.UserInternalService.SearchProfilesByIDs:input_type -> user.v1.SearchProfilesByIDsRequest
-	13, // 48: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
-	15, // 49: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
-	17, // 50: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
-	19, // 51: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	21, // 52: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
-	3,  // 53: user.v1.UserService.ListAvatars:output_type -> user.v1.ListAvatarsResponse
-	5,  // 54: user.v1.UserService.AddAvatar:output_type -> user.v1.AddAvatarResponse
-	7,  // 55: user.v1.UserService.SelectAvatar:output_type -> user.v1.SelectAvatarResponse
-	9,  // 56: user.v1.UserService.DeleteAvatar:output_type -> user.v1.DeleteAvatarResponse
-	23, // 57: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
-	25, // 58: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
-	27, // 59: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
-	29, // 60: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
-	31, // 61: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
-	34, // 62: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
-	50, // 63: user.v1.UserService.SetStatus:output_type -> user.v1.SetStatusResponse
-	52, // 64: user.v1.UserService.ClearStatus:output_type -> user.v1.ClearStatusResponse
-	54, // 65: user.v1.UserService.SetAvatarShape:output_type -> user.v1.SetAvatarShapeResponse
-	56, // 66: user.v1.UserService.ClearAvatarShape:output_type -> user.v1.ClearAvatarShapeResponse
-	40, // 67: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
-	42, // 68: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
-	44, // 69: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
-	46, // 70: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
-	48, // 71: user.v1.UserInternalService.BlockedIDs:output_type -> user.v1.BlockedIDsResponse
-	36, // 72: user.v1.UserInternalService.ForwardAuthorsHidden:output_type -> user.v1.ForwardAuthorsHiddenResponse
-	38, // 73: user.v1.UserInternalService.SearchProfilesByIDs:output_type -> user.v1.SearchProfilesByIDsResponse
-	48, // [48:74] is the sub-list for method output_type
-	22, // [22:48] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	63, // 0: user.v1.Profile.last_seen_at:type_name -> google.protobuf.Timestamp
+	63, // 1: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	63, // 2: user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	64, // 3: user.v1.Profile.status:type_name -> status.v1.Status
+	65, // 4: user.v1.Profile.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	66, // 5: user.v1.Profile.profile_cover:type_name -> profilecover.v1.ProfileCover
+	63, // 6: user.v1.AvatarPhoto.created_at:type_name -> google.protobuf.Timestamp
+	1,  // 7: user.v1.ListAvatarsResponse.items:type_name -> user.v1.AvatarPhoto
+	63, // 8: user.v1.Settings.created_at:type_name -> google.protobuf.Timestamp
+	63, // 9: user.v1.Settings.updated_at:type_name -> google.protobuf.Timestamp
+	63, // 10: user.v1.BlockedEntry.blocked_at:type_name -> google.protobuf.Timestamp
+	0,  // 11: user.v1.GetMeResponse.profile:type_name -> user.v1.Profile
+	0,  // 12: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
+	0,  // 13: user.v1.SearchProfilesResponse.profiles:type_name -> user.v1.Profile
+	11, // 14: user.v1.ListBlockedResponse.items:type_name -> user.v1.BlockedEntry
+	10, // 15: user.v1.GetSettingsResponse.settings:type_name -> user.v1.Settings
+	33, // 16: user.v1.UpdateSettingsRequest.favorite_emojis:type_name -> user.v1.EmojiList
+	0,  // 17: user.v1.SearchProfilesByIDsResponse.profiles:type_name -> user.v1.Profile
+	61, // 18: user.v1.PresenceVisibleResponse.visible:type_name -> user.v1.PresenceVisibleResponse.VisibleEntry
+	62, // 19: user.v1.PresenceVisibleResponse.last_seen_at:type_name -> user.v1.PresenceVisibleResponse.LastSeenAtEntry
+	64, // 20: user.v1.SetStatusResponse.status:type_name -> status.v1.Status
+	65, // 21: user.v1.SetAvatarShapeResponse.avatar_shape:type_name -> avatarshape.v1.AvatarShape
+	66, // 22: user.v1.SetProfileCoverResponse.profile_cover:type_name -> profilecover.v1.ProfileCover
+	63, // 23: user.v1.PresenceVisibleResponse.LastSeenAtEntry.value:type_name -> google.protobuf.Timestamp
+	12, // 24: user.v1.UserService.CreateProfile:input_type -> user.v1.CreateProfileRequest
+	14, // 25: user.v1.UserService.GetMe:input_type -> user.v1.GetMeRequest
+	16, // 26: user.v1.UserService.UpdateMe:input_type -> user.v1.UpdateMeRequest
+	18, // 27: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	20, // 28: user.v1.UserService.SearchProfiles:input_type -> user.v1.SearchProfilesRequest
+	2,  // 29: user.v1.UserService.ListAvatars:input_type -> user.v1.ListAvatarsRequest
+	4,  // 30: user.v1.UserService.AddAvatar:input_type -> user.v1.AddAvatarRequest
+	6,  // 31: user.v1.UserService.SelectAvatar:input_type -> user.v1.SelectAvatarRequest
+	8,  // 32: user.v1.UserService.DeleteAvatar:input_type -> user.v1.DeleteAvatarRequest
+	22, // 33: user.v1.UserService.ListBlocked:input_type -> user.v1.ListBlockedRequest
+	24, // 34: user.v1.UserService.GetBlockStatus:input_type -> user.v1.GetBlockStatusRequest
+	26, // 35: user.v1.UserService.BlockUser:input_type -> user.v1.BlockUserRequest
+	28, // 36: user.v1.UserService.UnblockUser:input_type -> user.v1.UnblockUserRequest
+	30, // 37: user.v1.UserService.GetSettings:input_type -> user.v1.GetSettingsRequest
+	32, // 38: user.v1.UserService.UpdateSettings:input_type -> user.v1.UpdateSettingsRequest
+	49, // 39: user.v1.UserService.SetStatus:input_type -> user.v1.SetStatusRequest
+	51, // 40: user.v1.UserService.ClearStatus:input_type -> user.v1.ClearStatusRequest
+	53, // 41: user.v1.UserService.SetAvatarShape:input_type -> user.v1.SetAvatarShapeRequest
+	55, // 42: user.v1.UserService.ClearAvatarShape:input_type -> user.v1.ClearAvatarShapeRequest
+	57, // 43: user.v1.UserService.SetProfileCover:input_type -> user.v1.SetProfileCoverRequest
+	59, // 44: user.v1.UserService.ClearProfileCover:input_type -> user.v1.ClearProfileCoverRequest
+	39, // 45: user.v1.UserInternalService.MessagingAllowed:input_type -> user.v1.MessagingAllowedRequest
+	41, // 46: user.v1.UserInternalService.UserExists:input_type -> user.v1.UserExistsRequest
+	43, // 47: user.v1.UserInternalService.GroupInviteAllowed:input_type -> user.v1.GroupInviteAllowedRequest
+	45, // 48: user.v1.UserInternalService.PresenceVisible:input_type -> user.v1.PresenceVisibleRequest
+	47, // 49: user.v1.UserInternalService.BlockedIDs:input_type -> user.v1.BlockedIDsRequest
+	35, // 50: user.v1.UserInternalService.ForwardAuthorsHidden:input_type -> user.v1.ForwardAuthorsHiddenRequest
+	37, // 51: user.v1.UserInternalService.SearchProfilesByIDs:input_type -> user.v1.SearchProfilesByIDsRequest
+	13, // 52: user.v1.UserService.CreateProfile:output_type -> user.v1.CreateProfileResponse
+	15, // 53: user.v1.UserService.GetMe:output_type -> user.v1.GetMeResponse
+	17, // 54: user.v1.UserService.UpdateMe:output_type -> user.v1.UpdateMeResponse
+	19, // 55: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	21, // 56: user.v1.UserService.SearchProfiles:output_type -> user.v1.SearchProfilesResponse
+	3,  // 57: user.v1.UserService.ListAvatars:output_type -> user.v1.ListAvatarsResponse
+	5,  // 58: user.v1.UserService.AddAvatar:output_type -> user.v1.AddAvatarResponse
+	7,  // 59: user.v1.UserService.SelectAvatar:output_type -> user.v1.SelectAvatarResponse
+	9,  // 60: user.v1.UserService.DeleteAvatar:output_type -> user.v1.DeleteAvatarResponse
+	23, // 61: user.v1.UserService.ListBlocked:output_type -> user.v1.ListBlockedResponse
+	25, // 62: user.v1.UserService.GetBlockStatus:output_type -> user.v1.GetBlockStatusResponse
+	27, // 63: user.v1.UserService.BlockUser:output_type -> user.v1.BlockUserResponse
+	29, // 64: user.v1.UserService.UnblockUser:output_type -> user.v1.UnblockUserResponse
+	31, // 65: user.v1.UserService.GetSettings:output_type -> user.v1.GetSettingsResponse
+	34, // 66: user.v1.UserService.UpdateSettings:output_type -> user.v1.UpdateSettingsResponse
+	50, // 67: user.v1.UserService.SetStatus:output_type -> user.v1.SetStatusResponse
+	52, // 68: user.v1.UserService.ClearStatus:output_type -> user.v1.ClearStatusResponse
+	54, // 69: user.v1.UserService.SetAvatarShape:output_type -> user.v1.SetAvatarShapeResponse
+	56, // 70: user.v1.UserService.ClearAvatarShape:output_type -> user.v1.ClearAvatarShapeResponse
+	58, // 71: user.v1.UserService.SetProfileCover:output_type -> user.v1.SetProfileCoverResponse
+	60, // 72: user.v1.UserService.ClearProfileCover:output_type -> user.v1.ClearProfileCoverResponse
+	40, // 73: user.v1.UserInternalService.MessagingAllowed:output_type -> user.v1.MessagingAllowedResponse
+	42, // 74: user.v1.UserInternalService.UserExists:output_type -> user.v1.UserExistsResponse
+	44, // 75: user.v1.UserInternalService.GroupInviteAllowed:output_type -> user.v1.GroupInviteAllowedResponse
+	46, // 76: user.v1.UserInternalService.PresenceVisible:output_type -> user.v1.PresenceVisibleResponse
+	48, // 77: user.v1.UserInternalService.BlockedIDs:output_type -> user.v1.BlockedIDsResponse
+	36, // 78: user.v1.UserInternalService.ForwardAuthorsHidden:output_type -> user.v1.ForwardAuthorsHiddenResponse
+	38, // 79: user.v1.UserInternalService.SearchProfilesByIDs:output_type -> user.v1.SearchProfilesByIDsResponse
+	52, // [52:80] is the sub-list for method output_type
+	24, // [24:52] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -3305,7 +3505,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   59,
+			NumMessages:   63,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

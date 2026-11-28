@@ -387,6 +387,66 @@ func TestAvatarShapes(t *testing.T) {
 	}
 }
 
+func TestProfileCovers(t *testing.T) {
+	pool := testutil.Pool(t, "user_repository_test")
+	profiles := repository.NewProfileRepository(pool)
+	covers := repository.NewProfileCoverRepository(pool)
+	ctx := context.Background()
+	id := createProfile(t, pool, "cov_a")
+	other := createProfile(t, pool, "cov_b")
+
+	if p, _ := profiles.FindByID(ctx, id); p.ProfileCover != nil {
+		t.Fatal("new profile has a cover")
+	}
+	if err := covers.Set(ctx, id, models.ProfileCover{Color: "#34D399", Pattern: "star"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := profiles.FindByID(ctx, id)
+	if err != nil || p.ProfileCover == nil || p.ProfileCover.Color != "#34D399" || p.ProfileCover.Pattern != "star" {
+		t.Fatalf("cover: %+v %v", p, err)
+	}
+
+	// установка заменяет обложку целиком (в том числе без паттерна)
+	if err := covers.Set(ctx, id, models.ProfileCover{Color: "#4F46E5", Pattern: ""}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.ProfileCover.Color != "#4F46E5" || p.ProfileCover.Pattern != "" {
+		t.Fatalf("replace: %+v", p.ProfileCover)
+	}
+
+	found, err := profiles.GetAllBySearch(ctx, "cov_", 10, 0)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("search: %v %v", found, err)
+	}
+	for _, f := range found {
+		if (f.UserID == id) != (f.ProfileCover != nil) {
+			t.Fatalf("search cover for %s: %+v", f.Username, f.ProfileCover)
+		}
+	}
+
+	if err := covers.Clear(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := profiles.FindByID(ctx, id); p.ProfileCover != nil {
+		t.Fatalf("not cleared: %+v", p.ProfileCover)
+	}
+	if err := covers.Clear(ctx, id); err != nil {
+		t.Fatalf("second clear: %v", err)
+	}
+
+	// обложка удаляется вместе с профилем
+	if err := covers.Set(ctx, other, models.ProfileCover{Color: "#FFFFFF", Pattern: "moon"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM profiles WHERE user_id = $1`, other); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM user_profile_covers WHERE user_id = $1`, other).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("cascade: %d %v", n, err)
+	}
+}
+
 func avatarPath(n int) string {
 	return media.AvatarURL(fmt.Sprintf("%032x.jpg", n))
 }

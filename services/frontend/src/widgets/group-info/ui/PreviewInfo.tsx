@@ -4,7 +4,7 @@ import type { GroupPreview } from '@/entities/conversation'
 import { useJoinGroup, useRequestJoin } from '@/features/join-group'
 import { chatLinkText, chatPath } from '@/shared/config'
 import type { InfoItem } from '@/shared/ui'
-import { Button, InfoList, Modal, Status } from '@/shared/ui'
+import { Button, InfoList, Modal, ProfileCover, Status } from '@/shared/ui'
 
 import { GroupHead, statusProps } from './GroupHead'
 import styles from './GroupInfo.module.scss'
@@ -66,7 +66,15 @@ export function PreviewInfo({ group, open, onClose }: Props) {
             open={open}
             onClose={onClose}
             aria-label={`Группа: ${group.name}`}
-            headerStart={group.status && <Status {...statusProps(group.status)} />}
+            cover={
+                group.profile_cover ? (
+                    <ProfileCover
+                        color={group.profile_cover.color}
+                        pattern={group.profile_cover.pattern}
+                    />
+                ) : undefined
+            }
+            headerStart={group.status && <Status {...statusProps(group.status)} animate />}
         >
             <GroupHead
                 name={group.name}

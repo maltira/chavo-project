@@ -2,6 +2,7 @@ export { getMe } from './api/me'
 export {
     blockUser,
     clearMyAvatarShape,
+    clearMyProfileCover,
     clearMyStatus,
     deleteAvatarPhoto,
     deleteMyAvatar,
@@ -13,6 +14,7 @@ export {
     searchUsers,
     selectAvatarPhoto,
     setMyAvatarShape,
+    setMyProfileCover,
     setMyStatus,
     unblockUser,
     updateMe,
@@ -41,6 +43,6 @@ export { presenceKey, usePresence } from './model/presence'
 export type { Presence } from './model/presence'
 export { UserAvatar } from './ui/UserAvatar'
 export { UserRow } from './ui/UserRow'
-export type { AvatarShape, Profile, Status } from './model/types'
+export type { AvatarShape, Profile, ProfileCover, Status } from './model/types'
 export { profileSchema } from './model/profileSchema'
 export type { ProfileInput, ProfileValues } from './model/profileSchema'

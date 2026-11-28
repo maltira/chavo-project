@@ -1,6 +1,6 @@
 import { photoForm, request } from '@/shared/api'
 
-import type { AvatarShape, Profile, Status } from '../model/types'
+import type { AvatarShape, Profile, ProfileCover, Status } from '../model/types'
 
 // чужой профиль
 export function getUser(userId: string): Promise<Profile> {
@@ -62,6 +62,14 @@ export function setMyAvatarShape(shape: AvatarShape): Promise<AvatarShape> {
 
 export function clearMyAvatarShape(): Promise<void> {
     return request<void>('/users/me/avatar-shape', { method: 'DELETE' })
+}
+
+export function setMyProfileCover(cover: ProfileCover): Promise<ProfileCover> {
+    return request<ProfileCover>('/users/me/profile-cover', { method: 'POST', body: cover })
+}
+
+export function clearMyProfileCover(): Promise<void> {
+    return request<void>('/users/me/profile-cover', { method: 'DELETE' })
 }
 
 // фото профиля: сервер проверяет и перекодирует файл и возвращает путь нового фото

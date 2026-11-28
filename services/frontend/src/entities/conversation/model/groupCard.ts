@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
+import type { AvatarShape, ProfileCover, Status } from '@/entities/user/@x/conversation'
 
 import type { PublicGroup } from '../api/conversations'
 import type { InviteInfo } from '../api/groups'
@@ -19,6 +19,7 @@ export interface GroupPreview {
     request_status: string | null
     status: Status | null
     avatar_shape: AvatarShape | null
+    profile_cover?: ProfileCover | null
     // код ссылки, по которой открыли закрытую группу: нужен для заявки
     code?: string
 }
@@ -63,6 +64,7 @@ export function previewFromInvite(info: InviteInfo, code: string): GroupPreview 
         request_status: info.request_status,
         status: info.status,
         avatar_shape: info.avatar_shape,
+        profile_cover: info.profile_cover ?? null,
         code,
     }
 }

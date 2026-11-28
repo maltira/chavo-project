@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package profilecover.v1;
+
+option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/profilecover/v1;profilecoverv1";
+
+// ProfileCover - шапка / обложка профиля пользователя или группы:
+// color - цвет градиента (#RRGGBB), pattern - необязательный ключ символа из каталога proto/profilecover
+message ProfileCover {
+  string color = 1;
+  string pattern = 2;
+}

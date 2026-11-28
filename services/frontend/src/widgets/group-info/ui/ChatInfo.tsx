@@ -13,7 +13,16 @@ import { AvatarShapeEditor } from '@/features/set-avatar-shape'
 import { StatusButton, StatusEditor } from '@/features/set-status'
 import { formatDate } from '@/shared/lib'
 import type { InfoItem } from '@/shared/ui'
-import { Button, Icon, InfoList, Loader, Modal, PhotoViewer, Status } from '@/shared/ui'
+import {
+    Button,
+    Icon,
+    InfoList,
+    Loader,
+    Modal,
+    PhotoViewer,
+    ProfileCover,
+    Status,
+} from '@/shared/ui'
 
 import { GroupHead, statusProps } from './GroupHead'
 import styles from './GroupInfo.module.scss'
@@ -23,7 +32,7 @@ type Screen = 'info' | 'settings' | 'status' | 'shape' | 'members' | 'add'
 
 const TITLES: Partial<Record<Screen, string>> = {
     status: 'Статус группы',
-    shape: 'Фигура',
+    shape: 'Оформление',
     members: 'Участники',
     add: 'Добавить участников',
 }
@@ -194,7 +203,15 @@ export function ChatInfo({ id, open, onClose }: Props) {
             open={open}
             onClose={onClose}
             aria-label={`Группа: ${name}`}
-            headerStart={data.status && <Status {...statusProps(data.status)} />}
+            cover={
+                data.profile_cover ? (
+                    <ProfileCover
+                        color={data.profile_cover.color}
+                        pattern={data.profile_cover.pattern}
+                    />
+                ) : undefined
+            }
+            headerStart={data.status && <Status {...statusProps(data.status)} animate />}
         >
             <GroupHead
                 name={name}

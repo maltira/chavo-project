@@ -1,6 +1,6 @@
 import { request } from '@/shared/api'
 
-import type { AvatarShape, Profile, Status } from '@/entities/user/@x/conversation'
+import type { AvatarShape, Profile, ProfileCover, Status } from '@/entities/user/@x/conversation'
 
 import type { ChatSettings, ConversationSummary } from '../model/types'
 
@@ -106,6 +106,7 @@ export interface PublicGroup {
     is_member: boolean
     status: Status | null
     avatar_shape: AvatarShape | null
+    profile_cover?: ProfileCover | null
 }
 
 export async function searchGroups(query: string): Promise<PublicGroup[]> {

@@ -89,24 +89,35 @@ describe('UserProfileModal', () => {
         )
     })
 
-    it('picks the avatar shape from the edit screen with a back arrow, not in another window', () => {
+    it('picks the appearance from the edit screen with a back arrow, not in another window', () => {
         renderModal()
         act(() => useProfileCard.getState().open('me'))
-        expect(screen.queryByRole('button', { name: 'Изменить фигуру за аватаром' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Изменить оформление' })).toBeNull()
 
         fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Изменить оформление' }))
 
-        // экран фигуры заменяет окно профиля, а не открывается поверх него
+        // экран оформления заменяет окно профиля, а не открывается поверх него
         expect(screen.getAllByRole('dialog')).toHaveLength(1)
-        expect(screen.getByRole('dialog', { name: 'Фигура' })).toBeInTheDocument()
+        expect(screen.getByRole('dialog', { name: 'Оформление' })).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
         expect(screen.getAllByRole('dialog')).toHaveLength(1)
         expect(screen.getByRole('dialog', { name: /Профиль: Я/ })).toBeInTheDocument()
-        expect(
-            screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }),
-        ).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Изменить оформление' })).toBeInTheDocument()
+    })
+
+    it('renders profile cover halo when profile_cover is set', () => {
+        const { client } = renderModal()
+        client.setQueryData(['user', 'peer'], {
+            ...peer,
+            profile_cover: { color: '#4F46E5', pattern: 'star' },
+        })
+        act(() => useProfileCard.getState().open('peer'))
+        const dialog = screen.getByRole('dialog', { name: /Профиль: Василиса/ })
+        const cover = dialog.querySelector('[data-cover-color="#4F46E5"]')
+        expect(cover).toBeInTheDocument()
+        expect(cover).toHaveAttribute('data-cover-pattern', 'star')
     })
 
     it('shows my own profile without actions', () => {
@@ -185,8 +196,8 @@ describe('UserProfileModal', () => {
             avatar_url: photo('a'),
         })
         act(() => useProfileCard.getState().open('me', { remember: false }))
-        // в просмотре профиля кнопки смены фигуры нет - она перенесена в «Редактировать»
-        expect(screen.queryByRole('button', { name: 'Изменить фигуру за аватаром' })).toBeNull()
+        // в просмотре профиля кнопки смены оформления нет - она перенесена в «Редактировать»
+        expect(screen.queryByRole('button', { name: 'Изменить оформление' })).toBeNull()
 
         fireEvent.click(screen.getByRole('button', { name: 'Открыть фото' }))
         const viewer = screen.getByRole('dialog', { name: 'Фото: Я' })

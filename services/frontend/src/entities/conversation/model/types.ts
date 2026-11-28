@@ -1,5 +1,5 @@
 import type { Message } from '@/entities/message/@x/conversation'
-import type { AvatarShape, Status } from '@/entities/user/@x/conversation'
+import type { AvatarShape, ProfileCover, Status } from '@/entities/user/@x/conversation'
 
 export interface Conversation {
     id: string
@@ -14,6 +14,7 @@ export interface Conversation {
     updated_at: string
     status: Status | null
     avatar_shape: AvatarShape | null
+    profile_cover?: ProfileCover | null
     // код ссылки на чат открытой группы; у закрытых и личных - null
     slug: string | null
 }

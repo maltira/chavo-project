@@ -4,6 +4,7 @@ package user.v1;
 
 import "google/protobuf/timestamp.proto";
 import "avatarshape/v1/avatarshape.proto";
+import "profilecover/v1/profilecover.proto";
 import "status/v1/status.proto";
 
 option go_package = "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1;userv1";
@@ -41,6 +42,10 @@ service UserService {
   // SetAvatarShape ставит фигуру позади аватара целиком (прежняя заменяется); редактировать нельзя
   rpc SetAvatarShape(SetAvatarShapeRequest) returns (SetAvatarShapeResponse);
   rpc ClearAvatarShape(ClearAvatarShapeRequest) returns (ClearAvatarShapeResponse);
+
+  // SetProfileCover ставит шапку / обложку профиля целиком (прежняя заменяется)
+  rpc SetProfileCover(SetProfileCoverRequest) returns (SetProfileCoverResponse);
+  rpc ClearProfileCover(ClearProfileCoverRequest) returns (ClearProfileCoverResponse);
 }
 
 // Вызовы между сервисами; Gateway их наружу не открывает.
@@ -75,6 +80,8 @@ message Profile {
   avatarshape.v1.AvatarShape avatar_shape = 11;
   // аккаунт удалён: показывается как «Удалённый аккаунт» без username и фото
   bool is_deleted = 12;
+  // не задана - обложки нет или она скрыта от заблокированного
+  profilecover.v1.ProfileCover profile_cover = 13;
 }
 
 message AvatarPhoto {
@@ -298,3 +305,14 @@ message SetAvatarShapeResponse {
 }
 message ClearAvatarShapeRequest {}
 message ClearAvatarShapeResponse {}
+
+// color - #RRGGBB (обязателен); pattern - ключ символа из каталога или пустая строка (без паттерна)
+message SetProfileCoverRequest {
+  string color = 1;
+  string pattern = 2;
+}
+message SetProfileCoverResponse {
+  profilecover.v1.ProfileCover profile_cover = 1;
+}
+message ClearProfileCoverRequest {}
+message ClearProfileCoverResponse {}

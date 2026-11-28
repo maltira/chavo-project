@@ -28,6 +28,7 @@ import (
 	authv1 "github.com/maltira/chavo-project-backend/proto/gen/go/auth/v1"
 	avatarshapev1 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
 	conversationv1 "github.com/maltira/chavo-project-backend/proto/gen/go/conversation/v1"
+	profilecoverv1 "github.com/maltira/chavo-project-backend/proto/gen/go/profilecover/v1"
 	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
@@ -327,6 +328,20 @@ func (u *fakeUsers) ClearAvatarShape(context.Context, *userv1.ClearAvatarShapeRe
 	return &userv1.ClearAvatarShapeResponse{}, nil
 }
 
+// SetProfileCover проверяет только паттерн (полная проверка - в user-service) и возвращает обложку как есть
+func (u *fakeUsers) SetProfileCover(_ context.Context, req *userv1.SetProfileCoverRequest) (*userv1.SetProfileCoverResponse, error) {
+	if req.GetPattern() != "" && req.GetPattern() != "star" {
+		return nil, grpcx.Error(codes.InvalidArgument, "PROFILE_COVER_PATTERN_INVALID", "Неизвестный паттерн обложки")
+	}
+	return &userv1.SetProfileCoverResponse{ProfileCover: &profilecoverv1.ProfileCover{
+		Color: req.GetColor(), Pattern: req.GetPattern(),
+	}}, nil
+}
+
+func (u *fakeUsers) ClearProfileCover(context.Context, *userv1.ClearProfileCoverRequest) (*userv1.ClearProfileCoverResponse, error) {
+	return &userv1.ClearProfileCoverResponse{}, nil
+}
+
 func (u *fakeUsers) SearchProfiles(context.Context, *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
 	return &userv1.SearchProfilesResponse{}, nil
 }
@@ -616,6 +631,29 @@ func (f *fakeConversations) EditMessage(_ context.Context, req *conversationv1.E
 	return &conversationv1.EditMessageResponse{Message: &conversationv1.Message{
 		Id: req.GetMessageId(), Content: &req.Content, CreatedAt: timestamppb.Now(), IsEdited: true, Entities: req.GetEntities(),
 	}}, nil
+}
+
+func (f *fakeConversations) SetGroupProfileCover(ctx context.Context, req *conversationv1.SetGroupProfileCoverRequest) (*conversationv1.SetGroupProfileCoverResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.adminOnly(ctx, req.GetConversationId()); err != nil {
+		return nil, err
+	}
+	if req.GetPattern() != "" && req.GetPattern() != "star" {
+		return nil, grpcx.Error(codes.InvalidArgument, "PROFILE_COVER_PATTERN_INVALID", "Неизвестный паттерн обложки")
+	}
+	return &conversationv1.SetGroupProfileCoverResponse{ProfileCover: &profilecoverv1.ProfileCover{
+		Color: req.GetColor(), Pattern: req.GetPattern(),
+	}}, nil
+}
+
+func (f *fakeConversations) ClearGroupProfileCover(ctx context.Context, req *conversationv1.ClearGroupProfileCoverRequest) (*conversationv1.ClearGroupProfileCoverResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.adminOnly(ctx, req.GetConversationId()); err != nil {
+		return nil, err
+	}
+	return &conversationv1.ClearGroupProfileCoverResponse{}, nil
 }
 
 // ── окружение теста ───────────────────────────────────
@@ -1105,8 +1143,10 @@ func TestStatusEndpoints(t *testing.T) {
 	icons, _ := st["icons"].([]any)
 	durations, _ := st["durations"].([]any)
 	shapes, _ := cat["avatar_shapes"].([]any)
+	coverPatterns, _ := cat["profile_cover_patterns"].([]any)
 	mutes, _ := cat["mute_durations"].([]any)
 	if len(icons) != 6 || icons[0] != "moon" || len(durations) != 5 || len(shapes) != 27 || shapes[0] != "circle" ||
+		len(coverPatterns) != 12 || coverPatterns[0] != "star" ||
 		len(mutes) != 4 || mutes[3] != "forever" {
 		t.Fatalf("catalog content: %v", cat)
 	}
@@ -1165,6 +1205,55 @@ func TestAvatarShapeEndpoints(t *testing.T) {
 	// PUT не поддерживается: фигура только ставится заново или удаляется
 	if w := e.do(http.MethodPut, "/api/users/me/avatar-shape", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT: %d", w.Code)
+	}
+}
+
+func TestProfileCoverEndpoints(t *testing.T) {
+	e := newEnv(t)
+
+	_, noProfile := e.login(t, false)
+	expect(t, e.do(http.MethodPost, "/api/users/me/profile-cover", noProfile, `{"color":"#4F46E5","pattern":"star"}`),
+		http.StatusForbidden, "PROFILE_REQUIRED")
+
+	uid, tok := e.login(t, true)
+	w := e.do(http.MethodPost, "/api/users/me/profile-cover", tok, `{"color":"#4F46E5","pattern":"star"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("set: %d %s", w.Code, w.Body.String())
+	}
+	if cov := decode(t, w); cov["color"] != "#4F46E5" || cov["pattern"] != "star" {
+		t.Fatalf("cover: %v", cov)
+	}
+	// только градиент (пустой паттерн)
+	w = e.do(http.MethodPost, "/api/users/me/profile-cover", tok, `{"color":"#EC4899","pattern":""}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("set gradient-only: %d %s", w.Code, w.Body.String())
+	}
+	if cov := decode(t, w); cov["color"] != "#EC4899" || cov["pattern"] != "" {
+		t.Fatalf("cover gradient-only: %v", cov)
+	}
+	expect(t, e.do(http.MethodPost, "/api/users/me/profile-cover", tok, `{"color":"#000000","pattern":"unknown"}`),
+		http.StatusBadRequest, "PROFILE_COVER_PATTERN_INVALID")
+	if w := e.do(http.MethodDelete, "/api/users/me/profile-cover", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+	if w := e.do(http.MethodPut, "/api/users/me/profile-cover", tok, `{}`); w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT: %d", w.Code)
+	}
+
+	// группа
+	groupID := uuid.NewString()
+	e.convs.mu.Lock()
+	e.convs.admins[groupID] = uid
+	e.convs.mu.Unlock()
+	w = e.do(http.MethodPost, "/api/conversations/"+groupID+"/profile-cover", tok, `{"color":"#34D399","pattern":"star"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("group set: %d %s", w.Code, w.Body.String())
+	}
+	if cov := decode(t, w); cov["color"] != "#34D399" || cov["pattern"] != "star" {
+		t.Fatalf("group cover: %v", cov)
+	}
+	if w := e.do(http.MethodDelete, "/api/conversations/"+groupID+"/profile-cover", tok, ""); w.Code != http.StatusOK {
+		t.Fatalf("group clear: %d %s", w.Code, w.Body.String())
 	}
 }
 

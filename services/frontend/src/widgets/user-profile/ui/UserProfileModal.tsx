@@ -28,6 +28,7 @@ import {
     Loader,
     Modal,
     PhotoViewer,
+    ProfileCover,
     Status,
 } from '@/shared/ui'
 
@@ -147,14 +148,14 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
         info.push({ icon: 'shape-message', label: 'О себе', value: profile.bio })
     }
 
-    // разные key у окон профиля, статуса и фигуры: переход между ними - новое окно со своей анимацией
+    // разные key у окон профиля, статуса и оформления: переход между ними - новое окно со своей анимацией
     if (isMe && pickingShape) {
         return (
             <Modal
                 key="shape"
                 open={open}
                 onClose={onClose}
-                title="Фигура"
+                title="Оформление"
                 headerStart={
                     <button
                         type="button"
@@ -206,10 +207,18 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
             open={open}
             onClose={onClose}
             aria-label={`Профиль: ${profile.display_name}`}
+            cover={
+                !(isMe && editing) && profile.profile_cover ? (
+                    <ProfileCover
+                        color={profile.profile_cover.color}
+                        pattern={profile.profile_cover.pattern}
+                    />
+                ) : undefined
+            }
             headerStart={
                 // свой статус - кнопка: по нажатию редактор статуса
                 isMe ? (
-                    <StatusButton onEdit={() => setEditingStatus(true)} />
+                    <StatusButton animate onEdit={() => setEditingStatus(true)} />
                 ) : (
                     profile.status && (
                         <Status
@@ -218,6 +227,7 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
                             background={profile.status.background}
                             foreground={profile.status.foreground}
                             expiresAt={profile.status.expires_at}
+                            animate
                         />
                     )
                 )
@@ -331,8 +341,8 @@ function ProfileContent({ userId, open, onClose }: ContentProps) {
                 confirmLabel="Заблокировать"
                 danger
             >
-                {profile.display_name} не сможет писать вам и не увидит ваш аватар, статус и время в
-                сети
+                {profile.display_name} не сможет писать вам и не увидит ваш аватар, обложку, статус
+                и время в сети
             </ConfirmModal>
         </Modal>
     )

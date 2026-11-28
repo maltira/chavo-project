@@ -242,14 +242,20 @@ describe('GroupInfoModal', () => {
         )
     })
 
-    it('picks the group shape and status on screens with a back arrow', () => {
-        renderModal()
+    it('picks the group appearance and status on screens with a back arrow', () => {
+        renderModal({ ...chat, profile_cover: { color: '#10B981', pattern: 'clover' } })
         act(() => useGroupCard.getState().openChat('g1'))
+        const infoDialog = screen.getByRole('dialog', { name: 'Группа: Крутые перцы' })
+        expect(infoDialog.querySelector('[data-cover-color="#10B981"]')).toHaveAttribute(
+            'data-cover-pattern',
+            'clover',
+        )
+
         fireEvent.click(screen.getByRole('button', { name: 'Настройки группы' }))
 
-        fireEvent.click(screen.getByRole('button', { name: 'Изменить фигуру за аватаром' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Изменить оформление' }))
         expect(screen.getAllByRole('dialog')).toHaveLength(1)
-        expect(screen.getByRole('dialog', { name: 'Фигура' })).toBeInTheDocument()
+        expect(screen.getByRole('dialog', { name: 'Оформление' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
         expect(screen.getByRole('dialog', { name: /Настройки группы/ })).toBeInTheDocument()
     })

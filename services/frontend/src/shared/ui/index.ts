@@ -1,5 +1,6 @@
 // public api сегмента - экспорты добавляются по мере появления кода
 export { AvatarShape, isKnownShape } from './AvatarShape'
+export { CoverPatternIcon, isKnownCoverPattern, ProfileCover } from './ProfileCover'
 export { Icon, isKnownIcon } from './Icon'
 export { Button } from './Button'
 export { IconButton } from './IconButton'

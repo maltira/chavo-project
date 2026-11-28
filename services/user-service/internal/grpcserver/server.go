@@ -11,9 +11,11 @@ import (
 
 	"github.com/maltira/chavo-project-backend/proto/avatarshape"
 	avatarshapev1 "github.com/maltira/chavo-project-backend/proto/gen/go/avatarshape/v1"
+	profilecoverv1 "github.com/maltira/chavo-project-backend/proto/gen/go/profilecover/v1"
 	statusv1 "github.com/maltira/chavo-project-backend/proto/gen/go/status/v1"
 	userv1 "github.com/maltira/chavo-project-backend/proto/gen/go/user/v1"
 	"github.com/maltira/chavo-project-backend/proto/grpcx"
+	"github.com/maltira/chavo-project-backend/proto/profilecover"
 	"github.com/maltira/chavo-project-backend/proto/status"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/apperror"
 	"github.com/maltira/chavo-project-backend/services/user-service/internal/models"
@@ -30,15 +32,16 @@ type Server struct {
 	settings service.SettingsService
 	statuses service.StatusService
 	shapes   service.AvatarShapeService
+	covers   service.ProfileCoverService
 	avatars  service.AvatarHistoryService
 	presence presence.Checker
 }
 
 func New(profiles service.ProfileService, blocks service.BlockService, settings service.SettingsService,
-	statuses service.StatusService, shapes service.AvatarShapeService, avatars service.AvatarHistoryService,
-	presence presence.Checker) *Server {
+	statuses service.StatusService, shapes service.AvatarShapeService, covers service.ProfileCoverService,
+	avatars service.AvatarHistoryService, presence presence.Checker) *Server {
 	return &Server{profiles: profiles, blocks: blocks, settings: settings, statuses: statuses, shapes: shapes,
-		avatars: avatars, presence: presence}
+		covers: covers, avatars: avatars, presence: presence}
 }
 
 // avatarShapeToProto - фигура, убранная из каталога после установки, считается отсутствующей
@@ -47,6 +50,18 @@ func avatarShapeToProto(sh *models.AvatarShape) *avatarshapev1.AvatarShape {
 		return nil
 	}
 	return &avatarshapev1.AvatarShape{Shape: sh.Shape, Color: sh.Color}
+}
+
+// profileCoverToProto - если паттерн убрали из каталога после установки, оставляем чистый градиент без паттерна
+func profileCoverToProto(c *models.ProfileCover) *profilecoverv1.ProfileCover {
+	if c == nil || c.Color == "" {
+		return nil
+	}
+	pat := c.Pattern
+	if pat != "" && !profilecover.Known(pat) {
+		pat = ""
+	}
+	return &profilecoverv1.ProfileCover{Color: c.Color, Pattern: pat}
 }
 
 // statusToProto: иконка, убранная из каталога после установки, — отсутствие статуса.
@@ -145,6 +160,7 @@ func (s *Server) profilesToProto(ctx context.Context, viewer uuid.UUID, items []
 			out.AvatarUrl = p.AvatarURL
 			out.Status = statusToProto(p.Status)
 			out.AvatarShape = avatarShapeToProto(p.AvatarShape)
+			out.ProfileCover = profileCoverToProto(p.ProfileCover)
 		}
 		if show {
 			out.Online = online[p.UserID]
@@ -617,6 +633,29 @@ func (s *Server) ClearAvatarShape(ctx context.Context, _ *userv1.ClearAvatarShap
 		return nil, err
 	}
 	return &userv1.ClearAvatarShapeResponse{}, nil
+}
+
+func (s *Server) SetProfileCover(ctx context.Context, req *userv1.SetProfileCoverRequest) (*userv1.SetProfileCoverResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cover, err := s.covers.Set(ctx, userID, req.GetColor(), req.GetPattern())
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.SetProfileCoverResponse{ProfileCover: profileCoverToProto(cover)}, nil
+}
+
+func (s *Server) ClearProfileCover(ctx context.Context, _ *userv1.ClearProfileCoverRequest) (*userv1.ClearProfileCoverResponse, error) {
+	userID, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.covers.Clear(ctx, userID); err != nil {
+		return nil, err
+	}
+	return &userv1.ClearProfileCoverResponse{}, nil
 }
 
 func (s *Server) ListAvatars(ctx context.Context, req *userv1.ListAvatarsRequest) (*userv1.ListAvatarsResponse, error) {

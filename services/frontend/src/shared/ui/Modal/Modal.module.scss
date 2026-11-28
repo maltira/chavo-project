@@ -22,12 +22,14 @@
 }
 
 .dialog {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 24px;
     max-width: 100%;
     max-height: min(800px, 100%);
     padding: 20px;
+    overflow-x: hidden;
     overflow-y: auto;
 
     border: 1px solid var(--color-bg-muted);
@@ -37,6 +39,24 @@
     outline: none;
 
     animation: dialog-show 150ms ease-out;
+}
+
+.coverLayer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.withCover {
+    & > :not(.coverLayer) {
+        position: relative;
+        z-index: 1;
+    }
+
+    & .close {
+        opacity: 0.82;
+    }
 }
 
 // шапка: слот слева, заголовок по центру, крестик справа

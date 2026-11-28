@@ -119,12 +119,13 @@ func (r *profileRepository) Update(ctx context.Context, userID uuid.UUID, update
 	return nil
 }
 
-// profileColumns и profileJoins - общие для чтения профиля со статусом и фигурой; истёкший статус не читается
+// profileColumns и profileJoins - общие для чтения профиля со статусом, фигурой и обложкой; истёкший статус не читается
 const (
 	profileColumns = `p.user_id, p.username, p.display_name, p.bio, p.avatar_url, p.last_seen_at, p.created_at, p.updated_at, p.deleted_at,
-		s.icon, s.text, s.background, s.foreground, s.expires_at, sh.shape, sh.color`
+		s.icon, s.text, s.background, s.foreground, s.expires_at, sh.shape, sh.color, pc.color, pc.pattern`
 	profileJoins = `LEFT JOIN user_statuses s ON s.user_id = p.user_id AND (s.expires_at IS NULL OR s.expires_at > NOW())
-		LEFT JOIN user_avatar_shapes sh ON sh.user_id = p.user_id`
+		LEFT JOIN user_avatar_shapes sh ON sh.user_id = p.user_id
+		LEFT JOIN user_profile_covers pc ON pc.user_id = p.user_id`
 )
 
 func scanProfile(row pgx.Row) (*models.Profile, error) {
@@ -133,11 +134,12 @@ func scanProfile(row pgx.Row) (*models.Profile, error) {
 		stIcon, stText, stBg, stFg *string
 		stExpires                  *time.Time
 		shShape, shColor           *string
+		pcColor, pcPattern         *string
 	)
 	if err := row.Scan(
 		&p.UserID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL,
 		&p.LastSeenAt, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
-		&stIcon, &stText, &stBg, &stFg, &stExpires, &shShape, &shColor,
+		&stIcon, &stText, &stBg, &stFg, &stExpires, &shShape, &shColor, &pcColor, &pcPattern,
 	); err != nil {
 		return nil, err
 	}
@@ -146,6 +148,9 @@ func scanProfile(row pgx.Row) (*models.Profile, error) {
 	}
 	if shShape != nil && shColor != nil {
 		p.AvatarShape = &models.AvatarShape{Shape: *shShape, Color: *shColor}
+	}
+	if pcColor != nil && pcPattern != nil {
+		p.ProfileCover = &models.ProfileCover{Color: *pcColor, Pattern: *pcPattern}
 	}
 	return &p, nil
 }
@@ -287,6 +292,7 @@ func (r *profileRepository) DeleteAccount(ctx context.Context, userID uuid.UUID)
 		{"profile_avatars", `DELETE FROM profile_avatars WHERE user_id = $1`},
 		{"user_statuses", `DELETE FROM user_statuses WHERE user_id = $1`},
 		{"user_avatar_shapes", `DELETE FROM user_avatar_shapes WHERE user_id = $1`},
+		{"user_profile_covers", `DELETE FROM user_profile_covers WHERE user_id = $1`},
 		{"user_blocks", `DELETE FROM user_blocks WHERE user_id = $1 OR blocked_user_id = $1`},
 		{"user_settings", `DELETE FROM user_settings WHERE user_id = $1`},
 	} {

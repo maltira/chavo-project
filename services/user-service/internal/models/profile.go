@@ -19,6 +19,8 @@ type Profile struct {
 	Status      *Status    `json:"status,omitempty"`
 	// AvatarShape - фигура позади аватара; nil - фигуры нет
 	AvatarShape *AvatarShape `json:"avatar_shape,omitempty"`
+	// ProfileCover - шапка / обложка профиля; nil - обложки нет
+	ProfileCover *ProfileCover `json:"profile_cover,omitempty"`
 }
 
 type Status struct {
@@ -39,4 +41,9 @@ type PresenceBatchRow struct {
 type AvatarShape struct {
 	Shape string
 	Color string
+}
+
+type ProfileCover struct {
+	Color   string
+	Pattern string
 }

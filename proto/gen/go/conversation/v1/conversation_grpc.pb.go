@@ -19,52 +19,54 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ConversationService_ListConversations_FullMethodName     = "/conversation.v1.ConversationService/ListConversations"
-	ConversationService_GetConversation_FullMethodName       = "/conversation.v1.ConversationService/GetConversation"
-	ConversationService_SearchPublicGroups_FullMethodName    = "/conversation.v1.ConversationService/SearchPublicGroups"
-	ConversationService_CreateGroup_FullMethodName           = "/conversation.v1.ConversationService/CreateGroup"
-	ConversationService_UpdateGroup_FullMethodName           = "/conversation.v1.ConversationService/UpdateGroup"
-	ConversationService_SetGroupStatus_FullMethodName        = "/conversation.v1.ConversationService/SetGroupStatus"
-	ConversationService_ClearGroupStatus_FullMethodName      = "/conversation.v1.ConversationService/ClearGroupStatus"
-	ConversationService_SetGroupAvatarShape_FullMethodName   = "/conversation.v1.ConversationService/SetGroupAvatarShape"
-	ConversationService_ClearGroupAvatarShape_FullMethodName = "/conversation.v1.ConversationService/ClearGroupAvatarShape"
-	ConversationService_DeleteConversation_FullMethodName    = "/conversation.v1.ConversationService/DeleteConversation"
-	ConversationService_ClearHistory_FullMethodName          = "/conversation.v1.ConversationService/ClearHistory"
-	ConversationService_JoinGroup_FullMethodName             = "/conversation.v1.ConversationService/JoinGroup"
-	ConversationService_ListGroupAvatars_FullMethodName      = "/conversation.v1.ConversationService/ListGroupAvatars"
-	ConversationService_AddGroupAvatar_FullMethodName        = "/conversation.v1.ConversationService/AddGroupAvatar"
-	ConversationService_SelectGroupAvatar_FullMethodName     = "/conversation.v1.ConversationService/SelectGroupAvatar"
-	ConversationService_DeleteGroupAvatar_FullMethodName     = "/conversation.v1.ConversationService/DeleteGroupAvatar"
-	ConversationService_SetChatMute_FullMethodName           = "/conversation.v1.ConversationService/SetChatMute"
-	ConversationService_SetChatArchived_FullMethodName       = "/conversation.v1.ConversationService/SetChatArchived"
-	ConversationService_SetChatPinned_FullMethodName         = "/conversation.v1.ConversationService/SetChatPinned"
-	ConversationService_ListMembers_FullMethodName           = "/conversation.v1.ConversationService/ListMembers"
-	ConversationService_AddMembers_FullMethodName            = "/conversation.v1.ConversationService/AddMembers"
-	ConversationService_SetMemberRole_FullMethodName         = "/conversation.v1.ConversationService/SetMemberRole"
-	ConversationService_RemoveMember_FullMethodName          = "/conversation.v1.ConversationService/RemoveMember"
-	ConversationService_ListBans_FullMethodName              = "/conversation.v1.ConversationService/ListBans"
-	ConversationService_Unban_FullMethodName                 = "/conversation.v1.ConversationService/Unban"
-	ConversationService_GetInviteInfo_FullMethodName         = "/conversation.v1.ConversationService/GetInviteInfo"
-	ConversationService_RegenerateInvite_FullMethodName      = "/conversation.v1.ConversationService/RegenerateInvite"
-	ConversationService_RequestJoin_FullMethodName           = "/conversation.v1.ConversationService/RequestJoin"
-	ConversationService_ListJoinRequests_FullMethodName      = "/conversation.v1.ConversationService/ListJoinRequests"
-	ConversationService_ApproveJoinRequest_FullMethodName    = "/conversation.v1.ConversationService/ApproveJoinRequest"
-	ConversationService_RejectJoinRequest_FullMethodName     = "/conversation.v1.ConversationService/RejectJoinRequest"
-	ConversationService_SendMessage_FullMethodName           = "/conversation.v1.ConversationService/SendMessage"
-	ConversationService_GetMessage_FullMethodName            = "/conversation.v1.ConversationService/GetMessage"
-	ConversationService_ListMessages_FullMethodName          = "/conversation.v1.ConversationService/ListMessages"
-	ConversationService_EditMessage_FullMethodName           = "/conversation.v1.ConversationService/EditMessage"
-	ConversationService_DeleteMessage_FullMethodName         = "/conversation.v1.ConversationService/DeleteMessage"
-	ConversationService_DeleteMessages_FullMethodName        = "/conversation.v1.ConversationService/DeleteMessages"
-	ConversationService_ForwardMessages_FullMethodName       = "/conversation.v1.ConversationService/ForwardMessages"
-	ConversationService_MarkRead_FullMethodName              = "/conversation.v1.ConversationService/MarkRead"
-	ConversationService_ListReaders_FullMethodName           = "/conversation.v1.ConversationService/ListReaders"
-	ConversationService_ListPins_FullMethodName              = "/conversation.v1.ConversationService/ListPins"
-	ConversationService_PinMessage_FullMethodName            = "/conversation.v1.ConversationService/PinMessage"
-	ConversationService_UnpinMessage_FullMethodName          = "/conversation.v1.ConversationService/UnpinMessage"
-	ConversationService_AddReaction_FullMethodName           = "/conversation.v1.ConversationService/AddReaction"
-	ConversationService_RemoveReaction_FullMethodName        = "/conversation.v1.ConversationService/RemoveReaction"
-	ConversationService_ListUnreadMentions_FullMethodName    = "/conversation.v1.ConversationService/ListUnreadMentions"
+	ConversationService_ListConversations_FullMethodName      = "/conversation.v1.ConversationService/ListConversations"
+	ConversationService_GetConversation_FullMethodName        = "/conversation.v1.ConversationService/GetConversation"
+	ConversationService_SearchPublicGroups_FullMethodName     = "/conversation.v1.ConversationService/SearchPublicGroups"
+	ConversationService_CreateGroup_FullMethodName            = "/conversation.v1.ConversationService/CreateGroup"
+	ConversationService_UpdateGroup_FullMethodName            = "/conversation.v1.ConversationService/UpdateGroup"
+	ConversationService_SetGroupStatus_FullMethodName         = "/conversation.v1.ConversationService/SetGroupStatus"
+	ConversationService_ClearGroupStatus_FullMethodName       = "/conversation.v1.ConversationService/ClearGroupStatus"
+	ConversationService_SetGroupAvatarShape_FullMethodName    = "/conversation.v1.ConversationService/SetGroupAvatarShape"
+	ConversationService_ClearGroupAvatarShape_FullMethodName  = "/conversation.v1.ConversationService/ClearGroupAvatarShape"
+	ConversationService_SetGroupProfileCover_FullMethodName   = "/conversation.v1.ConversationService/SetGroupProfileCover"
+	ConversationService_ClearGroupProfileCover_FullMethodName = "/conversation.v1.ConversationService/ClearGroupProfileCover"
+	ConversationService_DeleteConversation_FullMethodName     = "/conversation.v1.ConversationService/DeleteConversation"
+	ConversationService_ClearHistory_FullMethodName           = "/conversation.v1.ConversationService/ClearHistory"
+	ConversationService_JoinGroup_FullMethodName              = "/conversation.v1.ConversationService/JoinGroup"
+	ConversationService_ListGroupAvatars_FullMethodName       = "/conversation.v1.ConversationService/ListGroupAvatars"
+	ConversationService_AddGroupAvatar_FullMethodName         = "/conversation.v1.ConversationService/AddGroupAvatar"
+	ConversationService_SelectGroupAvatar_FullMethodName      = "/conversation.v1.ConversationService/SelectGroupAvatar"
+	ConversationService_DeleteGroupAvatar_FullMethodName      = "/conversation.v1.ConversationService/DeleteGroupAvatar"
+	ConversationService_SetChatMute_FullMethodName            = "/conversation.v1.ConversationService/SetChatMute"
+	ConversationService_SetChatArchived_FullMethodName        = "/conversation.v1.ConversationService/SetChatArchived"
+	ConversationService_SetChatPinned_FullMethodName          = "/conversation.v1.ConversationService/SetChatPinned"
+	ConversationService_ListMembers_FullMethodName            = "/conversation.v1.ConversationService/ListMembers"
+	ConversationService_AddMembers_FullMethodName             = "/conversation.v1.ConversationService/AddMembers"
+	ConversationService_SetMemberRole_FullMethodName          = "/conversation.v1.ConversationService/SetMemberRole"
+	ConversationService_RemoveMember_FullMethodName           = "/conversation.v1.ConversationService/RemoveMember"
+	ConversationService_ListBans_FullMethodName               = "/conversation.v1.ConversationService/ListBans"
+	ConversationService_Unban_FullMethodName                  = "/conversation.v1.ConversationService/Unban"
+	ConversationService_GetInviteInfo_FullMethodName          = "/conversation.v1.ConversationService/GetInviteInfo"
+	ConversationService_RegenerateInvite_FullMethodName       = "/conversation.v1.ConversationService/RegenerateInvite"
+	ConversationService_RequestJoin_FullMethodName            = "/conversation.v1.ConversationService/RequestJoin"
+	ConversationService_ListJoinRequests_FullMethodName       = "/conversation.v1.ConversationService/ListJoinRequests"
+	ConversationService_ApproveJoinRequest_FullMethodName     = "/conversation.v1.ConversationService/ApproveJoinRequest"
+	ConversationService_RejectJoinRequest_FullMethodName      = "/conversation.v1.ConversationService/RejectJoinRequest"
+	ConversationService_SendMessage_FullMethodName            = "/conversation.v1.ConversationService/SendMessage"
+	ConversationService_GetMessage_FullMethodName             = "/conversation.v1.ConversationService/GetMessage"
+	ConversationService_ListMessages_FullMethodName           = "/conversation.v1.ConversationService/ListMessages"
+	ConversationService_EditMessage_FullMethodName            = "/conversation.v1.ConversationService/EditMessage"
+	ConversationService_DeleteMessage_FullMethodName          = "/conversation.v1.ConversationService/DeleteMessage"
+	ConversationService_DeleteMessages_FullMethodName         = "/conversation.v1.ConversationService/DeleteMessages"
+	ConversationService_ForwardMessages_FullMethodName        = "/conversation.v1.ConversationService/ForwardMessages"
+	ConversationService_MarkRead_FullMethodName               = "/conversation.v1.ConversationService/MarkRead"
+	ConversationService_ListReaders_FullMethodName            = "/conversation.v1.ConversationService/ListReaders"
+	ConversationService_ListPins_FullMethodName               = "/conversation.v1.ConversationService/ListPins"
+	ConversationService_PinMessage_FullMethodName             = "/conversation.v1.ConversationService/PinMessage"
+	ConversationService_UnpinMessage_FullMethodName           = "/conversation.v1.ConversationService/UnpinMessage"
+	ConversationService_AddReaction_FullMethodName            = "/conversation.v1.ConversationService/AddReaction"
+	ConversationService_RemoveReaction_FullMethodName         = "/conversation.v1.ConversationService/RemoveReaction"
+	ConversationService_ListUnreadMentions_FullMethodName     = "/conversation.v1.ConversationService/ListUnreadMentions"
 )
 
 // ConversationServiceClient is the client API for ConversationService service.
@@ -84,6 +86,9 @@ type ConversationServiceClient interface {
 	// SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
 	SetGroupAvatarShape(ctx context.Context, in *SetGroupAvatarShapeRequest, opts ...grpc.CallOption) (*SetGroupAvatarShapeResponse, error)
 	ClearGroupAvatarShape(ctx context.Context, in *ClearGroupAvatarShapeRequest, opts ...grpc.CallOption) (*ClearGroupAvatarShapeResponse, error)
+	// SetGroupProfileCover - только админ группы; ставит обложку группы целиком, прежняя заменяется
+	SetGroupProfileCover(ctx context.Context, in *SetGroupProfileCoverRequest, opts ...grpc.CallOption) (*SetGroupProfileCoverResponse, error)
+	ClearGroupProfileCover(ctx context.Context, in *ClearGroupProfileCoverRequest, opts ...grpc.CallOption) (*ClearGroupProfileCoverResponse, error)
 	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(ctx context.Context, in *DeleteConversationRequest, opts ...grpc.CallOption) (*DeleteConversationResponse, error)
 	// ClearHistory - очищает историю чата только для вызывающего, сам чат остаётся в списке
@@ -230,6 +235,26 @@ func (c *conversationServiceClient) ClearGroupAvatarShape(ctx context.Context, i
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ClearGroupAvatarShapeResponse)
 	err := c.cc.Invoke(ctx, ConversationService_ClearGroupAvatarShape_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) SetGroupProfileCover(ctx context.Context, in *SetGroupProfileCoverRequest, opts ...grpc.CallOption) (*SetGroupProfileCoverResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetGroupProfileCoverResponse)
+	err := c.cc.Invoke(ctx, ConversationService_SetGroupProfileCover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *conversationServiceClient) ClearGroupProfileCover(ctx context.Context, in *ClearGroupProfileCoverRequest, opts ...grpc.CallOption) (*ClearGroupProfileCoverResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearGroupProfileCoverResponse)
+	err := c.cc.Invoke(ctx, ConversationService_ClearGroupProfileCover_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -623,6 +648,9 @@ type ConversationServiceServer interface {
 	// SetGroupAvatarShape - только админ группы; ставит фигуру целиком, прежняя заменяется
 	SetGroupAvatarShape(context.Context, *SetGroupAvatarShapeRequest) (*SetGroupAvatarShapeResponse, error)
 	ClearGroupAvatarShape(context.Context, *ClearGroupAvatarShapeRequest) (*ClearGroupAvatarShapeResponse, error)
+	// SetGroupProfileCover - только админ группы; ставит обложку группы целиком, прежняя заменяется
+	SetGroupProfileCover(context.Context, *SetGroupProfileCoverRequest) (*SetGroupProfileCoverResponse, error)
+	ClearGroupProfileCover(context.Context, *ClearGroupProfileCoverRequest) (*ClearGroupProfileCoverResponse, error)
 	// DeleteConversation: участник выходит, admin удаляет группу; личный чат - у себя или for_everyone у обоих.
 	DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error)
 	// ClearHistory - очищает историю чата только для вызывающего, сам чат остаётся в списке
@@ -711,6 +739,12 @@ func (UnimplementedConversationServiceServer) SetGroupAvatarShape(context.Contex
 }
 func (UnimplementedConversationServiceServer) ClearGroupAvatarShape(context.Context, *ClearGroupAvatarShapeRequest) (*ClearGroupAvatarShapeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ClearGroupAvatarShape not implemented")
+}
+func (UnimplementedConversationServiceServer) SetGroupProfileCover(context.Context, *SetGroupProfileCoverRequest) (*SetGroupProfileCoverResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetGroupProfileCover not implemented")
+}
+func (UnimplementedConversationServiceServer) ClearGroupProfileCover(context.Context, *ClearGroupProfileCoverRequest) (*ClearGroupProfileCoverResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearGroupProfileCover not implemented")
 }
 func (UnimplementedConversationServiceServer) DeleteConversation(context.Context, *DeleteConversationRequest) (*DeleteConversationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteConversation not implemented")
@@ -1002,6 +1036,42 @@ func _ConversationService_ClearGroupAvatarShape_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConversationServiceServer).ClearGroupAvatarShape(ctx, req.(*ClearGroupAvatarShapeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_SetGroupProfileCover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetGroupProfileCoverRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).SetGroupProfileCover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_SetGroupProfileCover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).SetGroupProfileCover(ctx, req.(*SetGroupProfileCoverRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConversationService_ClearGroupProfileCover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearGroupProfileCoverRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConversationServiceServer).ClearGroupProfileCover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConversationService_ClearGroupProfileCover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConversationServiceServer).ClearGroupProfileCover(ctx, req.(*ClearGroupProfileCoverRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1714,6 +1784,14 @@ var ConversationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ClearGroupAvatarShape",
 			Handler:    _ConversationService_ClearGroupAvatarShape_Handler,
+		},
+		{
+			MethodName: "SetGroupProfileCover",
+			Handler:    _ConversationService_SetGroupProfileCover_Handler,
+		},
+		{
+			MethodName: "ClearGroupProfileCover",
+			Handler:    _ConversationService_ClearGroupProfileCover_Handler,
 		},
 		{
 			MethodName: "DeleteConversation",

@@ -13,7 +13,9 @@
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    grid-template-columns: repeat(auto-fill, 52px);
+    grid-auto-rows: 52px;
+    justify-content: center;
     gap: 8px;
     max-height: 232px;
     padding: 12px;
@@ -28,7 +30,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    aspect-ratio: 1;
+    width: 52px;
+    height: 52px;
     padding: 0;
 
     border: 1px solid transparent;
@@ -54,8 +57,8 @@
 // «аватар» в образце: кружок, за которым видна форма
 .dot {
     display: block;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: $radius-full;
     background-color: var(--color-bg-secondary);
 }

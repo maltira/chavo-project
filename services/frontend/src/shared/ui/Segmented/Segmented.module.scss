@@ -1,9 +1,10 @@
 .root {
     display: flex;
-    gap: 6px;
-    padding: 6px;
+    gap: 4px;
+    height: $button-height;
+    padding: 4px;
 
-    border-radius: $radius-lg;
+    border-radius: $radius-md;
     background-color: var(--color-bg-tertiary);
 }
 
@@ -11,11 +12,11 @@
     @include type(button-medium);
 
     flex: 1;
-    height: $button-height;
+    height: 100%;
     padding: 0 12px;
 
     border: none;
-    border-radius: $radius-md;
+    border-radius: calc($radius-md - 4px);
     background: none;
     color: alpha(var(--color-text), 0.6);
     cursor: pointer;

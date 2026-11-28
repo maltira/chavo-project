@@ -6,7 +6,7 @@ import { profileSchema, uploadMyAvatar } from '@/entities/user'
 import type { ProfileInput, ProfileValues } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
 import { notify, usePhotoDraft } from '@/shared/lib'
-import { Avatar, Button, Field, Input, PhotoPicker, Textarea, TextLink } from '@/shared/ui'
+import { Avatar, Button, Field, Input, PhotoActions, Textarea } from '@/shared/ui'
 
 import { createProfile } from '../api/createProfile'
 import type { CreateProfileBody } from '../api/createProfile'
@@ -76,20 +76,12 @@ export function ProfileForm() {
             {/* фото уйдёт на сервер сразу после создания профиля */}
             <div className={styles.photo}>
                 <Avatar src={draft.preview} size={96} />
-                <div className={styles.photoActions}>
-                    <PhotoPicker onPick={draft.set}>
-                        {(open) => (
-                            <TextLink as="button" className={styles.photoButton} onClick={open}>
-                                {draft.photo ? 'Сменить фото' : 'Выбрать фото'}
-                            </TextLink>
-                        )}
-                    </PhotoPicker>
-                    {draft.photo && (
-                        <TextLink as="button" className={styles.photoRemove} onClick={draft.clear}>
-                            Убрать
-                        </TextLink>
-                    )}
-                </div>
+                <PhotoActions
+                    hasPhoto={!!draft.photo}
+                    onPick={draft.set}
+                    onRemove={draft.clear}
+                    removeLabel="Убрать"
+                />
             </div>
 
             <div className={styles.fields}>

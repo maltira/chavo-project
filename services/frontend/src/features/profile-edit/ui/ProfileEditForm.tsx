@@ -3,19 +3,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
-import { profileSchema, updateMe, useMyAvatar } from '@/entities/user'
+import { profileSchema, updateMe, useMyAvatar, UserAvatar } from '@/entities/user'
 import type { Profile, ProfileInput, ProfileUpdate, ProfileValues } from '@/entities/user'
 import { errorMessage } from '@/shared/api'
 import { notify } from '@/shared/lib'
 import {
-    Avatar,
     Button,
     ConfirmModal,
     Field,
+    Icon,
     Input,
-    PhotoPicker,
+    PhotoActions,
     Textarea,
-    TextLink,
 } from '@/shared/ui'
 
 import styles from './ProfileEditForm.module.scss'
@@ -28,9 +27,11 @@ interface Props {
     profile: Profile
     // сохранено или передумали - вернуться к просмотру профиля
     onDone: () => void
+    // открыть экран выбора фигуры за аватаром
+    onPickShape?: () => void
 }
 
-export function ProfileEditForm({ profile: current, onDone }: Props) {
+export function ProfileEditForm({ profile: current, onDone, onPickShape }: Props) {
     // сравниваем с профилем на момент открытия формы: проп может обновиться, пока форма открыта
     const [profile] = useState(current)
     const queryClient = useQueryClient()
@@ -86,31 +87,29 @@ export function ProfileEditForm({ profile: current, onDone }: Props) {
         <form className={styles.form} noValidate onSubmit={handleSubmit(submit)}>
             {/* фото - живое значение профиля: после загрузки оно сразу обновляется */}
             <div className={styles.photo}>
-                <Avatar src={current.avatar_url} size={96} />
-                <div className={styles.photoActions}>
-                    <PhotoPicker onPick={(photo) => avatar.upload.mutate(photo)}>
-                        {(open) => (
-                            <TextLink
-                                as="button"
-                                className={styles.photoButton}
-                                disabled={avatar.pending}
-                                onClick={open}
-                            >
-                                {current.avatar_url ? 'Сменить фото' : 'Выбрать фото'}
-                            </TextLink>
-                        )}
-                    </PhotoPicker>
-                    {current.avatar_url && (
-                        <TextLink
-                            as="button"
-                            className={styles.photoRemove}
-                            disabled={avatar.pending}
-                            onClick={() => setConfirmRemove(true)}
+                <span className={styles.avatarWrap}>
+                    <UserAvatar
+                        src={current.avatar_url}
+                        shape={current.avatar_shape}
+                        size={96}
+                    />
+                    {onPickShape && (
+                        <button
+                            type="button"
+                            className={styles.shapeButton}
+                            aria-label="Изменить фигуру за аватаром"
+                            onClick={onPickShape}
                         >
-                            Удалить фото
-                        </TextLink>
+                            <Icon name="pallete" size={16} color="inherit" />
+                        </button>
                     )}
-                </div>
+                </span>
+                <PhotoActions
+                    hasPhoto={!!current.avatar_url}
+                    disabled={avatar.pending}
+                    onPick={(photo) => avatar.upload.mutate(photo)}
+                    onRemove={() => setConfirmRemove(true)}
+                />
             </div>
 
             <ConfirmModal

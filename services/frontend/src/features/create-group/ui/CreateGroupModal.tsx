@@ -12,10 +12,9 @@ import {
     IconButton,
     Input,
     Modal,
-    PhotoPicker,
+    PhotoActions,
     Segmented,
     Textarea,
-    TextLink,
 } from '@/shared/ui'
 
 import { useCreateGroup } from '../model/useCreateGroup'
@@ -174,20 +173,12 @@ function CreateGroupForm({ open, onClose }: Props) {
             {/* фото уйдёт на сервер сразу после создания группы */}
             <div className={styles.photo}>
                 <Avatar src={draft.preview} size={96} />
-                <div className={styles.photoActions}>
-                    <PhotoPicker onPick={draft.set}>
-                        {(open) => (
-                            <TextLink as="button" className={styles.photoButton} onClick={open}>
-                                {draft.photo ? 'Сменить фото' : 'Выбрать фото'}
-                            </TextLink>
-                        )}
-                    </PhotoPicker>
-                    {draft.photo && (
-                        <TextLink as="button" className={styles.photoRemove} onClick={draft.clear}>
-                            Убрать
-                        </TextLink>
-                    )}
-                </div>
+                <PhotoActions
+                    hasPhoto={!!draft.photo}
+                    onPick={draft.set}
+                    onRemove={draft.clear}
+                    removeLabel="Убрать"
+                />
             </div>
 
             <form

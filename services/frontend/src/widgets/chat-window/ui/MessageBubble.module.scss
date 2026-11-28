@@ -371,22 +371,17 @@ $tail-height: 14px;
     min-height: 24px;
     padding: 2px 7px;
 
-    border: 1px solid transparent;
+    border: none;
     border-radius: $radius-full;
-    background-color: alpha(var(--color-text), 0.08);
+    background-color: color-mix(in srgb, var(--color-text) 8%, transparent);
     color: var(--color-text);
     cursor: pointer;
     transition:
         background-color $transition-fast,
-        border-color $transition-fast,
-        transform $transition-fast;
+        box-shadow $transition-fast;
 
     &:hover:not(:disabled) {
-        background-color: alpha(var(--color-text), 0.14);
-    }
-
-    &:active:not(:disabled) {
-        transform: scale(0.95);
+        background-color: color-mix(in srgb, var(--color-text) 14%, transparent);
     }
 
     &:disabled {
@@ -400,11 +395,11 @@ $tail-height: 14px;
 }
 
 .reactionMine {
-    border-color: alpha(var(--color-accent), 0.55);
-    background-color: alpha(var(--color-accent), 0.18);
+    background-color: alpha(var(--color-accent), 0.16);
+    box-shadow: inset 0 0 0 1px alpha(var(--color-accent), 0.45);
 
     &:hover:not(:disabled) {
-        background-color: alpha(var(--color-accent), 0.26);
+        background-color: alpha(var(--color-accent), 0.24);
     }
 }
 
@@ -455,19 +450,16 @@ $tail-height: 14px;
     height: 30px;
     padding: 0;
 
-    border: 1px solid transparent;
+    border: none;
     border-radius: $radius-full;
     background: none;
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    transition:
-        background-color $transition-fast,
-        transform $transition-fast;
+    transition: background-color $transition-fast;
 
     &:hover {
         background-color: alpha(var(--color-text), 0.08);
-        transform: scale(1.15);
     }
 
     &:focus-visible {
@@ -477,8 +469,8 @@ $tail-height: 14px;
 }
 
 .quickEmojiActive {
-    border-color: var(--color-accent);
-    background-color: alpha(var(--color-accent), 0.14);
+    background-color: alpha(var(--color-accent), 0.16);
+    box-shadow: inset 0 0 0 1px alpha(var(--color-accent), 0.45);
 }
 
 .reactionPicker {

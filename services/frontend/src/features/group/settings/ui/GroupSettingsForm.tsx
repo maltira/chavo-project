@@ -9,10 +9,9 @@ import {
     ConfirmModal,
     Field,
     Input,
-    PhotoPicker,
+    PhotoActions,
     Segmented,
     Textarea,
-    TextLink,
 } from '@/shared/ui'
 
 import { isSlugError, useDeleteGroup, useUpdateGroup } from '../model/useGroupSettings'
@@ -108,30 +107,12 @@ export function GroupSettingsForm({ chat, onPickShape, onSaved, onDeleted }: Pro
                     <UserAvatar src={chat.avatar_url} shape={chat.avatar_shape} size={96} />
                 </button>
                 {/* фото сохраняется сразу после кропа, отдельно от «Сохранить изменения» */}
-                <div className={styles.photoActions}>
-                    <PhotoPicker onPick={(photo) => avatar.upload.mutate(photo)}>
-                        {(open) => (
-                            <TextLink
-                                as="button"
-                                className={styles.photoButton}
-                                disabled={avatar.pending}
-                                onClick={open}
-                            >
-                                {chat.avatar_url ? 'Сменить фото' : 'Выбрать фото'}
-                            </TextLink>
-                        )}
-                    </PhotoPicker>
-                    {chat.avatar_url && (
-                        <TextLink
-                            as="button"
-                            className={styles.photoRemove}
-                            disabled={avatar.pending}
-                            onClick={() => setConfirmRemovePhoto(true)}
-                        >
-                            Удалить фото
-                        </TextLink>
-                    )}
-                </div>
+                <PhotoActions
+                    hasPhoto={!!chat.avatar_url}
+                    disabled={avatar.pending}
+                    onPick={(photo) => avatar.upload.mutate(photo)}
+                    onRemove={() => setConfirmRemovePhoto(true)}
+                />
             </div>
 
             <ConfirmModal

@@ -7,6 +7,7 @@ import {
     useState,
 } from 'react'
 import type { ClipboardEvent, KeyboardEvent, Ref } from 'react'
+import { createPortal } from 'react-dom'
 
 import {
     cn,
@@ -110,10 +111,14 @@ const FORMATS: FormatTool[] = [
 
 const NATIVE_COMMANDS = new Set<ToggleableFormat>(['bold', 'italic', 'underline'])
 
-interface Bubble {
+interface BubbleAnchor {
+    x: number
     top: number
-    left: number
+    bottom: number
 }
+
+// отступ всплывающего меню форматирования от краёв окна
+const BUBBLE_EDGE = 8
 
 const EMPTY_ACTIVE: Record<ToggleableFormat, boolean> = {
     bold: false,
@@ -143,9 +148,11 @@ export function RichEditor({
     className,
 }: Props) {
     const rootRef = useRef<HTMLDivElement>(null)
+    const bubbleRef = useRef<HTMLDivElement>(null)
     // последнее выделение внутри поля: кнопка эмодзи и панель забирают фокус, а вставлять надо в это место
     const lastRange = useRef<{ start: number; end: number } | null>(null)
-    const [bubble, setBubble] = useState<Bubble | null>(null)
+    const [bubble, setBubble] = useState<BubbleAnchor | null>(null)
+    const [placedBubble, setPlacedBubble] = useState<{ top: number; left: number } | null>(null)
     const [active, setActive] = useState<Record<ToggleableFormat, boolean>>(EMPTY_ACTIVE)
     const [activeLink, setActiveLink] = useState<string | null>(null)
     const [activePreLang, setActivePreLang] = useState<string | null>(null)
@@ -256,16 +263,40 @@ export function RichEditor({
                 range && typeof range.getBoundingClientRect === 'function'
                     ? range.getBoundingClientRect()
                     : null
-            // панель над выделением, по центру; у краёв окна прижимается внутрь
-            const center = rect ? rect.left + rect.width / 2 : 0
+            const center = rect ? rect.left + rect.width / 2 : BUBBLE_EDGE
             setBubble({
-                top: Math.max(8, (rect?.top ?? 0) - 48),
-                left: Math.min(Math.max(center, 184), Math.max(184, window.innerWidth - 184)),
+                x: center,
+                top: rect?.top ?? BUBBLE_EDGE,
+                bottom: rect?.bottom ?? BUBBLE_EDGE,
             })
         }
         document.addEventListener('selectionchange', onSelectionChange)
         return () => document.removeEventListener('selectionchange', onSelectionChange)
     }, [linkEditing, preEditing, onCaretChange])
+
+    // размещаем вертикальное меню над выделением (или под ним, если сверху не помещается)
+    useLayoutEffect(() => {
+        const node = bubbleRef.current
+        if (!bubble || !node) {
+            setPlacedBubble(null)
+            return
+        }
+        const width = node.offsetWidth
+        const height = node.offsetHeight
+        const left = Math.max(
+            BUBBLE_EDGE,
+            Math.min(bubble.x - width / 2, window.innerWidth - width - BUBBLE_EDGE),
+        )
+        const aboveTop = bubble.top - height - 8
+        const top =
+            aboveTop >= BUBBLE_EDGE
+                ? aboveTop
+                : Math.max(
+                      BUBBLE_EDGE,
+                      Math.min(bubble.bottom + 8, window.innerHeight - height - BUBBLE_EDGE),
+                  )
+        setPlacedBubble({ top, left })
+    }, [bubble, linkEditing, preEditing])
 
     // вернуть выделение туда, где оно было (после клика по кнопке вне поля)
     const restoreSelection = useCallback(() => {
@@ -692,162 +723,191 @@ export function RichEditor({
                     insert(event.dataTransfer.getData('text/plain'))
                 }}
             />
-            {bubble && (
-                <div
-                    className={styles.bubble}
-                    role="toolbar"
-                    aria-label="Форматирование"
-                    style={{ top: bubble.top, left: bubble.left }}
-                    // нажатие на кнопки панели не должно снимать выделение и фокус с поля
-                    onMouseDown={(event) => {
-                        if (!linkEditing && !preEditing) {
-                            event.preventDefault()
-                        }
-                    }}
-                >
-                    {linkEditing ? (
-                        <div className={styles.linkForm}>
-                            <input
-                                ref={linkInputRef}
-                                type="url"
-                                className={cn(styles.linkInput, linkError && styles.linkInputError)}
-                                value={linkInput}
-                                placeholder="https://example.com"
-                                aria-label="Адрес ссылки"
-                                onChange={(event) => {
-                                    setLinkInput(event.target.value)
-                                    setLinkError(false)
-                                }}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                        event.preventDefault()
-                                        applyLink(linkInput)
-                                    } else if (event.key === 'Escape') {
-                                        event.preventDefault()
-                                        closeLinkEditor()
-                                    }
-                                }}
-                            />
-                            <button
-                                type="button"
-                                className={styles.tool}
-                                aria-label="Применить ссылку"
-                                onClick={() => applyLink(linkInput)}
-                            >
-                                <Icon name="check" size={18} color="inherit" />
-                            </button>
-                            {activeLink && (
+            {bubble &&
+                createPortal(
+                    <div
+                        ref={bubbleRef}
+                        className={styles.bubble}
+                        role="toolbar"
+                        aria-label="Форматирование"
+                        style={{
+                            top: (placedBubble ?? bubble).top,
+                            left: placedBubble ? placedBubble.left : bubble.x,
+                        }}
+                        // нажатие на пункты меню не должно снимать выделение и фокус с поля
+                        onMouseDown={(event) => {
+                            if (!linkEditing && !preEditing) {
+                                event.preventDefault()
+                            }
+                        }}
+                    >
+                        {linkEditing ? (
+                            <div className={styles.linkForm}>
+                                <input
+                                    ref={linkInputRef}
+                                    type="url"
+                                    className={cn(
+                                        styles.linkInput,
+                                        linkError && styles.linkInputError,
+                                    )}
+                                    value={linkInput}
+                                    placeholder="https://example.com"
+                                    aria-label="Адрес ссылки"
+                                    onChange={(event) => {
+                                        setLinkInput(event.target.value)
+                                        setLinkError(false)
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault()
+                                            applyLink(linkInput)
+                                        } else if (event.key === 'Escape') {
+                                            event.preventDefault()
+                                            closeLinkEditor()
+                                        }
+                                    }}
+                                />
                                 <button
                                     type="button"
-                                    className={styles.tool}
-                                    aria-label="Убрать ссылку"
-                                    onClick={() => applyLink(null)}
+                                    className={styles.inlineBtn}
+                                    aria-label="Применить ссылку"
+                                    onClick={() => applyLink(linkInput)}
                                 >
-                                    <Icon name="trash" size={18} color="inherit" />
+                                    <Icon name="check" size={18} color="inherit" />
                                 </button>
-                            )}
-                            <button
-                                type="button"
-                                className={styles.tool}
-                                aria-label="Отменить ввод ссылки"
-                                onClick={closeLinkEditor}
-                            >
-                                <Icon name="close" size={18} color="inherit" />
-                            </button>
-                        </div>
-                    ) : preEditing ? (
-                        <div className={styles.linkForm}>
-                            <select
-                                ref={preSelectRef}
-                                className={styles.langSelect}
-                                aria-label="Язык кода"
-                                value={preLang}
-                                onChange={(event) => setPreLang(event.target.value)}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                        event.preventDefault()
-                                        applyPre(preLang)
-                                    } else if (event.key === 'Escape') {
-                                        event.preventDefault()
-                                        closePreEditor()
-                                    }
-                                }}
-                            >
-                                {CODE_LANGUAGES.map((lang) => (
-                                    <option key={lang.value || 'plain'} value={lang.value}>
-                                        {lang.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <button
-                                type="button"
-                                className={styles.tool}
-                                aria-label="Применить блок кода"
-                                onClick={() => applyPre(preLang)}
-                            >
-                                <Icon name="check" size={18} color="inherit" />
-                            </button>
-                            {activePreLang !== null && (
-                                <button
-                                    type="button"
-                                    className={styles.tool}
-                                    aria-label="Убрать блок кода"
-                                    onClick={() => applyPre(null)}
-                                >
-                                    <Icon name="trash" size={18} color="inherit" />
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                className={styles.tool}
-                                aria-label="Отменить выбор языка"
-                                onClick={closePreEditor}
-                            >
-                                <Icon name="close" size={18} color="inherit" />
-                            </button>
-                        </div>
-                    ) : (
-                        <>
-                            {FORMATS.map((f) => (
-                                <button
-                                    key={f.type}
-                                    type="button"
-                                    className={cn(styles.tool, active[f.type] && styles.toolActive)}
-                                    aria-label={f.label}
-                                    aria-pressed={active[f.type]}
-                                    title={`${f.label} (${f.hint})`}
-                                    onClick={() => format(f.type)}
-                                >
-                                    <Icon name={f.icon} size={20} color="inherit" />
-                                </button>
-                            ))}
-                            <button
-                                type="button"
-                                className={cn(
-                                    styles.tool,
-                                    activePreLang !== null && styles.toolActive,
+                                {activeLink && (
+                                    <button
+                                        type="button"
+                                        className={styles.inlineBtn}
+                                        aria-label="Убрать ссылку"
+                                        onClick={() => applyLink(null)}
+                                    >
+                                        <Icon name="trash" size={18} color="inherit" />
+                                    </button>
                                 )}
-                                aria-label="Блок кода"
-                                aria-pressed={activePreLang !== null}
-                                title="Блок кода (Ctrl+Shift+C)"
-                                onClick={openPreEditor}
-                            >
-                                <Icon name="font-code-block" size={20} color="inherit" />
-                            </button>
-                            <button
-                                type="button"
-                                className={cn(styles.tool, !!activeLink && styles.toolActive)}
-                                aria-label="Ссылка"
-                                aria-pressed={!!activeLink}
-                                title="Ссылка (Ctrl+K)"
-                                onClick={openLinkEditor}
-                            >
-                                <Icon name="link" size={20} color="inherit" />
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
+                                <button
+                                    type="button"
+                                    className={styles.inlineBtn}
+                                    aria-label="Отменить ввод ссылки"
+                                    onClick={closeLinkEditor}
+                                >
+                                    <Icon name="close" size={18} color="inherit" />
+                                </button>
+                            </div>
+                        ) : preEditing ? (
+                            <div className={styles.linkForm}>
+                                <select
+                                    ref={preSelectRef}
+                                    className={styles.langSelect}
+                                    aria-label="Язык кода"
+                                    value={preLang}
+                                    onChange={(event) => setPreLang(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault()
+                                            applyPre(preLang)
+                                        } else if (event.key === 'Escape') {
+                                            event.preventDefault()
+                                            closePreEditor()
+                                        }
+                                    }}
+                                >
+                                    {CODE_LANGUAGES.map((lang) => (
+                                        <option key={lang.value || 'plain'} value={lang.value}>
+                                            {lang.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    className={styles.inlineBtn}
+                                    aria-label="Применить блок кода"
+                                    onClick={() => applyPre(preLang)}
+                                >
+                                    <Icon name="check" size={18} color="inherit" />
+                                </button>
+                                {activePreLang !== null && (
+                                    <button
+                                        type="button"
+                                        className={styles.inlineBtn}
+                                        aria-label="Убрать блок кода"
+                                        onClick={() => applyPre(null)}
+                                    >
+                                        <Icon name="trash" size={18} color="inherit" />
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    className={styles.inlineBtn}
+                                    aria-label="Отменить выбор языка"
+                                    onClick={closePreEditor}
+                                >
+                                    <Icon name="close" size={18} color="inherit" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className={styles.menuList}>
+                                {FORMATS.map((f) => (
+                                    <button
+                                        key={f.type}
+                                        type="button"
+                                        className={cn(
+                                            styles.tool,
+                                            active[f.type] && styles.toolActive,
+                                        )}
+                                        aria-label={f.label}
+                                        aria-pressed={active[f.type]}
+                                        onClick={() => format(f.type)}
+                                    >
+                                        <Icon name={f.icon} size={18} color="inherit" />
+                                        <span
+                                            className={cn(
+                                                styles.toolLabel,
+                                                styles[`preview_${f.type}`],
+                                            )}
+                                        >
+                                            {f.label}
+                                        </span>
+                                        <span className={styles.toolHint} aria-hidden="true">
+                                            {f.hint}
+                                        </span>
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        styles.tool,
+                                        activePreLang !== null && styles.toolActive,
+                                    )}
+                                    aria-label="Блок кода"
+                                    aria-pressed={activePreLang !== null}
+                                    onClick={openPreEditor}
+                                >
+                                    <Icon name="font-code-block" size={18} color="inherit" />
+                                    <span className={styles.toolLabel}>Блок кода</span>
+                                    <span className={styles.toolHint} aria-hidden="true">
+                                        Ctrl+Shift+C
+                                    </span>
+                                </button>
+                                <div className={styles.menuDivider} role="separator" />
+                                <button
+                                    type="button"
+                                    className={cn(styles.tool, !!activeLink && styles.toolActive)}
+                                    aria-label="Ссылка"
+                                    aria-pressed={!!activeLink}
+                                    onClick={openLinkEditor}
+                                >
+                                    <Icon name="link" size={18} color="inherit" />
+                                    <span className={styles.toolLabel}>Ссылка</span>
+                                    <span className={styles.toolHint} aria-hidden="true">
+                                        Ctrl+K
+                                    </span>
+                                </button>
+                            </div>
+                        )}
+                    </div>,
+                    document.body,
+                )}
         </>
     )
 }

@@ -34,7 +34,11 @@ export {
 export { getDraft, useDraft, useDrafts } from './model/drafts'
 export type { DraftReply, MessageDraft } from './model/drafts'
 export { useMessages } from './model/useMessages'
-export { useToggleReaction } from './model/useReactions'
+export {
+    MAX_DISTINCT_REACTIONS_PER_MSG,
+    MAX_USER_REACTIONS_PER_MSG,
+    useToggleReaction,
+} from './model/useReactions'
 export type { ToggleReactionInput } from './model/useReactions'
 export { readersKey, useReaders } from './model/useReaders'
 export { getPins, pinMessage, unpinMessage } from './api/pins'

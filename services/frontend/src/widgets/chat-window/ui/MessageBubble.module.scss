@@ -184,6 +184,10 @@ $tail-height: 14px;
     }
 }
 
+.bodyWithReactions {
+    padding-bottom: 4px;
+}
+
 .quote {
     display: flex;
     flex-direction: column;
@@ -226,7 +230,8 @@ $tail-height: 14px;
 
 // время, «изменено» и галочки в правом нижнем углу пузыря
 .meta,
-.metaSpace {
+.metaSpace,
+.metaInline {
     @include type(xs-regular);
 
     display: inline-flex;
@@ -241,6 +246,14 @@ $tail-height: 14px;
     position: absolute;
     right: 12px;
     bottom: 6px;
+    user-select: none;
+}
+
+// время в нижней строке рядом с реакциями, всегда прижато к правому нижнему углу пузыря
+.metaInline {
+    flex-shrink: 0;
+    align-self: flex-end;
+    line-height: 18px;
     user-select: none;
 }
 
@@ -327,15 +340,26 @@ $tail-height: 14px;
     object-fit: cover;
 }
 
-// плашки реакций под пузырём
+// нижняя строка пузыря: плашки реакций слева, время и галочки всегда справа внизу
+.reactionsFooter {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 12px 6px 14px;
+}
+
+.linkPreview + .reactionsFooter {
+    padding-top: 0;
+}
+
 .reactions {
     display: flex;
+    flex: 1;
     flex-wrap: wrap;
-    gap: 6px;
-
-    .mine & {
-        justify-content: flex-end;
-    }
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
 }
 
 .reactionPill {
@@ -343,12 +367,13 @@ $tail-height: 14px;
 
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
+    gap: 3px;
+    min-height: 24px;
+    padding: 2px 7px;
 
     border: 1px solid transparent;
     border-radius: $radius-full;
-    background-color: var(--color-bg-tertiary);
+    background-color: alpha(var(--color-text), 0.08);
     color: var(--color-text);
     cursor: pointer;
     transition:
@@ -357,7 +382,7 @@ $tail-height: 14px;
         transform $transition-fast;
 
     &:hover:not(:disabled) {
-        background-color: var(--color-bg-muted);
+        background-color: alpha(var(--color-text), 0.14);
     }
 
     &:active:not(:disabled) {
@@ -375,8 +400,12 @@ $tail-height: 14px;
 }
 
 .reactionMine {
-    border-color: var(--color-accent);
-    background-color: alpha(var(--color-accent), 0.14);
+    border-color: alpha(var(--color-accent), 0.55);
+    background-color: alpha(var(--color-accent), 0.18);
+
+    &:hover:not(:disabled) {
+        background-color: alpha(var(--color-accent), 0.26);
+    }
 }
 
 .reactionEmoji {
@@ -389,10 +418,8 @@ $tail-height: 14px;
 }
 
 .actionsWrap {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: $tail-width;
-    z-index: 10;
+    position: fixed;
+    z-index: 110;
 
     display: flex;
     flex-direction: column;
@@ -400,7 +427,12 @@ $tail-height: 14px;
     gap: 6px;
 
     transform-origin: top left;
-    animation: actions-show 150ms ease-out;
+    animation: actions-show 140ms ease-out;
+}
+
+.actionsMine {
+    align-items: flex-end;
+    transform-origin: top right;
 }
 
 .quickReactions {
@@ -409,8 +441,9 @@ $tail-height: 14px;
     gap: 2px;
     padding: 4px 6px;
 
+    border: 1px solid var(--color-bg-muted);
     border-radius: $radius-full;
-    background-color: var(--color-bg-tertiary);
+    background-color: var(--color-bg-secondary);
     box-shadow: $drop-shadow;
 }
 
@@ -452,42 +485,72 @@ $tail-height: 14px;
     z-index: 20;
 }
 
+// вертикальное контекстное меню действий с подписями (как в Telegram)
 .actions {
     display: flex;
-    gap: 6px;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 210px;
     padding: 6px;
 
+    border: 1px solid var(--color-bg-muted);
     border-radius: $radius-lg;
-    background-color: var(--color-bg-tertiary);
+    background-color: var(--color-bg-secondary);
     box-shadow: $drop-shadow;
 }
 
-.actionsMine {
-    right: $tail-width;
-    left: auto;
-    align-items: flex-end;
-    transform-origin: top right;
-}
+.actionItem {
+    @include type(tag-medium);
 
-// у нижнего края истории панель над сообщением, чтобы не уходить под поле ввода
-.actionsAbove {
-    top: auto;
-    bottom: calc(100% + 6px);
-    transform-origin: bottom left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
 
-    &.actionsMine {
-        transform-origin: bottom right;
+    border: none;
+    border-radius: $radius-md;
+    background: none;
+    color: var(--color-text);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color $transition-fast;
+
+    svg {
+        flex-shrink: 0;
+        opacity: 0.78;
+    }
+
+    &:hover {
+        background-color: var(--color-bg-muted);
+
+        svg {
+            opacity: 1;
+        }
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: -2px;
     }
 }
 
-// двойной класс перебивает фон IconButton независимо от порядка стилей
-.actions .danger {
-    border-color: transparent;
-    background-color: alpha(var(--color-danger), 0.1);
+.actionDivider {
+    height: 1px;
+    margin: 4px 6px;
+    background-color: var(--color-bg-muted);
+}
+
+.actionDanger {
     color: var(--color-danger);
 
+    svg {
+        opacity: 1;
+    }
+
     &:hover {
-        background-color: alpha(var(--color-danger), 0.2);
+        background-color: alpha(var(--color-danger), 0.12);
     }
 }
 

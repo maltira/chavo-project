@@ -355,6 +355,66 @@ describe('MessageList reactions, silent and return to latest', () => {
         // кнопка возврата к свежим сообщениям видна при hasNewer
         fireEvent.click(screen.getByRole('button', { name: 'К последним сообщениям' }))
         expect(onReturnToLatest).toHaveBeenCalledTimes(1)
+
+        // раскрытие полного пикера реакций скрывает список действий, повторный клик возвращает его
+        fireEvent.click(screen.getByRole('button', { name: 'Действия с сообщением' }))
+        expect(screen.getByRole('menuitem', { name: 'Ответить' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Выбрать реакцию' }))
+        expect(screen.queryByRole('menuitem', { name: 'Ответить' })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Выбрать реакцию' }))
+        expect(screen.getByRole('menuitem', { name: 'Ответить' })).toBeInTheDocument()
+    })
+
+    it('hides reaction selector when user or distinct reaction limit is reached', () => {
+        const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+        const emojis = ['👍', '❤️', '😂', '😮', '🔥']
+        const atUserLimit: Message = {
+            ...msg('m-limit', 'a', 5),
+            reactions: emojis.map((emoji) => ({ emoji, count: 1, me: true, user_ids: ['me'] })),
+        }
+        render(
+            <QueryClientProvider client={client}>
+                <MessageList
+                    chat={
+                        {
+                            id: 'g1',
+                            conversation_type: 'direct',
+                            my_role: 'member',
+                        } as ConversationSummary
+                    }
+                    messages={[atUserLimit]}
+                    myId="me"
+                    readBoundary={undefined}
+                    hasOlder={false}
+                    loadingOlder={false}
+                    loadOlder={vi.fn()}
+                    firstUnreadId={null}
+                    findMessage={vi.fn()}
+                    onSeen={vi.fn()}
+                    onReply={vi.fn()}
+                    onEdit={vi.fn()}
+                    onDelete={vi.fn()}
+                    pins={[]}
+                    onPin={vi.fn()}
+                    onToggleReaction={vi.fn()}
+                    jumpRequest={null}
+                    onForward={vi.fn()}
+                    selected={null}
+                    onToggleSelect={vi.fn()}
+                />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Действия с сообщением' }))
+        expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
+        expect(screen.queryByLabelText('Быстрые реакции')).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Выбрать реакцию' })).toBeNull()
+
+        // ПКМ по области реакций внутри пузыря открывает меню действий сообщения
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(screen.queryByRole('menu', { name: 'Действия с сообщением' })).toBeNull()
+        fireEvent.contextMenu(screen.getByLabelText('Реакции'))
+        expect(screen.getByRole('menu', { name: 'Действия с сообщением' })).toBeInTheDocument()
     })
 
     it('renders link preview card and unread mentions button', () => {
